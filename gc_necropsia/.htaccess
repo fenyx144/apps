@@ -1,0 +1,35 @@
+# Permitir que el header Authorization pase a PHP
+RewriteEngine On
+RewriteCond %{HTTP:Authorization} ^(.*)
+RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+
+# Configuración para aumentar límites de PHP 7.2 para subida de archivos grandes
+# IMPORTANTE: Estas directivas solo funcionan si:
+# 1. Usas mod_php (no PHP-FPM ni CGI)
+# 2. AllowOverride está configurado para permitir php_value en Apache
+# 3. Si no funcionan, configura estos valores en php.ini directamente
+
+# Aumentar límite de tamaño de POST (debe ser >= upload_max_filesize)
+php_value post_max_size 50M
+
+# Aumentar límite de tamaño de archivos subidos
+php_value upload_max_filesize 50M
+
+# Aumentar tiempo máximo de ejecución (5 minutos)
+php_value max_execution_time 300
+
+# Aumentar tiempo máximo de entrada (tiempo para recibir datos, incluyendo upload)
+php_value max_input_time 300
+
+# Aumentar límite de memoria (PHP 7.2 compatible)
+php_value memory_limit 256M
+
+# Permitir subida de archivos
+php_flag file_uploads On
+
+# Límite de número de archivos (PHP 7.2 compatible)
+php_value max_file_uploads 50
+
+# Configuración adicional para PHP 7.2
+# Tamaño máximo de variables POST (si existe esta directiva en tu PHP)
+# php_value max_input_vars 1000
