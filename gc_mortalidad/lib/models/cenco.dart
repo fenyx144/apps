@@ -1,3 +1,6 @@
+import '../utils/text_utils.dart';
+import 'galpon.dart';
+
 class Cenco {
   final String codigo;
   final String nombre;
@@ -24,10 +27,32 @@ class Cenco {
     return '';
   }
 
+  int get edadDias =>
+      computeEdadInDias(fecIngMin) ?? (int.tryParse(edad.trim()) ?? 0);
+
+  /// Promedio de edades de galpones (misma lógica que get_cencos_galpones.php).
+  static int edadPromedioFromGalpones(List<Galpon> galpones) {
+    final edades =
+        galpones.map((g) => g.edadDias).where((e) => e > 0).toList();
+    if (edades.isEmpty) return 0;
+    return (edades.reduce((a, b) => a + b) / edades.length).round();
+  }
+
+  Cenco withEdadFromGalpones(List<Galpon> galpones) {
+    final promedio = edadPromedioFromGalpones(galpones);
+    if (promedio <= 0) return this;
+    return Cenco(
+      codigo: codigo,
+      nombre: nombre,
+      edad: promedio.toString(),
+      fecIngMin: fecIngMin,
+    );
+  }
+
   String get displayLabel {
     final g = granjaCodigo;
     final n = nombre.trim();
-    final e = edad.trim();
+    final e = edadDias;
     if (g.isEmpty && n.isEmpty) return codigo;
     String base;
     if (g.isEmpty) {
@@ -37,7 +62,7 @@ class Cenco {
     } else {
       base = '$g - $n';
     }
-    if (e.isNotEmpty && e != '0') {
+    if (e > 0) {
       base += ' ($e d\u00edas)';
     }
     return base;
@@ -57,11 +82,7 @@ class Cenco {
   String get labelMortality => labelShort;
 
   /// Subtitulo con edad para dialogo de seleccion
-  String get subtitleAge {
-    final e = edad.trim();
-    final edadStr = e.isNotEmpty ? e : '0';
-    return 'Edad: $edadStr d\u00edas';
-  }
+  String get subtitleAge => 'Edad: ${edadDias > 0 ? edadDias : 0} d\u00edas';
 
   /// Para liquidacion/auditoria: labelShort sin edad
   String get labelFilter => labelShort;

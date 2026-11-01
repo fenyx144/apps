@@ -49,7 +49,7 @@ Future<void> showSearchableSelectDialog<T>({
                     padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
                     child: Row(
                       children: [
-                        Icon(icon, color: AppColors.primary, size: 22),
+                        Icon(icon, color: AppColors.textSecondary, size: 22),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -130,7 +130,7 @@ Future<void> showSearchableSelectDialog<T>({
                               final isSelected = val == selectedValue;
                               return Material(
                                 color: isSelected
-                                    ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1)
+                                    ? AppColors.textSecondary.withValues(alpha: isDark ? 0.2 : 0.1)
                                     : Colors.transparent,
                                 borderRadius: BorderRadius.circular(12),
                                 child: ListTile(
@@ -159,7 +159,7 @@ Future<void> showSearchableSelectDialog<T>({
                                   trailing: isSelected
                                       ? const Icon(
                                           Icons.check_circle_rounded,
-                                          color: AppColors.primary,
+                                          color: AppColors.textSecondary,
                                           size: 22,
                                         )
                                       : null,

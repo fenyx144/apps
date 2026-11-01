@@ -8,7 +8,7 @@ const Color kSystemNavBarColor = Color(0xFFF5F5F5);
 class AppTheme {
   static void applySystemChrome([Brightness? brightness]) {
     final isDark = brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF121212) : AppColors.background;
+    final bg = isDark ? AppColors.darkBackground : AppColors.background;
     SystemChrome.setSystemUIOverlayStyle(overlayForBackground(bg));
   }
 
@@ -23,7 +23,7 @@ class AppTheme {
 
     final resolvedNavColor = systemNavigationBarColor ??
         (ThemeData.estimateBrightnessForColor(background) == Brightness.dark
-            ? const Color(0xFF121212)
+            ? AppColors.darkBackground
             : kSystemNavBarColor);
 
     return SystemUiOverlayStyle(
@@ -61,16 +61,18 @@ class AppTheme {
 
   static ThemeData _base(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF121212) : AppColors.background;
-    final surface = isDark ? const Color(0xFF1E1E1E) : AppColors.cardBackground;
+    final bg = isDark ? AppColors.darkBackground : AppColors.background;
+    final surface = isDark ? AppColors.darkCard : AppColors.cardBackground;
     final textPrimary =
-        isDark ? const Color(0xFFA5D6A7) : AppColors.textPrimary;
+        isDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
+    final textSecondary =
+        isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
     final textSelected =
-        isDark ? const Color(0xFFC8E6C9) : AppColors.textSelectedValue;
+        isDark ? AppColors.darkTextPrimary : AppColors.textSelectedValue;
     final textMuted =
-        isDark ? const Color(0xFF81C784) : AppColors.textMuted;
+        isDark ? AppColors.darkTextMuted : AppColors.textMuted;
     final borderColor =
-        isDark ? const Color(0xFF424242) : Colors.grey.shade300;
+        isDark ? AppColors.darkBorder : AppColors.borderLight;
 
     final colorScheme = ColorScheme(
       brightness: brightness,
@@ -82,6 +84,7 @@ class AppTheme {
       onError: Colors.white,
       surface: surface,
       onSurface: textPrimary,
+      onSurfaceVariant: textSecondary,
     );
 
     return ThemeData(
@@ -103,25 +106,39 @@ class AppTheme {
           color: Colors.white,
         ),
       ),
+      dividerTheme: DividerThemeData(color: borderColor),
+      iconTheme: IconThemeData(color: textPrimary),
       cardTheme: CardThemeData(
         color: surface,
-        elevation: isDark ? 2 : 1,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppColors.radiusLg),
+          side: isDark
+              ? const BorderSide(color: AppColors.darkBorder)
+              : BorderSide.none,
+        ),
+        shadowColor: Colors.black.withValues(alpha: 0.08),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: isDark ? const Color(0xFF2C2C2C) : AppColors.dialogBackground,
+        backgroundColor: isDark ? AppColors.darkCard : AppColors.dialogBackground,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppColors.radiusXl),
+        ),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: isDark ? const Color(0xFF2C2C2C) : AppColors.dialogBackground,
+        backgroundColor: isDark ? AppColors.darkCard : AppColors.dialogBackground,
         surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
       ),
-      expansionTileTheme: ExpansionTileThemeData(
+      expansionTileTheme: const ExpansionTileThemeData(
         backgroundColor: Colors.transparent,
         collapsedBackgroundColor: Colors.transparent,
-        shape: const Border(),
-        collapsedShape: const Border(),
+        shape: Border(),
+        collapsedShape: Border(),
         childrenPadding: EdgeInsets.zero,
         tilePadding: EdgeInsets.zero,
       ),
@@ -129,9 +146,15 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppColors.radiusMd),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
           ),
         ),
       ),
@@ -140,33 +163,40 @@ class AppTheme {
         fillColor: surface,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        floatingLabelBehavior: FloatingLabelBehavior.auto,
         labelStyle: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: isDark ? AppColors.textSecondary : AppColors.textSecondary,
+          color: textSecondary,
         ),
         hintStyle: TextStyle(fontSize: 14, color: textMuted),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppColors.radiusMd),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppColors.radiusMd),
           borderSide: BorderSide(color: borderColor, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderRadius: BorderRadius.circular(AppColors.radiusMd),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.8),
         ),
       ),
       textTheme: TextTheme(
         headlineMedium: TextStyle(
           fontSize: 22,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           color: textPrimary,
+          letterSpacing: -0.2,
         ),
         titleLarge: TextStyle(
           fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: textPrimary,
+        ),
+        titleMedium: TextStyle(
+          fontSize: 15,
           fontWeight: FontWeight.w700,
           color: textPrimary,
         ),
@@ -178,9 +208,15 @@ class AppTheme {
         bodyMedium: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w500,
-          color: textMuted,
+          color: textSecondary,
+        ),
+        labelLarge: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: textSecondary,
         ),
       ),
+      drawerTheme: DrawerThemeData(backgroundColor: bg),
       extensions: [
         _AgFormColors(
           valueSelected: textSelected,

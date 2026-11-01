@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/mortality_detail.dart';
 import '../models/motivo_mortalidad.dart';
 
 enum MortalityType {
@@ -52,6 +53,78 @@ String? mortalityCausaLineText({
     }
   }
   return (codigo: kCausaTransporteNombre, nombre: kCausaTransporteNombre);
+}
+
+/// Etapa del proceso de despacho de aves.
+class DespachoEtapa {
+  final String id;
+  final String nombre;
+  final IconData icon;
+
+  const DespachoEtapa({
+    required this.id,
+    required this.nombre,
+    required this.icon,
+  });
+}
+
+/// Etapas del despacho en orden de ejecución (id = columna camelCase en BD).
+const List<DespachoEtapa> kDespachoEtapas = [
+  DespachoEtapa(id: 'procesoPreparar', nombre: 'Preparar', icon: Icons.pending_actions_outlined),
+  DespachoEtapa(id: 'procesoAcorralar', nombre: 'Acorralar', icon: Icons.fence_outlined),
+  DespachoEtapa(id: 'procesoSeleccionar', nombre: 'Seleccionar', icon: Icons.checklist_outlined),
+  DespachoEtapa(id: 'procesoEnjabar', nombre: 'Enjabar', icon: Icons.grid_view_outlined),
+  DespachoEtapa(id: 'procesoPesar', nombre: 'Pesar', icon: Icons.scale_outlined),
+  DespachoEtapa(id: 'procesoEstibar', nombre: 'Estibar', icon: Icons.warehouse_outlined),
+];
+
+/// Sexos para los que se registran etapas en el despacho ('macho' | 'hembra').
+const List<String> kDespachoSexos = ['macho', 'hembra'];
+
+/// Normaliza 'M'/'macho' → 'macho' y 'H'/'hembra' → 'hembra'.
+String despachoSexoId(String sexo) {
+  final s = sexo.trim().toLowerCase();
+  return s == 'macho' || s == 'm' ? 'macho' : 'hembra';
+}
+
+/// Etiqueta legible del sexo: 'macho' → 'Machos', 'hembra' → 'Hembras'.
+String despachoSexoLabel(String sexo) =>
+    despachoSexoId(sexo) == 'macho' ? 'Machos' : 'Hembras';
+
+/// Suma de las etapas de despacho de todos los detalles de un sexo.
+int despachoEtapasTotalDetalles(List<MortalityDetail> detalles, String sexo) {
+  final esMacho = despachoSexoId(sexo) == 'macho';
+  return detalles
+      .where((d) => d.isMacho == esMacho)
+      .fold(0, (sum, d) => sum + d.procesoTotal);
+}
+
+/// Suma de una etapa concreta en todos los detalles de un sexo.
+int despachoEtapaTotalDetalles(
+  List<MortalityDetail> detalles,
+  String sexo,
+  String etapaId,
+) {
+  final esMacho = despachoSexoId(sexo) == 'macho';
+  return detalles
+      .where((d) => d.isMacho == esMacho)
+      .fold(0, (sum, d) => sum + d.procesoEtapa(etapaId));
+}
+
+/// Valor de una etapa a nivel de registro desde sus detalles.
+int despachoEtapaRegistroInt(
+  Map<String, dynamic> record,
+  String sexo,
+  String etapaId,
+) {
+  final detalles = MortalityDetail.listFromRecord(record);
+  return despachoEtapaTotalDetalles(detalles, sexo, etapaId);
+}
+
+/// Total de etapas por sexo a nivel de registro desde sus detalles.
+int despachoEtapasRegistroTotal(Map<String, dynamic> record, String sexo) {
+  final detalles = MortalityDetail.listFromRecord(record);
+  return despachoEtapasTotalDetalles(detalles, sexo);
 }
 
 extension MortalityTypeExt on MortalityType {

@@ -1,11 +1,18 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import '../services/api_service.dart';
 import '../services/catalog_sync_service.dart';
 import '../services/storage_service.dart';
+import '../utils/app_theme.dart';
 import '../utils/constants.dart';
+import '../utils/dialog_helper.dart';
 import '../utils/galpones_resolver.dart';
+import '../utils/record_id.dart';
 import '../utils/toast_helper.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/evidencia_select_field.dart';
@@ -47,16 +54,14 @@ class _RegisterEvidenciaScreenState extends State<RegisterEvidenciaScreen> {
     return '';
   }
 
-  String get _granjaCampaniaLabel {
+  String get _granjaLabel {
     if (_granja.isEmpty) return '';
-    final codDisplay = _granja.contains('-')
-        ? _granja
-        : GranjaCampaniaPicker.formatCodigoCorrelativo(_granja, _campaniaEfectiva);
-    return GranjaCampaniaPicker.formatEtiqueta(
-      codigo6: codDisplay,
-      nombre: _granjaNombre,
-      campania: _campaniaEfectiva,
-    );
+    return GranjaCampaniaPicker.formatGranjaLabel(_granja, _granjaNombre);
+  }
+
+  String get _campaniaDisplay {
+    final c = _campaniaEfectiva;
+    return c.isEmpty ? '' : GranjaCampaniaPicker.padCampania(c);
   }
 
   List<String> get _galponCodes => _galpones
@@ -128,7 +133,7 @@ class _RegisterEvidenciaScreenState extends State<RegisterEvidenciaScreen> {
       'fecha': _fmtDate(_fecha),
       'tareaKey': _tareaKey,
       'procesoNombre': _procesoNombre,
-      'granja': _granja,
+      'granja': GranjaCampaniaPicker.normGranja(_granja),
       'granjaNombre': _granjaNombre,
       'campania': campania,
       'galpon': _galpon,
@@ -156,6 +161,16 @@ class _RegisterEvidenciaScreenState extends State<RegisterEvidenciaScreen> {
       _imagePaths[1] = null;
       _imagePaths[2] = null;
     });
+  }
+
+  Future<bool> _hasInternetFast() async {
+    try {
+      final r = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 4));
+      return r.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _guardar() async {
@@ -190,11 +205,47 @@ class _RegisterEvidenciaScreenState extends State<RegisterEvidenciaScreen> {
       record: record,
       onConfirm: () async {
         await storage.saveRecord(record);
+        record['synced'] = false;
+
+        if (!await _hasInternetFast()) return;
+
+        if (!mounted) return;
+
+        final close = showChickenLoadingDialog(context, 'Enviando registro…');
+        try {
+          final api = ApiService();
+          final result = await api.uploadEvidencia(record);
+          debugPrint(
+            '[guardar_evidencia] respuesta: $result '
+            '(id=${EvidenciaRecordId.of(record)})',
+          );
+          if (result['success'] == true) {
+            await storage.markRecordAsSynced({
+              ...record,
+              'id': EvidenciaRecordId.of(record),
+              'guardado_backend': true,
+            });
+            await storage.setLastSyncDate();
+            record['synced'] = true;
+            record['guardado_backend'] = true;
+          }
+        } catch (_) {
+          // Falló el envío; el registro ya quedó guardado en local.
+        } finally {
+          close();
+        }
       },
     );
 
     if (!mounted || !saved) return;
-    showSuccessToast(context, 'Registro guardado localmente');
+    if (record['synced'] == true) {
+      showSuccessToast(context, 'Registro guardado y enviado');
+    } else {
+      showSuccessToast(
+        context,
+        'Registro guardado localmente (pendiente de subir)',
+      );
+    }
     _clearForm();
   }
 
@@ -242,7 +293,7 @@ class _RegisterEvidenciaScreenState extends State<RegisterEvidenciaScreen> {
             ],
             const SizedBox(height: 12),
             EvidenciaSelectField(
-              label: 'Proceso (actividad)',
+              label: 'Proceso',
               value: _procesoNombre,
               placeholder: 'Toca para seleccionar',
               icon: Icons.account_tree_outlined,
@@ -257,33 +308,56 @@ class _RegisterEvidenciaScreenState extends State<RegisterEvidenciaScreen> {
               },
             ),
             const SizedBox(height: 12),
-            EvidenciaSelectField(
-              label: 'Granja y campaña',
-              value: _granjaCampaniaLabel,
-              placeholder: 'Toca para seleccionar',
-              icon: Icons.warehouse_outlined,
-              enabled: !_cargandoProyeccion,
-              onTap: () async {
-                final sel = await GranjaCampaniaPicker.show(
-                  context,
-                  proyeccion: proyeccion,
-                  cencosGalpones: storage.getCencosGalpones(),
-                );
-                if (sel != null) {
-                  final codigo = sel['granja'] ?? sel['codigo'] ?? '';
-                  var camp = sel['campania'] ?? '';
-                  if (camp.isEmpty && codigo.isNotEmpty) {
-                    camp = GranjaCampaniaPicker.campaniaFromCodigo(codigo);
-                  }
-                  setState(() {
-                    _granja = codigo;
-                    _granjaNombre = sel['granjaNombre'] ?? '';
-                    _campania = camp;
-                    _galpon = '';
-                  });
-                  _loadGalpones(storage);
-                }
-              },
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: EvidenciaSelectField(
+                    label: 'Granja',
+                    value: _granjaLabel,
+                    placeholder: 'Seleccione',
+                    icon: Icons.warehouse_outlined,
+                    enabled: !_cargandoProyeccion,
+                    onTap: () async {
+                      final sel = await GranjaCampaniaPicker.show(
+                        context,
+                        proyeccion: proyeccion,
+                        cencosGalpones: storage.getCencosGalpones(),
+                      );
+                      if (sel != null) {
+                        final codigo = sel['granja'] ?? sel['codigo'] ?? '';
+                        var camp = sel['campania'] ?? '';
+                        if (camp.isEmpty && codigo.isNotEmpty) {
+                          camp = GranjaCampaniaPicker.campaniaFromCodigo(codigo);
+                        }
+                        setState(() {
+                          _granja = GranjaCampaniaPicker.normGranja(
+                            sel['granja3'] ?? codigo,
+                          );
+                          _granjaNombre = GranjaCampaniaPicker.cleanNombreGranja(
+                            sel['granjaNombre'] ?? '',
+                          );
+                          _campania = camp;
+                          _galpon = '';
+                        });
+                        _loadGalpones(storage);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 1,
+                  child: EvidenciaSelectField(
+                    label: 'CAMP',
+                    value: _campaniaDisplay,
+                    placeholder: '',
+                    icon: Icons.tag,
+                    showIcon: false,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             EvidenciaGalponField(
@@ -295,11 +369,18 @@ class _RegisterEvidenciaScreenState extends State<RegisterEvidenciaScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: _obsController,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: context.formColors.valueSelected,
+                height: 1.35,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Observaciones',
-                alignLabelWithHint: true,
+                floatingLabelBehavior: FloatingLabelBehavior.always,
               ),
               maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: 16),
             Text(

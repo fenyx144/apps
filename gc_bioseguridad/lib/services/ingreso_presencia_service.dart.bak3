@@ -1,0 +1,694 @@
+import '../services/plan_visitas_service.dart';
+import '../utils/documento_persona.dart';
+import '../utils/dni_utils.dart';
+import 'storage_service.dart';
+
+/// Persona con estado dentro / fuera de la granja (solo en el dispositivo).
+class PersonaPresencia {
+  const PersonaPresencia({required this.dni, this.nombre = ''});
+
+  final String dni;
+  final String nombre;
+
+  String get etiqueta => nombre.isEmpty ? dni : '$dni · $nombre';
+}
+
+/// Vehículo que ingresó a la granja y puede registrar salida o regreso.
+class VehiculoPresencia {
+  const VehiculoPresencia({required this.placa});
+
+  final String placa;
+
+  String get clave => PlanDescarga.normPlaca(placa);
+
+  String get etiqueta => placa.trim().toUpperCase();
+}
+
+/// Visita o ingreso agrupado: varios ingresos parciales comparten [grupoId].
+class GrupoPresencia {
+  GrupoPresencia({
+    required this.grupoId,
+    required this.granja,
+    required this.granjaNombre,
+    required this.campania,
+    required this.turno,
+    required this.proveedor,
+    required this.motivo,
+    required this.horaIngreso,
+    this.fechaIngreso = '',
+    this.planVisitaId = '',
+    List<PersonaPresencia>? dentro,
+    List<PersonaPresencia>? fueraTemporal,
+    List<PersonaPresencia>? fueraDefinitiva,
+    List<VehiculoPresencia>? vehiculosDentro,
+    List<VehiculoPresencia>? vehiculosFueraTemporal,
+    List<VehiculoPresencia>? vehiculosFueraDefinitiva,
+  })  : _dentro = [...?dentro],
+        _fueraTemporal = [...?fueraTemporal],
+        _fueraDefinitiva = [...?fueraDefinitiva],
+        _vehiculosDentro = [...?vehiculosDentro],
+        _vehiculosFueraTemporal = [...?vehiculosFueraTemporal],
+        _vehiculosFueraDefinitiva = [...?vehiculosFueraDefinitiva];
+
+  final String grupoId;
+  /// Id de visita planificada (portal), vacío si el ingreso no viene del plan.
+  final String planVisitaId;
+  final String granja;
+  final String granjaNombre;
+  final String campania;
+  final String turno;
+  final String proveedor;
+  final String motivo;
+  final String horaIngreso;
+
+  /// Fecha del registro de ingreso (`yyyy-MM-dd`).
+  final String fechaIngreso;
+
+  final List<PersonaPresencia> _dentro;
+  final List<PersonaPresencia> _fueraTemporal;
+  final List<PersonaPresencia> _fueraDefinitiva;
+  final List<VehiculoPresencia> _vehiculosDentro;
+  final List<VehiculoPresencia> _vehiculosFueraTemporal;
+  final List<VehiculoPresencia> _vehiculosFueraDefinitiva;
+
+  List<PersonaPresencia> get dentro => List.unmodifiable(_dentro);
+  List<PersonaPresencia> get fueraTemporal =>
+      List.unmodifiable(_fueraTemporal);
+  List<PersonaPresencia> get fueraDefinitiva =>
+      List.unmodifiable(_fueraDefinitiva);
+  List<VehiculoPresencia> get vehiculosDentro =>
+      List.unmodifiable(_vehiculosDentro);
+  List<VehiculoPresencia> get vehiculosFueraTemporal =>
+      List.unmodifiable(_vehiculosFueraTemporal);
+  List<VehiculoPresencia> get vehiculosFueraDefinitiva =>
+      List.unmodifiable(_vehiculosFueraDefinitiva);
+
+  /// Compatibilidad con búsquedas y vistas antiguas.
+  List<PersonaPresencia> get fuera => [
+        ..._fueraTemporal,
+        ..._fueraDefinitiva,
+      ];
+
+  List<VehiculoPresencia> get vehiculosFuera => [
+        ..._vehiculosFueraTemporal,
+        ..._vehiculosFueraDefinitiva,
+      ];
+
+  bool get hayDentro =>
+      _dentro.isNotEmpty || _vehiculosDentro.isNotEmpty;
+
+  bool get hayFueraTemporal =>
+      _fueraTemporal.isNotEmpty || _vehiculosFueraTemporal.isNotEmpty;
+
+  bool get hayFuera => fuera.isNotEmpty || vehiculosFuera.isNotEmpty;
+
+  void _quitarPersonaDeFuera(String dni) {
+    _fueraTemporal.removeWhere((x) => x.dni == dni);
+    _fueraDefinitiva.removeWhere((x) => x.dni == dni);
+  }
+
+  void _quitarVehiculoDeFuera(String clave) {
+    if (clave.isEmpty) return;
+    _vehiculosFueraTemporal.removeWhere((x) => x.clave == clave);
+    _vehiculosFueraDefinitiva.removeWhere((x) => x.clave == clave);
+  }
+
+  void _ponerDentro(PersonaPresencia p) {
+    _quitarPersonaDeFuera(p.dni);
+    if (_dentro.every((x) => x.dni != p.dni)) {
+      _dentro.add(p);
+    }
+  }
+
+  void _ponerFueraTemporal(PersonaPresencia p) {
+    _dentro.removeWhere((x) => x.dni == p.dni);
+    _fueraDefinitiva.removeWhere((x) => x.dni == p.dni);
+    if (_fueraTemporal.every((x) => x.dni != p.dni)) {
+      _fueraTemporal.add(p);
+    }
+  }
+
+  void _ponerFueraDefinitiva(PersonaPresencia p) {
+    _dentro.removeWhere((x) => x.dni == p.dni);
+    _fueraTemporal.removeWhere((x) => x.dni == p.dni);
+    if (_fueraDefinitiva.every((x) => x.dni != p.dni)) {
+      _fueraDefinitiva.add(p);
+    }
+  }
+
+  void _ponerVehiculoDentro(VehiculoPresencia v) {
+    final k = v.clave;
+    if (k.isEmpty) return;
+    _quitarVehiculoDeFuera(k);
+    if (_vehiculosDentro.every((x) => x.clave != k)) {
+      _vehiculosDentro.add(v);
+    }
+  }
+
+  void _ponerVehiculoFueraTemporal(VehiculoPresencia v) {
+    final k = v.clave;
+    if (k.isEmpty) return;
+    _vehiculosDentro.removeWhere((x) => x.clave == k);
+    _vehiculosFueraDefinitiva.removeWhere((x) => x.clave == k);
+    if (_vehiculosFueraTemporal.every((x) => x.clave != k)) {
+      _vehiculosFueraTemporal.add(v);
+    }
+  }
+
+  void _ponerVehiculoFueraDefinitiva(VehiculoPresencia v) {
+    final k = v.clave;
+    if (k.isEmpty) return;
+    _vehiculosDentro.removeWhere((x) => x.clave == k);
+    _vehiculosFueraTemporal.removeWhere((x) => x.clave == k);
+    if (_vehiculosFueraDefinitiva.every((x) => x.clave != k)) {
+      _vehiculosFueraDefinitiva.add(v);
+    }
+  }
+}
+
+/// Dónde figura una persona o vehículo respecto a la granja.
+enum PresenciaUbicacion {
+  dentro,
+  fueraTemporal,
+  fueraDefinitiva,
+  noEncontrado,
+}
+
+/// Resultado de buscar un DNI o una placa en la presencia local.
+class PresenciaCoincidencia {
+  const PresenciaCoincidencia({
+    this.grupo,
+    this.persona,
+    this.vehiculo,
+    this.ubicacion = PresenciaUbicacion.noEncontrado,
+    this.ambiguo = false,
+    this.escaneoDni,
+    this.escaneoPlaca,
+  });
+
+  final GrupoPresencia? grupo;
+  final PersonaPresencia? persona;
+  final VehiculoPresencia? vehiculo;
+  final PresenciaUbicacion ubicacion;
+  final bool ambiguo;
+
+  /// DNI leído en garita cuando no hay ingreso abierto que coincida.
+  final String? escaneoDni;
+
+  /// Placa leída cuando no hay ingreso abierto que coincida.
+  final String? escaneoPlaca;
+
+  bool get encontrado =>
+      !ambiguo && ubicacion != PresenciaUbicacion.noEncontrado;
+}
+
+/// Calcula quién sigue dentro según ingresos y movimientos guardados en el equipo.
+abstract final class IngresoPresenciaService {
+  static const String tipoSalidaTemporal = 'temporal';
+  static const String tipoSalidaDefinitiva = 'definitiva';
+
+  static String? _planVisitaIdDeRegistro(Map<String, dynamic> reg) {
+    final id = reg['plan_visita_id']?.toString().trim() ?? '';
+    if (id.isEmpty || id == '0') return null;
+    return id;
+  }
+
+  static String grupoIdDeIngreso(Map<String, dynamic> record) {
+    final reg = Map<String, dynamic>.from(
+      (record['registro'] as Map?) ?? const {},
+    );
+    final planId = _planVisitaIdDeRegistro(reg);
+    if (planId != null) return 'plan:$planId';
+    return 'ing:${record['id']?.toString() ?? ''}';
+  }
+
+  static String? grupoIdDeMovimiento(Map<String, dynamic> record) {
+    final reg = Map<String, dynamic>.from(
+      (record['registro'] as Map?) ?? const {},
+    );
+    final gid = reg['grupo_id']?.toString().trim() ?? '';
+    if (gid.isNotEmpty) return gid;
+    return null;
+  }
+
+  static bool _vehiculoIngresaFlag(dynamic ingresa) {
+    if (ingresa == false || ingresa == 0 || ingresa == '0') return false;
+    return true;
+  }
+
+  static String _tipoSalidaDe(Map<String, dynamic> reg) {
+    final t = (reg['tipo_salida'] ?? '').toString().trim().toLowerCase();
+    if (t == tipoSalidaTemporal) return tipoSalidaTemporal;
+    return tipoSalidaDefinitiva;
+  }
+
+  static bool _esRegreso(Map<String, dynamic> reg) {
+    final mov = (reg['movimiento'] ?? 'salida').toString().toLowerCase();
+    return mov == 'reingreso' || mov == 'regreso';
+  }
+
+  /// Vehículos que ingresaron a la granja en ese registro de ingreso.
+  static List<VehiculoPresencia> vehiculosIngresadosDe(
+    Map<String, dynamic> reg,
+  ) {
+    final out = <VehiculoPresencia>[];
+    final vistos = <String>{};
+    final raw = reg['vehiculos'];
+    if (raw is List && raw.isNotEmpty) {
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final m = Map<String, dynamic>.from(item);
+        if (!_vehiculoIngresaFlag(m['ingresa'])) continue;
+        final placa = (m['placa'] ?? '').toString().trim();
+        final clave = PlanDescarga.normPlaca(placa);
+        if (placa.isEmpty || clave.isEmpty || vistos.contains(clave)) {
+          continue;
+        }
+        vistos.add(clave);
+        out.add(VehiculoPresencia(placa: placa));
+      }
+      return out;
+    }
+    return out;
+  }
+
+  static List<VehiculoPresencia> vehiculosDeMovimiento(
+    Map<String, dynamic> reg,
+  ) {
+    final out = <VehiculoPresencia>[];
+    final vistos = <String>{};
+    final raw = reg['vehiculos'];
+    if (raw is! List) return out;
+    for (final item in raw) {
+      String placa;
+      if (item is Map) {
+        placa = (item['placa'] ?? '').toString().trim();
+      } else {
+        placa = item.toString().trim();
+      }
+      final clave = PlanDescarga.normPlaca(placa);
+      if (placa.isEmpty || clave.isEmpty || vistos.contains(clave)) continue;
+      vistos.add(clave);
+      out.add(VehiculoPresencia(placa: placa));
+    }
+    return out;
+  }
+
+  /// DNIs ya registrados en ingresos del día para una visita planificada.
+  static Set<String> dnisIngresadosEnPlanVisita(
+    StorageService storage,
+    String planVisitaId, {
+    required String fechaYmd,
+  }) {
+    if (planVisitaId.isEmpty) return {};
+    final out = <String>{};
+    for (final r in storage.getMyRecords()) {
+      if ((r['reporte'] ?? '').toString() != 'ingreso') continue;
+      if ((r['fecha'] ?? '').toString() != fechaYmd) continue;
+      final reg = Map<String, dynamic>.from((r['registro'] as Map?) ?? {});
+      if (_planVisitaIdDeRegistro(reg) != planVisitaId) continue;
+      for (final p in parseDnisEntradas(reg['dnis'])) {
+        out.add(p.dni);
+      }
+    }
+    return out;
+  }
+
+  static bool esPlanificado(GrupoPresencia g) =>
+      g.planVisitaId.isNotEmpty || g.grupoId.startsWith('plan:');
+
+  /// Ingresos con personal/vehículos aún dentro (cualquier fecha), por granja.
+  static List<GrupoPresencia> gruposConPersonalDentro(
+    StorageService storage, {
+    String granja = '',
+  }) {
+    return _gruposDesdeRecords(
+      storage,
+      granja: granja,
+    ).where((g) => g.hayDentro).toList();
+  }
+
+  /// Salidas temporales pendientes de regreso (cualquier fecha), por granja.
+  static List<GrupoPresencia> gruposPendientesRegreso(
+    StorageService storage, {
+    String granja = '',
+  }) {
+    return _gruposDesdeRecords(
+      storage,
+      granja: granja,
+    ).where((g) => g.hayFueraTemporal).toList();
+  }
+
+  /// Grupos del día (ingreso + salidas de esa fecha).
+  static List<GrupoPresencia> gruposDelDia(
+    StorageService storage, {
+    required String fechaYmd,
+    String granja = '',
+  }) {
+    return _gruposDesdeRecords(
+      storage,
+      granja: granja,
+      fechaYmd: fechaYmd,
+    ).where((g) => g.hayDentro || g.hayFuera).toList();
+  }
+
+  static bool _recordEnAlcanceGranja(
+    Map<String, dynamic> r, {
+    String granja = '',
+    List<String> granjas = const [],
+  }) {
+    final g = (r['granja'] ?? '').toString();
+    if (granja.isNotEmpty) return g == granja;
+    if (granjas.isNotEmpty) return granjas.contains(g);
+    return true;
+  }
+
+  static List<GrupoPresencia> _gruposDesdeRecords(
+    StorageService storage, {
+    String granja = '',
+    List<String> granjas = const [],
+    String? fechaYmd,
+  }) {
+    final records = storage.getMyRecords().where((r) {
+      if (fechaYmd != null && (r['fecha'] ?? '').toString() != fechaYmd) {
+        return false;
+      }
+      if (!_recordEnAlcanceGranja(r, granja: granja, granjas: granjas)) {
+        return false;
+      }
+      final rep = (r['reporte'] ?? '').toString();
+      return rep == 'ingreso' || rep == 'salida';
+    }).toList();
+
+    records.sort((a, b) {
+      final ta = a['created_at']?.toString() ?? '';
+      final tb = b['created_at']?.toString() ?? '';
+      return ta.compareTo(tb);
+    });
+
+    final grupos = <String, GrupoPresencia>{};
+
+    GrupoPresencia metaDeIngreso(Map<String, dynamic> r) {
+      final reg = Map<String, dynamic>.from((r['registro'] as Map?) ?? {});
+      return GrupoPresencia(
+        grupoId: grupoIdDeIngreso(r),
+        planVisitaId: _planVisitaIdDeRegistro(reg) ?? '',
+        granja: r['granja']?.toString() ?? '',
+        granjaNombre: r['granjaNombre']?.toString() ?? '',
+        campania: r['campania']?.toString() ?? '',
+        turno: r['turno']?.toString() ?? '',
+        proveedor: _proveedorDe(reg),
+        motivo: reg['motivo']?.toString().trim() ?? '',
+        horaIngreso: reg['hora']?.toString() ?? '',
+        fechaIngreso: r['fecha']?.toString() ?? '',
+      );
+    }
+
+    for (final r in records) {
+      final rep = (r['reporte'] ?? '').toString();
+      if (rep == 'ingreso') {
+        final gid = grupoIdDeIngreso(r);
+        grupos.putIfAbsent(gid, () => metaDeIngreso(r));
+        final g = grupos[gid]!;
+        final reg = Map<String, dynamic>.from((r['registro'] as Map?) ?? {});
+        for (final p in parseDnisEntradas(reg['dnis'])) {
+          g._ponerDentro(PersonaPresencia(dni: p.dni, nombre: p.nombre));
+        }
+        for (final v in vehiculosIngresadosDe(reg)) {
+          g._ponerVehiculoDentro(v);
+        }
+        continue;
+      }
+      if (rep == 'salida') {
+        final gid = grupoIdDeMovimiento(r);
+        if (gid == null) continue;
+        grupos.putIfAbsent(gid, () {
+          final reg = Map<String, dynamic>.from((r['registro'] as Map?) ?? {});
+          final planId = _planVisitaIdDeRegistro(reg) ??
+              (gid.startsWith('plan:') ? gid.substring(5) : '');
+          return GrupoPresencia(
+            grupoId: gid,
+            planVisitaId: planId,
+            granja: r['granja']?.toString() ?? '',
+            granjaNombre: r['granjaNombre']?.toString() ?? '',
+            campania: r['campania']?.toString() ?? '',
+            turno: r['turno']?.toString() ?? '',
+            proveedor: _proveedorDe(reg),
+            motivo: reg['motivo']?.toString().trim() ?? '',
+            horaIngreso: '',
+            fechaIngreso: '',
+          );
+        });
+        final g = grupos[gid]!;
+        final reg = Map<String, dynamic>.from((r['registro'] as Map?) ?? {});
+        if (_esRegreso(reg)) {
+          for (final p in parseDnisEntradas(reg['dnis'])) {
+            g._ponerDentro(PersonaPresencia(dni: p.dni, nombre: p.nombre));
+          }
+          for (final v in vehiculosDeMovimiento(reg)) {
+            g._ponerVehiculoDentro(v);
+          }
+        } else {
+          final temporal = _tipoSalidaDe(reg) == tipoSalidaTemporal;
+          for (final p in parseDnisEntradas(reg['dnis'])) {
+            final persona = PersonaPresencia(dni: p.dni, nombre: p.nombre);
+            if (temporal) {
+              g._ponerFueraTemporal(persona);
+            } else {
+              g._ponerFueraDefinitiva(persona);
+            }
+          }
+          for (final v in vehiculosDeMovimiento(reg)) {
+            if (temporal) {
+              g._ponerVehiculoFueraTemporal(v);
+            } else {
+              g._ponerVehiculoFueraDefinitiva(v);
+            }
+          }
+        }
+      }
+    }
+
+    final lista = grupos.values.toList()
+      ..sort((a, b) {
+        final fa = a.fechaIngreso;
+        final fb = b.fechaIngreso;
+        if (fa != fb) return fb.compareTo(fa);
+        return a.proveedor.compareTo(b.proveedor);
+      });
+    return lista;
+  }
+
+  static String _proveedorDe(Map<String, dynamic> reg) {
+    final nombre = reg['proveedor']?.toString().trim() ?? '';
+    if (nombre.isNotEmpty) return nombre;
+    final ruc = reg['proveedor_ruc']?.toString().trim() ?? '';
+    return ruc.isEmpty ? '—' : ruc;
+  }
+
+  static String etiquetaTipoSalida(String? raw) {
+    final t = (raw ?? '').toString().trim().toLowerCase();
+    if (t == tipoSalidaTemporal) return 'Salida temporal';
+    return 'Salida definitiva';
+  }
+
+  static List<PresenciaCoincidencia> _coincidenciasPorDni(
+    StorageService storage, {
+    required String dni,
+    String granja = '',
+    List<String> granjas = const [],
+  }) {
+    final doc = DocumentoPersona.normalizar(dni.trim());
+    if (!DocumentoPersona.esCompleto(doc)) return const [];
+
+    final out = <PresenciaCoincidencia>[];
+    for (final g in _gruposDesdeRecords(
+      storage,
+      granja: granja,
+      granjas: granjas,
+    )) {
+      for (final p in g.dentro) {
+        if (DocumentoPersona.normalizar(p.dni) == doc) {
+          out.add(
+            PresenciaCoincidencia(
+              grupo: g,
+              persona: p,
+              ubicacion: PresenciaUbicacion.dentro,
+            ),
+          );
+        }
+      }
+      for (final p in g.fueraTemporal) {
+        if (DocumentoPersona.normalizar(p.dni) == doc) {
+          out.add(
+            PresenciaCoincidencia(
+              grupo: g,
+              persona: p,
+              ubicacion: PresenciaUbicacion.fueraTemporal,
+            ),
+          );
+        }
+      }
+      for (final p in g.fueraDefinitiva) {
+        if (DocumentoPersona.normalizar(p.dni) == doc) {
+          out.add(
+            PresenciaCoincidencia(
+              grupo: g,
+              persona: p,
+              ubicacion: PresenciaUbicacion.fueraDefinitiva,
+            ),
+          );
+        }
+      }
+    }
+    return out;
+  }
+
+  static List<PresenciaCoincidencia> _coincidenciasPorPlaca(
+    StorageService storage, {
+    required String placa,
+    String granja = '',
+    List<String> granjas = const [],
+  }) {
+    final clave = PlanDescarga.normPlaca(placa);
+    if (clave.length < 5) return const [];
+
+    final out = <PresenciaCoincidencia>[];
+    for (final g in _gruposDesdeRecords(
+      storage,
+      granja: granja,
+      granjas: granjas,
+    )) {
+      for (final v in g.vehiculosDentro) {
+        if (v.clave == clave) {
+          out.add(
+            PresenciaCoincidencia(
+              grupo: g,
+              vehiculo: v,
+              ubicacion: PresenciaUbicacion.dentro,
+            ),
+          );
+        }
+      }
+      for (final v in g.vehiculosFueraTemporal) {
+        if (v.clave == clave) {
+          out.add(
+            PresenciaCoincidencia(
+              grupo: g,
+              vehiculo: v,
+              ubicacion: PresenciaUbicacion.fueraTemporal,
+            ),
+          );
+        }
+      }
+      for (final v in g.vehiculosFueraDefinitiva) {
+        if (v.clave == clave) {
+          out.add(
+            PresenciaCoincidencia(
+              grupo: g,
+              vehiculo: v,
+              ubicacion: PresenciaUbicacion.fueraDefinitiva,
+            ),
+          );
+        }
+      }
+    }
+    return out;
+  }
+
+  static int _prioridadUbicacion(PresenciaUbicacion u) {
+    return switch (u) {
+      PresenciaUbicacion.dentro => 3,
+      PresenciaUbicacion.fueraTemporal => 2,
+      PresenciaUbicacion.fueraDefinitiva => 1,
+      PresenciaUbicacion.noEncontrado => 0,
+    };
+  }
+
+  static int _compareRecencia(GrupoPresencia? a, GrupoPresencia? b) {
+    final fa = a?.fechaIngreso ?? '';
+    final fb = b?.fechaIngreso ?? '';
+    final cmpF = fb.compareTo(fa);
+    if (cmpF != 0) return cmpF;
+    final ha = a?.horaIngreso ?? '';
+    final hb = b?.horaIngreso ?? '';
+    return hb.compareTo(ha);
+  }
+
+  /// Varios ingresos abiertos con el mismo DNI/placa: elige uno (más reciente,
+  /// priorizando quien figura [dentro] para no bloquear salida en garita).
+  static PresenciaCoincidencia _resolverLista(List<PresenciaCoincidencia> lista) {
+    if (lista.isEmpty) {
+      return const PresenciaCoincidencia();
+    }
+    if (lista.length == 1) return lista.first;
+
+    final ordenada = [...lista]
+      ..sort((a, b) {
+        final pu = _prioridadUbicacion(b.ubicacion) -
+            _prioridadUbicacion(a.ubicacion);
+        if (pu != 0) return pu;
+        return _compareRecencia(a.grupo, b.grupo);
+      });
+    return ordenada.first;
+  }
+
+  /// Busca un DNI en ingresos abiertos de la granja (cualquier fecha).
+  static PresenciaCoincidencia resolverPorDni(
+    StorageService storage, {
+    required String dni,
+    String granja = '',
+    List<String> granjas = const [],
+  }) {
+    return _resolverLista(
+      _coincidenciasPorDni(
+        storage,
+        dni: dni,
+        granja: granja,
+        granjas: granjas,
+      ),
+    );
+  }
+
+  /// Busca una placa en ingresos abiertos de la granja (cualquier fecha).
+  static PresenciaCoincidencia resolverPorPlaca(
+    StorageService storage, {
+    required String placa,
+    String granja = '',
+    List<String> granjas = const [],
+  }) {
+    return _resolverLista(
+      _coincidenciasPorPlaca(
+        storage,
+        placa: placa,
+        granja: granja,
+        granjas: granjas,
+      ),
+    );
+  }
+
+  /// Filtra tarjetas de ingreso por proveedor, DNI, nombre o placa.
+  static bool grupoCoincideBusqueda(GrupoPresencia g, String consulta) {
+    final q = consulta.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    if (g.proveedor.toLowerCase().contains(q)) return true;
+    if (g.motivo.toLowerCase().contains(q)) return true;
+    if (g.fechaIngreso.contains(q)) return true;
+    for (final p in g.dentro) {
+      if (p.dni.contains(q) || p.nombre.toLowerCase().contains(q)) return true;
+    }
+    for (final p in g.fueraTemporal) {
+      if (p.dni.contains(q) || p.nombre.toLowerCase().contains(q)) return true;
+    }
+    for (final p in g.fueraDefinitiva) {
+      if (p.dni.contains(q) || p.nombre.toLowerCase().contains(q)) return true;
+    }
+    for (final v in g.vehiculosDentro) {
+      if (v.etiqueta.toLowerCase().contains(q)) return true;
+    }
+    for (final v in g.vehiculosFuera) {
+      if (v.etiqueta.toLowerCase().contains(q)) return true;
+    }
+    return false;
+  }
+}

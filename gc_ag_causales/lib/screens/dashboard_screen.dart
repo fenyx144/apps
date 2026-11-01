@@ -2,13 +2,13 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../services/catalog_service.dart';
-import '../services/catalog_sync_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../utils/theme_colors.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/granja_campania_picker.dart';
+import '../widgets/screen_status_bar.dart';
 import '../widgets/section_app_bar.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -27,14 +27,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final now = DateTime.now();
     _weekStart = DateTime(now.year, now.month, now.day)
         .subtract(Duration(days: now.weekday - 1));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncCatalogsSilent());
-  }
-
-  Future<void> _syncCatalogsSilent() async {
-    final storage = context.read<StorageService>();
-    final catalog = context.read<CatalogService>();
-    await CatalogSyncService().syncAll(storage: storage, catalog: catalog);
-    if (mounted) setState(() {});
   }
 
   void _changeWeek(int offset) {
@@ -68,44 +60,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return week.where((r) => r['fecha']?.toString() == ds).length;
     });
 
-    final byGranja = <String, int>{};
+    final porGranja = <String, Map<String, dynamic>>{};
     for (final r in week) {
-      final g = r['granjaNombre']?.toString() ?? r['granja']?.toString() ?? '?';
-      byGranja[g] = (byGranja[g] ?? 0) + 1;
+      final g3 = r['granja']?.toString() ?? '';
+      final nom = r['granjaNombre']?.toString() ?? '';
+      final camp = GranjaCampaniaPicker.padCampania(
+        r['campania']?.toString() ?? '',
+      );
+      final label = GranjaCampaniaPicker.formatGranjaLabel(g3, nom);
+      final key = '$g3|$camp';
+      final entry = porGranja.putIfAbsent(
+        key,
+        () => {
+          'label': label.isNotEmpty ? label : (g3.isNotEmpty ? g3 : '?'),
+          'camp': camp,
+          'count': 0,
+        },
+      );
+      entry['count'] = (entry['count'] as int) + 1;
     }
+    final porGranjaList = porGranja.values.toList()
+      ..sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
-    return Scaffold(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const lightGradientEnd = Color(0xFFD6E4F0);
+    const darkGradientEnd = Color(0xFF121212);
+
+    return ScreenStatusBar(
+      color: AppColors.primary,
+      iconBrightness: Brightness.light,
+      navigationBarColor: isDark ? darkGradientEnd : lightGradientEnd,
+      child: Scaffold(
+      backgroundColor: isDark ? darkGradientEnd : lightGradientEnd,
+      extendBody: true,
       drawer: const AppDrawer(),
-      appBar: const SectionAppBar(
+      appBar: SectionAppBar(
         title: AppStrings.menuDashboard,
         sectionIcon: Icons.dashboard_rounded,
+        navigationBarColor: isDark ? darkGradientEnd : lightGradientEnd,
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: Theme.of(context).brightness == Brightness.dark
+            colors: isDark
                 ? [
                     const Color(0xFF1A1A1A),
-                    const Color(0xFF121212),
+                    darkGradientEnd,
                   ]
                 : const [
               Color(0xFFF8F9FA),
               Color(0xFFE8EEF3),
-              Color(0xFFD6E4F0),
+              lightGradientEnd,
             ],
           ),
         ),
         child: SafeArea(
           top: false,
-          bottom: true,
+          bottom: false,
           child: RefreshIndicator(
             onRefresh: () async => setState(() {}),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.paddingOf(context).bottom,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -189,14 +215,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: _buildBarChart(byDay, tc),
                       ),
                     ),
-                    if (byGranja.isNotEmpty) ...[
+                    if (porGranjaList.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: AppColors.accent.withOpacity(0.1),
+                              color: AppColors.accent.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(
@@ -219,10 +245,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(height: 12),
                       AppCard(
                         padding: const EdgeInsets.all(12),
-                        child: SizedBox(
-                          height: 180,
-                          child: _buildPieChartByGranja(byGranja),
-                        ),
+                        child: _buildPieChartByGranja(porGranjaList, tc),
                       ),
                     ],
                   ],
@@ -232,6 +255,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -332,24 +356,158 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildPieChartByGranja(Map<String, int> byGranja) {
-    final sections = byGranja.entries.map((e) {
-      final idx = byGranja.keys.toList().indexOf(e.key);
-      final alpha = 0.4 + (idx % 5) * 0.12;
+  static const _granjaPalette = [
+    Color(0xFF42A5F5),
+    Color(0xFFAB47BC),
+    Color(0xFF26A69A),
+    Color(0xFFEF5350),
+    Color(0xFF7E57C2),
+    Color(0xFFFF7043),
+    Color(0xFF29B6F6),
+    Color(0xFF66BB6A),
+    Color(0xFFEC407A),
+    Color(0xFF8D6E63),
+    Color(0xFF78909C),
+    Color(0xFFFFD54F),
+  ];
+
+  Widget _buildPieChartByGranja(
+    List<Map<String, dynamic>> porGranja,
+    BuildContext context,
+  ) {
+    Color pieColor(int idx) => _granjaPalette[idx % _granjaPalette.length];
+
+    final sections = porGranja.asMap().entries.map((e) {
       return PieChartSectionData(
-        value: e.value.toDouble(),
-        title: '${e.value}',
-        radius: 50,
-        color: AppColors.primary.withOpacity(alpha.clamp(0.0, 1.0)),
+        value: (e.value['count'] as int).toDouble(),
+        title: '${e.value['count']}',
+        radius: 44,
+        titleStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: context.textThemePrimary,
+        ),
+        color: pieColor(e.key),
       );
     }).toList();
 
-    return PieChart(
-      PieChartData(
-        sections: sections,
-        centerSpaceRadius: 35,
-        sectionsSpace: 2,
-      ),
+    return Column(
+      children: [
+        SizedBox(
+          height: 140,
+          child: PieChart(
+            PieChartData(
+              sections: sections,
+              centerSpaceRadius: 30,
+              sectionsSpace: 2,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            children: [
+              const SizedBox(width: 22),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  'Granja',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: context.textThemeSecondary,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 52,
+                child: Text(
+                  'Camp',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: context.textThemeSecondary,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 40,
+                child: Text(
+                  'Cant.',
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: context.textThemeSecondary,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        for (final e in porGranja.asMap().entries) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: pieColor(e.key),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    e.value['label'].toString(),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: context.textThemePrimary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                SizedBox(
+                  width: 52,
+                  child: Text(
+                    (e.value['camp'] as String).isNotEmpty
+                        ? e.value['camp'].toString()
+                        : '—',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: context.textThemeSecondary,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 40,
+                  child: Text(
+                    '${e.value['count']}',
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: pieColor(e.key),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

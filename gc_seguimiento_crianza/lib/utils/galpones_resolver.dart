@@ -87,6 +87,62 @@ class GalponesResolver {
     return out;
   }
 
+  static int _cencoRank(String? tcencos) {
+    final n = normalizarCodigoCenco((tcencos ?? '').toString());
+    if (n.length < 6) return 0;
+    return int.tryParse(n) ?? 0;
+  }
+
+  /// Por granja: mismo tcodint → conservar CENCO más reciente (mayor código).
+  static List<Map<String, dynamic>> dedupeGalponesPreferHigherCenco(
+    List<Map<String, dynamic>> raw,
+  ) {
+    final best = <String, Map<String, dynamic>>{};
+    for (final g in raw) {
+      final tc = (g['tcodint'] ?? g['galpon'] ?? '').toString().trim();
+      if (tc.isEmpty) continue;
+      final prev = best[tc];
+      if (prev == null) {
+        best[tc] = Map<String, dynamic>.from(g);
+        continue;
+      }
+      final rNew = _cencoRank(g['tcencos']?.toString());
+      final rOld = _cencoRank(prev['tcencos']?.toString());
+      if (rNew > rOld) {
+        best[tc] = Map<String, dynamic>.from(g);
+        continue;
+      }
+      if (rNew == rOld) {
+        final fiNew = (g['fec_ing_min'] ?? '').toString().trim();
+        final fiOld = (prev['fec_ing_min'] ?? '').toString().trim();
+        if (fiNew.isNotEmpty && fiOld.isEmpty) {
+          best[tc] = Map<String, dynamic>.from(g);
+        }
+      }
+    }
+    final out = best.values.toList();
+    out.sort((a, b) {
+      final aa = (a['tcodint'] ?? '').toString();
+      final bb = (b['tcodint'] ?? '').toString();
+      return aa.compareTo(bb);
+    });
+    return out;
+  }
+
+  static List<Map<String, dynamic>> filterGalponesPorCenco(
+    List<Map<String, dynamic>> galpones,
+    String norm6,
+  ) {
+    if (norm6.length < 6 || galpones.isEmpty) {
+      return galpones;
+    }
+    final exact = galpones.where((g) {
+      final tc = normalizarCodigoCenco((g['tcencos'] ?? '').toString());
+      return tc == norm6;
+    }).toList();
+    return exact.isNotEmpty ? exact : galpones;
+  }
+
   static List<Map<String, dynamic>> parseGalponesList(dynamic raw, {String? codigoCenco}) {
     if (raw is! List) return [];
     final out = <Map<String, dynamic>>[];
@@ -122,7 +178,8 @@ class GalponesResolver {
 
       final g3 = normGranja(cod6);
       final prev = galponesPorGranja[g3] ?? [];
-      galponesPorGranja[g3] = dedupeGalpones([...prev, ...gps]);
+      galponesPorGranja[g3] =
+          dedupeGalponesPreferHigherCenco([...prev, ...gps]);
     }
 
     var totalGalpones = 0;
@@ -136,7 +193,7 @@ class GalponesResolver {
     );
   }
 
-  /// Prioridad: por granja (3 díg.) → CENCO exacto → mismo prefijo con galpones.
+  /// Prioridad: CENCO exacto → por granja (3 díg.) → mismo prefijo con galpones.
   static List<Map<String, dynamic>> resolveOffline({
     required String granjaCodigo,
     required String campania,
@@ -163,11 +220,11 @@ class GalponesResolver {
         ? normalizarCodigoCenco(codSel)
         : codigoCenco6(g3, camp);
 
-    final porGranja = galponesPorGranja[g3] ?? [];
-    if (porGranja.isNotEmpty) return List<Map<String, dynamic>>.from(porGranja);
-
     final porCenco = galponesPorCenco[cod6] ?? [];
     if (porCenco.isNotEmpty) return List<Map<String, dynamic>>.from(porCenco);
+
+    final porGranja = galponesPorGranja[g3] ?? [];
+    if (porGranja.isNotEmpty) return List<Map<String, dynamic>>.from(porGranja);
 
     if (cencosLista == null || cencosLista.isEmpty) return [];
 

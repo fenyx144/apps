@@ -6,33 +6,34 @@ extension AppThemeColors on BuildContext {
   bool get isAppDark => Theme.of(this).brightness == Brightness.dark;
 
   Color get surfaceCard =>
-      isAppDark ? const Color(0xFF1E1E1E) : Colors.white;
+      isAppDark ? AppColors.darkCard : AppColors.cardBackground;
 
   Color get surfaceElevated =>
-      isAppDark ? const Color(0xFF2C2C2C) : Colors.white;
+      isAppDark ? AppColors.darkCard : AppColors.cardBackground;
 
   Color get scaffoldMuted =>
-      isAppDark ? const Color(0xFF121212) : AppColors.background;
+      isAppDark ? AppColors.darkBackground : AppColors.background;
 
   Color get borderSubtle =>
-      isAppDark ? const Color(0xFF424242) : Colors.grey.shade300;
+      isAppDark ? AppColors.darkBorder : AppColors.borderLight;
 
   Color get shadowColor =>
       isAppDark ? Colors.black : Colors.grey.shade200;
 
-  Color get textThemePrimary => Theme.of(this).colorScheme.onSurface;
+  Color get textThemePrimary =>
+      isAppDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
 
   Color get textThemeSecondary =>
-      isAppDark ? const Color(0xFF81C784) : AppColors.textSecondary;
+      isAppDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
 
   Color get textThemeMuted =>
-      isAppDark ? const Color(0xFF9E9E9E) : AppColors.textMuted;
+      isAppDark ? AppColors.darkTextMuted : AppColors.textMuted;
 
   Color get chartLabelColor =>
-      isAppDark ? const Color(0xFFB0B0B0) : Colors.grey;
+      isAppDark ? AppColors.darkTextSecondary : AppColors.textMuted;
 
   Color get dialogSurface =>
-      isAppDark ? const Color(0xFF2C2C2C) : AppColors.dialogBackground;
+      isAppDark ? AppColors.darkCard : AppColors.dialogBackground;
 
   EdgeInsets get dialogInsetPadding =>
       const EdgeInsets.symmetric(horizontal: 12, vertical: 24);

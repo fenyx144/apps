@@ -1,0 +1,163 @@
+import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+
+class UbicacionMarcacion {
+  const UbicacionMarcacion({
+    required this.latitud,
+    required this.longitud,
+    required this.direccion,
+  });
+
+  final String latitud;
+  final String longitud;
+  final String direccion;
+
+  static const vacia = UbicacionMarcacion(
+    latitud: '',
+    longitud: '',
+    direccion: '',
+  );
+}
+
+class UbicacionService {
+  /// Si el GPS está apagado, sugiere encenderlo y abre los ajustes.
+  static Future<void> sugerirGps(BuildContext context) async {
+    try {
+      if (await Geolocator.isLocationServiceEnabled()) return;
+    } catch (_) {
+      return;
+    }
+    if (!context.mounted) return;
+    final abrir = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: const Icon(Icons.location_off_rounded, size: 40),
+        title: const Text('GPS apagado'),
+        content: const Text(
+          'Encienda la ubicación para registrar dónde se hace la marcación.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Ahora no'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.my_location_rounded),
+            label: const Text('Encender GPS'),
+          ),
+        ],
+      ),
+    );
+    if (abrir == true) await Geolocator.openLocationSettings();
+  }
+  static UbicacionMarcacion? _cache;
+  static DateTime? _cacheEn;
+  static Future<UbicacionMarcacion>? _enCurso;
+  static bool _permisoPedido = false;
+
+  /// Consulta en segundo plano al abrir la pantalla para tener una
+  /// posicion lista al guardar.
+  static void precalentar() {
+    UbicacionService().actual();
+  }
+
+  /// Ubicacion para guardar. Nunca tarda mas de ~4 s: usa la cache (< 2 min),
+  /// la ultima conocida reciente o una lectura rapida; si falla, vacia.
+  Future<UbicacionMarcacion> actual() async {
+    final c = _cache;
+    final en = _cacheEn;
+    if (c != null &&
+        en != null &&
+        DateTime.now().difference(en) < const Duration(minutes: 2)) {
+      return c;
+    }
+    final pendiente = _enCurso ??= _leer();
+    try {
+      return await pendiente.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => _cache ?? UbicacionMarcacion.vacia,
+      );
+    } catch (_) {
+      return _cache ?? UbicacionMarcacion.vacia;
+    }
+  }
+
+  static Future<UbicacionMarcacion> _leer() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return UbicacionMarcacion.vacia;
+      }
+      var permiso = await Geolocator.checkPermission();
+      if (permiso == LocationPermission.denied && !_permisoPedido) {
+        _permisoPedido = true;
+        permiso = await Geolocator.requestPermission();
+      }
+      if (permiso == LocationPermission.denied ||
+          permiso == LocationPermission.deniedForever) {
+        return UbicacionMarcacion.vacia;
+      }
+
+      Position? pos;
+      try {
+        final ultima = await Geolocator.getLastKnownPosition();
+        if (ultima != null &&
+            DateTime.now().difference(ultima.timestamp) <
+                const Duration(minutes: 2)) {
+          pos = ultima;
+        }
+      } catch (_) {}
+      if (pos == null) {
+        try {
+          pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 4),
+            ),
+          );
+        } catch (_) {
+          try {
+            pos = await Geolocator.getLastKnownPosition();
+          } catch (_) {}
+        }
+      }
+      if (pos == null) return UbicacionMarcacion.vacia;
+
+      final lat = pos.latitude.toStringAsFixed(6);
+      final lng = pos.longitude.toStringAsFixed(6);
+      var direccion = '';
+      try {
+        final marcas = await placemarkFromCoordinates(
+          pos.latitude,
+          pos.longitude,
+        ).timeout(const Duration(seconds: 2));
+        if (marcas.isNotEmpty) {
+          final p = marcas.first;
+          direccion = [
+            p.street,
+            p.subLocality,
+            p.locality,
+            p.administrativeArea,
+          ].whereType<String>().map((e) => e.trim()).where((e) => e.isNotEmpty).join(', ');
+        }
+      } catch (_) {}
+      if (direccion.length > 150) {
+        direccion = direccion.substring(0, 150);
+      }
+      final u = UbicacionMarcacion(
+        latitud: lat,
+        longitud: lng,
+        direccion: direccion,
+      );
+      _cache = u;
+      _cacheEn = DateTime.now();
+      return u;
+    } catch (_) {
+      return UbicacionMarcacion.vacia;
+    } finally {
+      _enCurso = null;
+    }
+  }
+}

@@ -33,10 +33,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   void _load() {
     final storage = context.read<StorageService>();
-    _cencos = storage
-        .getCencosLocal()
-        .map((e) => Cenco.fromJson(e))
-        .toList()
+    _cencos = storage.getCencosWithEdadActual()
       ..sort((a, b) => a.codigo.compareTo(b.codigo));
     _selectedGranjaCodigo = storage.getDefaultGranja();
     setState(() => _loading = false);

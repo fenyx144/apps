@@ -24,12 +24,14 @@ class _TreeRow {
   final int depth;
   final String pathLabel;
   final bool selectable;
+  final String? branchKey;
 
   const _TreeRow({
     required this.node,
     required this.depth,
     required this.pathLabel,
     required this.selectable,
+    this.branchKey,
   });
 }
 
@@ -45,6 +47,13 @@ class _ProcessTreeDialogWidget extends StatefulWidget {
 
 class _ProcessTreeDialogWidgetState extends State<_ProcessTreeDialogWidget> {
   String _filter = '';
+  final Set<String> _expandedKeys = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _expandAllBranches();
+  }
 
   List<Map<String, dynamic>> get _topChildren {
     final children = widget.root['children'];
@@ -67,6 +76,14 @@ class _ProcessTreeDialogWidgetState extends State<_ProcessTreeDialogWidget> {
   String _name(Map<String, dynamic> node) =>
       (node['name'] ?? '').toString().trim();
 
+  String _nodeKey(Map<String, dynamic> node, String pathLabel) {
+    final treePath = (node['treePath'] ?? '').toString().trim();
+    if (treePath.isNotEmpty) return treePath;
+    final pathCodigo = (node['pathCodigo'] ?? '').toString().trim();
+    if (pathCodigo.isNotEmpty) return pathCodigo;
+    return pathLabel;
+  }
+
   /// Profundidad visual desde treePath/pathCodigo del API (0 = hijo directo de la raíz).
   int _depthFromNode(Map<String, dynamic> node, int fallback) {
     final treePath = (node['treePath'] ?? '').toString().trim();
@@ -78,6 +95,44 @@ class _ProcessTreeDialogWidgetState extends State<_ProcessTreeDialogWidget> {
       return pathCodigo.split('-').where((p) => p.isNotEmpty).length - 1;
     }
     return fallback;
+  }
+
+  void _expandAllBranches() {
+    void walk(Map<String, dynamic> node, String pathPrefix) {
+      final name = _name(node);
+      final hasKids = _hasStructuralChildren(node);
+      if (!hasKids) return;
+
+      final pathLabel = name.isEmpty
+          ? pathPrefix
+          : (pathPrefix.isEmpty ? name : '$pathPrefix › $name');
+      if (name.isNotEmpty) {
+        _expandedKeys.add(_nodeKey(node, pathLabel));
+      }
+
+      final children = node['children'] as List;
+      for (final c in children) {
+        if (c is! Map) continue;
+        walk(Map<String, dynamic>.from(c), pathLabel);
+      }
+    }
+
+    for (final child in _topChildren) {
+      walk(child, '');
+    }
+  }
+
+  bool _isBranchExpanded(String key) =>
+      _filter.isNotEmpty || _expandedKeys.contains(key);
+
+  void _toggleBranch(String key) {
+    setState(() {
+      if (_expandedKeys.contains(key)) {
+        _expandedKeys.remove(key);
+      } else {
+        _expandedKeys.add(key);
+      }
+    });
   }
 
   bool _nodeMatchesFilter(Map<String, dynamic> node) {
@@ -111,6 +166,9 @@ class _ProcessTreeDialogWidgetState extends State<_ProcessTreeDialogWidget> {
         ? pathPrefix
         : (pathPrefix.isEmpty ? name : '$pathPrefix › $name');
     final depth = _depthFromNode(node, walkDepth);
+    final branchKey = hasKids && name.isNotEmpty
+        ? _nodeKey(node, pathLabel)
+        : null;
 
     if (!hasKids) {
       if (name.isEmpty && tk.isEmpty) return;
@@ -137,9 +195,13 @@ class _ProcessTreeDialogWidgetState extends State<_ProcessTreeDialogWidget> {
           depth: depth,
           pathLabel: pathLabel,
           selectable: false,
+          branchKey: branchKey,
         ),
       );
     }
+
+    final showChildren = branchKey == null || _isBranchExpanded(branchKey);
+    if (!showChildren) return;
 
     final children = node['children'] as List;
     for (final c in children) {
@@ -209,22 +271,54 @@ class _ProcessTreeDialogWidgetState extends State<_ProcessTreeDialogWidget> {
                   final row = rows[index];
                   final name = _name(row.node);
                   final indent = _indentForDepth(row.depth);
+                  const chevronSlot = 24.0;
 
                   if (!row.selectable) {
-                    return Padding(
-                      padding: EdgeInsets.only(
-                        left: indent,
-                        right: 12,
-                        top: 6,
-                        bottom: 2,
-                      ),
-                      child: Text(
-                        name.isEmpty ? 'Proceso' : name,
-                        style: TextStyle(
-                          fontWeight:
-                              row.depth == 0 ? FontWeight.w700 : FontWeight.w600,
-                          color: context.textThemePrimary,
-                          fontSize: row.depth == 0 ? 15 : 14,
+                    final branchKey = row.branchKey;
+                    final isExpanded = branchKey != null &&
+                        _isBranchExpanded(branchKey);
+
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: branchKey == null
+                            ? null
+                            : () => _toggleBranch(branchKey),
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            left: indent,
+                            right: 12,
+                            top: 6,
+                            bottom: 2,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              if (branchKey != null) ...[
+                                Icon(
+                                  isExpanded
+                                      ? Icons.keyboard_arrow_down_rounded
+                                      : Icons.chevron_right_rounded,
+                                  size: 20,
+                                  color: context.textThemeMuted,
+                                ),
+                                const SizedBox(width: 4),
+                              ] else
+                                const SizedBox(width: chevronSlot),
+                              Expanded(
+                                child: Text(
+                                  name.isEmpty ? 'Proceso' : name,
+                                  style: TextStyle(
+                                    fontWeight: row.depth == 0
+                                        ? FontWeight.w700
+                                        : FontWeight.w600,
+                                    color: context.textThemePrimary,
+                                    fontSize: row.depth == 0 ? 15 : 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -240,11 +334,9 @@ class _ProcessTreeDialogWidgetState extends State<_ProcessTreeDialogWidget> {
                     ),
                     title: Text(
                       name,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 14,
-                        color: context.isAppDark
-                            ? AppColors.textSelectedValue
-                            : AppColors.textSelectedValue,
+                        color: AppColors.textSelectedValue,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -253,9 +345,7 @@ class _ProcessTreeDialogWidgetState extends State<_ProcessTreeDialogWidget> {
                       if (tk.isEmpty) return;
                       Navigator.pop(context, {
                         'tareaKey': tk,
-                        'procesoNombre': row.pathLabel.isNotEmpty
-                            ? row.pathLabel
-                            : name,
+                        'procesoNombre': name.isNotEmpty ? name : tk,
                       });
                     },
                   );

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../models/cenco.dart';
 import '../models/galpon.dart';
 import '../models/motivo_mortalidad.dart';
@@ -220,9 +221,16 @@ class ApiService {
         galponesPorCenco[codigoCenco] = galpones;
       }
 
+      final cencosConEdad = cencos.map((c) {
+        final prefijo = c.granjaCodigo;
+        final galpones =
+            galponesPorCenco[prefijo] ?? galponesPorCenco[c.codigo] ?? [];
+        return c.withEdadFromGalpones(galpones);
+      }).toList();
+
       return {
         'success': true,
-        'cencos': cencos,
+        'cencos': cencosConEdad,
         'galponesPorCenco': galponesPorCenco,
         'message': 'OK',
       };
@@ -746,6 +754,7 @@ class ApiService {
     required String usuario,
     required List<Map<String, dynamic>> registros,
     String observacionesGenerales = '',
+    String? tuuid,
   }) async {
     try {
       final url = Uri.parse(
@@ -760,12 +769,15 @@ class ApiService {
         final clave = a['clave']?.toString() ?? '';
         final fotos = a['fotos'];
         final fotosList = fotos is List ? List<String>.from(fotos.map((e) => e.toString())) : <String>[];
-        payload.add({
-          'clave': clave,
-          'aprobado': a['aprobado'] == true,
-          'registro_uuids': a['registro_uuids'] ?? [],
-          'observaciones': a['observaciones']?.toString() ?? '',
-        });
+        // Propaga todos los campos del grupo (cantidades, granja, campaña,
+        // galpón, fecha y observaciones) para que el servidor pueda armar el
+        // bloque de liquidación. Las fotos viajan aparte como archivos.
+        final item = Map<String, dynamic>.from(a);
+        item['aprobado'] = a['aprobado'] == true;
+        item['registro_uuids'] = a['registro_uuids'] ?? [];
+        item['observaciones'] = a['observaciones']?.toString() ?? '';
+        item.remove('fotos');
+        payload.add(item);
 
         final safeClave = clave.replaceAll(':', '_').replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
         for (var i = 0; i < fotosList.length; i++) {
@@ -782,19 +794,28 @@ class ApiService {
         }
       }
 
+      final audUuid = (tuuid ?? '').trim().isEmpty ? const Uuid().v4() : tuuid!.trim();
       request.fields['data'] = jsonEncode({
         'observaciones': observacionesGenerales,
+        'tuuid': audUuid,
         'registros': payload,
       });
 
+      debugPrint('[AUDITORIA_ENVIO] url=$url usuario=$usuario registros=${payload.length} '
+          'obs="$observacionesGenerales" data=${jsonEncode({'registros': payload})}');
+
       final streamed = await request.send().timeout(const Duration(minutes: 5));
       final response = await http.Response.fromStream(streamed);
+
+      debugPrint('[AUDITORIA_RESPUESTA] HTTP ${response.statusCode} (${response.body.length} bytes): '
+          '${response.body}');
 
       Map<String, dynamic> data;
       try {
         final decoded = jsonDecode(response.body);
         data = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
       } catch (_) {
+        debugPrint('[AUDITORIA_RESPUESTA] No fue JSON válido; cuerpo recibido: ${response.body}');
         return {
           'success': false,
           'message': AppStrings.errorServidor,
@@ -810,6 +831,7 @@ class ApiService {
         'debug': data['debug']?.toString(),
       };
     } catch (e) {
+      debugPrint('[AUDITORIA_ERROR] $e');
       return {'success': false, 'message': 'Error de conexion. Verifique su internet e intente de nuevo.'};
     }
   }

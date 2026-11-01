@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -15,9 +14,6 @@ import '../widgets/app_bar.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/searchable_select_dialog.dart';
 import '../widgets/styled_select_field.dart';
-
-// Color de acento para liquidacion (azul, reemplaza el morado)
-const Color _accentColor = Color(0xFF1565C0);
 
 // Anchos fijos para cada columna (para scroll horizontal sincronizado)
 const double _colFecha = 75;
@@ -111,14 +107,13 @@ class _LiquidacionReportScreenState extends State<LiquidacionReportScreen> {
 
   void _poblarCencosDesdeCache(StorageService storage, {bool autoSelectDefault = false}) {
     if (!mounted) return;
-    final raw = storage.getCencosLocal();
-    debugPrint('[CENCOS_LOAD] liquidacion_screen: getCencosLocal().length=${raw.length}');
     setState(() {
-      _cencos = raw
-          .map((e) => Cenco.fromJson(e))
+      _cencos = storage
+          .getCencosWithEdadActual()
           .where((c) => c.codigo.isNotEmpty)
           .toList()
         ..sort((a, b) => a.codigo.compareTo(b.codigo));
+      debugPrint('[CENCOS_LOAD] liquidacion_screen: _cencos.length=${_cencos.length}');
       debugPrint('[CENCOS_LOAD] liquidacion_screen: _cencos.length=${_cencos.length}');
       // Auto-seleccionar granja por defecto si esta configurada
       if (autoSelectDefault && _selectedCenco == null) {
@@ -369,114 +364,168 @@ class _LiquidacionReportScreenState extends State<LiquidacionReportScreen> {
     return found?.labelShort ?? rawCode;
   }
 
+  /// Resuelve el nombre del auditor a partir del bloque de liquidación.
+  /// Prioriza el campo 'usuario_nombre' que envía el backend; si viene vacío
+  /// usa el nombre del usuario en sesión, luego el catálogo local de usuarios
+  /// y como último recurso muestra el código.
+  String _resolveAuditorNombre(BuildContext context, Map<String, dynamic> item) {
+    // 1) Nombre ya resuelto por el backend.
+    final serverNombre =
+        (item['usuario_nombre']?.toString() ?? '').trim();
+    if (serverNombre.isNotEmpty) return serverNombre;
+
+    final codigo = (item['usuario']?.toString() ?? '').trim();
+    if (codigo.isEmpty) return '---';
+
+    final storage = context.read<StorageService>();
+    // 2) Si es el usuario en sesión, usar su nombre guardado.
+    final propio = (storage.getUserCodeSync() ?? '').trim().toLowerCase();
+    if (codigo.toLowerCase() == propio) {
+      final nombre = (storage.getUserName() ?? '').trim();
+      if (nombre.isNotEmpty) return nombre;
+    }
+    // 3) Buscar en el catálogo local de usuarios (código -> nombre).
+    final catalogos = storage.getCatalogos();
+    final usuarios = catalogos['usuarios'];
+    if (usuarios is List) {
+      for (final u in usuarios) {
+        if (u is Map) {
+          final c = (u['codigo']?.toString() ?? '').trim().toLowerCase();
+          if (c == codigo.toLowerCase()) {
+            final n = (u['nombre']?.toString() ?? '').trim();
+            if (n.isNotEmpty) return n;
+          }
+        }
+      }
+    }
+    return codigo;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: buildAppBar(
-        context,
-        AppStrings.reporteLiquidacionTitle,
-        appIcon: Icons.receipt_long_rounded,
-      ),
-      drawer: const AppDrawer(),
-      body: SafeArea(
-        top: false,
-        child: RefreshIndicator(
-          onRefresh: () async {
-            await _loadCatalogs();
-            await _cargar();
-          },
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _buildFiltersCard(context)),
-              if (!_loading && _liquidaciones.isNotEmpty)
-                SliverToBoxAdapter(child: _buildSummaryRow(context)),
-              if (_loading)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_liquidaciones.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _buildEmptyState(context),
-                )
-              else ...[
+    return Theme(
+      data: azulReporteTheme(context),
+      child: Scaffold(
+        backgroundColor: context.surfaceColor,
+        appBar: buildAppBar(
+          context,
+          AppStrings.reporteLiquidacionTitle,
+          appIcon: Icons.receipt_long_rounded,
+        ),
+        drawer: const AppDrawer(),
+        body: SafeArea(
+          top: false,
+          child: RefreshIndicator(
+            onRefresh: () async {
+              await _loadCatalogs();
+              await _cargar();
+            },
+            child: CustomScrollView(
+              slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Header - mismo estilo que auditoria
-                          Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(10),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                    child: _buildFiltersCard(context),
+                  ),
+                ),
+                if (!_loading && _liquidaciones.isNotEmpty)
+                  SliverToBoxAdapter(child: _buildSummaryRow(context)),
+                if (_loading)
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_liquidaciones.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _buildEmptyState(context),
+                  )
+                else ...[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Header - mismo estilo que auditoria
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: context.azulAccent.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(width: _colFecha, child: _th('Fecha', center: true)),
+                                  const SizedBox(width: _colSpacing),
+                                  SizedBox(width: _colGranja, child: _th('Granja')),
+                                  const SizedBox(width: _colSpacing),
+                                  SizedBox(width: _colNum, child: _th('Tot', center: true)),
+                                  const SizedBox(width: _colSpacing),
+                                  SizedBox(width: _colExpand, child: const SizedBox.shrink()),
+                                ],
+                              ),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(width: _colFecha, child: _th('Fecha', center: true)),
-                                const SizedBox(width: _colSpacing),
-                                SizedBox(width: _colGranja, child: _th('Granja')),
-                                const SizedBox(width: _colSpacing),
-                                SizedBox(width: _colNum, child: _th('Tot', center: true)),
-                                const SizedBox(width: _colSpacing),
-                                SizedBox(width: _colExpand, child: const SizedBox.shrink()),
-                              ],
+                            const SizedBox(height: 4),
+                            // Rows
+                            ..._liquidaciones.asMap().entries.map(
+                              (e) => Padding(
+                                padding: EdgeInsets.only(top: e.key > 0 ? 4 : 0),
+                                child: _buildRow(context, e.value, isDark, e.key),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          // Rows
-                          ..._liquidaciones.asMap().entries.map(
-                            (e) => Padding(
-                              padding: EdgeInsets.only(top: e.key > 0 ? 4 : 0),
-                              child: _buildRow(context, e.value, isDark, e.key),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          // Total
-                          Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: _colFecha + _colSpacing + _colGranja,
-                                  child: Text('TOTALES',
-                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800,
-                                          color: isDark ? Colors.white : AppColors.textPrimary)),
+                            const SizedBox(height: 4),
+                            // Total
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: context.azulAccent.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border(
+                                  left: BorderSide(
+                                      color: context.azulAccent, width: 4),
                                 ),
-                                const SizedBox(width: _colSpacing),
-                                SizedBox(
-                                  width: _colNum,
-                                  child: Text('$_totalAves',
-                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-                                      textAlign: TextAlign.center),
-                                ),
-                                const SizedBox(width: _colSpacing),
-                                const SizedBox(width: _colExpand),
-                              ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: _colFecha + _colSpacing + _colGranja,
+                                    child: Text('TOTALES',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: context.azulTexto)),
+                                  ),
+                                  const SizedBox(width: _colSpacing),
+                                  SizedBox(
+                                    width: _colNum,
+                                    child: Text('$_totalAves',
+                                        style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w800,
+                                            color: context.azulTexto),
+                                        textAlign: TextAlign.center),
+                                  ),
+                                  const SizedBox(width: _colSpacing),
+                                  const SizedBox(width: _colExpand),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -485,13 +534,18 @@ class _LiquidacionReportScreenState extends State<LiquidacionReportScreen> {
 
   Widget _th(String text, {bool center = false}) {
     return Text(text,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primaryDark),
+        style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: context.azulTexto),
         textAlign: center ? TextAlign.center : TextAlign.start);
   }
 
   Widget _buildRow(BuildContext context, Map<String, dynamic> item, bool isDark, int index) {
     final fecha = _fmtFecha(item['fecha']?.toString());
-    final usuario = item['usuario']?.toString() ?? '---';
+    final usuario = _resolveAuditorNombre(context, item);
+    final primaryText = context.azulTexto;
+    final secondaryText = context.azulTextoMuted;
     // Resolver granja: primero intentar desde cencos usando codigo raw
     String granja = '';
     final rawGranja = (item['granja']?.toString() ?? '').trim();
@@ -555,26 +609,37 @@ class _LiquidacionReportScreenState extends State<LiquidacionReportScreen> {
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: isDark ? Colors.grey.shade700 : Colors.grey.shade200),
+                color: isExpanded
+                    ? context.azulAccent.withValues(alpha: 0.06)
+                    : null,
+                border: isExpanded
+                    ? Border(
+                        left: BorderSide(color: context.azulAccent, width: 3),
+                      )
+                    : null,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
                     width: _colFecha,
-                    child: Text(fecha, style: const TextStyle(fontSize: 14), textAlign: TextAlign.center),
+                    child: Text(fecha,
+                        style: const TextStyle(fontSize: 12),
+                        textAlign: TextAlign.center),
                   ),
                   const SizedBox(width: _colSpacing),
                   SizedBox(
                     width: _colGranja,
                     child: Text(granja,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(width: _colSpacing),
                   SizedBox(
                     width: _colNum,
                     child: Text('${t.aves}',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w800),
                         textAlign: TextAlign.center),
                   ),
                   const SizedBox(width: _colSpacing),
@@ -590,7 +655,9 @@ class _LiquidacionReportScreenState extends State<LiquidacionReportScreen> {
                                 child: Icon(
                                   Icons.expand_more_rounded,
                                   size: 22,
-                                  color: isExpanded ? _accentColor : context.mutedTextColor,
+                                  color: isExpanded
+                                      ? context.azulAccent
+                                      : context.azulTextoMuted,
                                 ),
                               ),
                               onPressed: () {
@@ -618,32 +685,36 @@ class _LiquidacionReportScreenState extends State<LiquidacionReportScreen> {
                     margin: const EdgeInsets.only(top: 4),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkSurface : _accentColor.withValues(alpha: 0.04),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isDark ? Colors.grey.shade700 : _accentColor.withValues(alpha: 0.15),
-                      ),
+                      color: isDark
+                          ? AppColors.darkCard
+                          : AppColors.background,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: context.borderColor),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text('Granja: $granja',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white70 : AppColors.textPrimary)),
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: primaryText)),
                         const SizedBox(height: 4),
                         Text('Auditor: $usuario',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white70 : AppColors.textSecondary)),
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: primaryText)),
                         const SizedBox(height: 4),
-                        Text('Fecha/Hora: ${_fmtFecha(fechaHora.isNotEmpty ? fechaHora.split(' ').first : fecha)}',
-                            style: TextStyle(fontSize: 13,
-                                color: isDark ? Colors.white60 : AppColors.textSecondary)),
+                        Text(
+                            'Fecha/Hora: ${_fmtFecha(fechaHora.isNotEmpty ? fechaHora.split(' ').first : fecha)}',
+                            style: TextStyle(fontSize: 13, color: secondaryText)),
                         if ((item['observaciones'] ?? '').toString().isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text('Obs: ${item['observaciones']}',
                               style: TextStyle(fontSize: 12,
-                                  color: isDark ? Colors.white60 : AppColors.textSecondary)),
+                                  color: secondaryText)),
                         ],
                         const SizedBox(height: 8),
                         if (grupos.isNotEmpty) ...[
@@ -652,80 +723,154 @@ class _LiquidacionReportScreenState extends State<LiquidacionReportScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                             decoration: BoxDecoration(
-                              color: _accentColor.withValues(alpha: 0.08),
+                              color: context.azulAccent.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                SizedBox(width: 150, child: Text('Tipo',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _accentColor))),
-                                SizedBox(width: 50, child: Text('M',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _accentColor),
-                                    textAlign: TextAlign.center)),
-                                SizedBox(width: 50, child: Text('H',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _accentColor),
-                                    textAlign: TextAlign.center)),
-                                SizedBox(width: 50, child: Text('Tot',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _accentColor),
-                                    textAlign: TextAlign.center)),
+                                SizedBox(
+                                    width: 150,
+                                    child: Text('Tipo',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: context.azulTexto))),
+                                SizedBox(
+                                    width: 50,
+                                    child: Text('M',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.maleDark),
+                                        textAlign: TextAlign.center)),
+                                SizedBox(
+                                    width: 50,
+                                    child: Text('H',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.femaleDark),
+                                        textAlign: TextAlign.center)),
+                                SizedBox(
+                                    width: 50,
+                                    child: Text('Tot',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: context.azulTexto),
+                                        textAlign: TextAlign.center)),
                               ],
                             ),
                           ),
                           ...grupos.map((g) {
-                            final gMap = g is Map ? Map<String, dynamic>.from(g) : <String, dynamic>{};
-                            final label = gMap['label']?.toString() ?? gMap['clave']?.toString() ?? '--';
-                            final aves = int.tryParse(gMap['totalAves']?.toString() ?? '0') ?? 0;
-                            final mMachos = int.tryParse(gMap['cantMachos']?.toString() ?? '0') ?? 0;
-                            final mHembras = int.tryParse(gMap['cantHembras']?.toString() ?? '0') ?? 0;
+                            final gMap = g is Map
+                                ? Map<String, dynamic>.from(g)
+                                : <String, dynamic>{};
+                            final label = gMap['label']?.toString() ??
+                                gMap['clave']?.toString() ??
+                                '--';
+                            final aves = int.tryParse(
+                                    gMap['totalAves']?.toString() ?? '0') ??
+                                0;
+                            final mMachos = int.tryParse(
+                                    gMap['cantMachos']?.toString() ?? '0') ??
+                                0;
+                            final mHembras = int.tryParse(
+                                    gMap['cantHembras']?.toString() ?? '0') ??
+                                0;
                             return Container(
-                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 6, horizontal: 8),
                               margin: const EdgeInsets.only(top: 4),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: isDark ? Colors.grey.shade700 : Colors.grey.shade200),
+                                border: Border.all(color: context.borderColor),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  SizedBox(width: 150, child: Text(label,
-                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-                                  SizedBox(width: 50, child: Text('$mMachos',
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _accentColor),
-                                      textAlign: TextAlign.center)),
-                                  SizedBox(width: 50, child: Text('$mHembras',
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _accentColor),
-                                      textAlign: TextAlign.center)),
-                                  SizedBox(width: 50, child: Text('$aves',
-                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                                      textAlign: TextAlign.center)),
+                                  SizedBox(
+                                      width: 150,
+                                      child: Text(label,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: context.azulTexto))),
+                                  SizedBox(
+                                      width: 50,
+                                      child: Text('$mMachos',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.maleDark),
+                                          textAlign: TextAlign.center)),
+                                  SizedBox(
+                                      width: 50,
+                                      child: Text('$mHembras',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.femaleDark),
+                                          textAlign: TextAlign.center)),
+                                  SizedBox(
+                                      width: 50,
+                                      child: Text('$aves',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: context.azulTexto),
+                                          textAlign: TextAlign.center)),
                                 ],
                               ),
                             );
                           }),
                           Container(
-                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 6, horizontal: 8),
                             margin: const EdgeInsets.only(top: 4),
                             decoration: BoxDecoration(
-                              color: _accentColor.withValues(alpha: 0.05),
+                              color: context.azulAccent.withValues(alpha: 0.06),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: _accentColor.withValues(alpha: 0.2)),
+                              border: Border(
+                                left: BorderSide(
+                                    color: context.azulAccent, width: 3),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                SizedBox(width: 150, child: Text('TOTAL',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-                                        color: isDark ? Colors.white : AppColors.textPrimary))),
-                                SizedBox(width: 50, child: Text('$totalMachos',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _accentColor),
-                                    textAlign: TextAlign.center)),
-                                SizedBox(width: 50, child: Text('$totalHembras',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _accentColor),
-                                    textAlign: TextAlign.center)),
-                                SizedBox(width: 50, child: Text('${totalMachos + totalHembras}',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-                                    textAlign: TextAlign.center)),
+                                SizedBox(
+                                    width: 150,
+                                    child: Text('TOTAL',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            color: context.azulTexto))),
+                                SizedBox(
+                                    width: 50,
+                                    child: Text('$totalMachos',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.maleDark),
+                                        textAlign: TextAlign.center)),
+                                SizedBox(
+                                    width: 50,
+                                    child: Text('$totalHembras',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.femaleDark),
+                                        textAlign: TextAlign.center)),
+                                SizedBox(
+                                    width: 50,
+                                    child: Text('${totalMachos + totalHembras}',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            color: context.azulTexto),
+                                        textAlign: TextAlign.center)),
                               ],
                             ),
                           ),
@@ -742,119 +887,106 @@ class _LiquidacionReportScreenState extends State<LiquidacionReportScreen> {
 
   // ─── Widgets ───
   Widget _buildFiltersCard(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        border: Border(bottom: BorderSide(color: context.borderColor)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: context.isDarkTheme ? 0.2 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Card(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: context.borderColor),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              StyledSelectField(
+                label: 'Granja / Campania',
+                value: _loadingCencos
+                    ? 'Cargando...'
+                    : (_selectedCenco?.labelFilter ?? 'Todas las granjas'),
+                placeholder: 'Seleccionar granja...',
+                icon: Icons.home_work_outlined,
+                compact: true,
+                enabled: !_loadingCencos,
+                onTap: _pickCenco,
+              ),
+              const SizedBox(height: 8),
+              StyledSelectField(
+                label: 'Galpon',
+                value: _galponLabel,
+                placeholder: _selectedCenco == null
+                    ? 'Seleccione una granja'
+                    : 'Todos los galpones',
+                icon: Icons.warehouse_outlined,
+                compact: true,
+                enabled: _selectedCenco != null,
+                onTap: _pickGalpon,
+              ),
+            ],
           ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          StyledSelectField(
-            label: 'Granja / Campania',
-            value: _loadingCencos
-                ? 'Cargando...'
-                : (_selectedCenco?.labelFilter ?? 'Todas las granjas'),
-            placeholder: 'Seleccionar granja...',
-            icon: Icons.home_work_outlined,
-            compact: true,
-            enabled: !_loadingCencos,
-            onTap: _pickCenco,
-          ),
-          const SizedBox(height: 8),
-          StyledSelectField(
-            label: 'Galpon',
-            value: _galponLabel,
-            placeholder: _selectedCenco == null
-                ? 'Seleccione una granja'
-                : 'Todos los galpones',
-            icon: Icons.warehouse_outlined,
-            compact: true,
-            enabled: _selectedCenco != null,
-            onTap: _pickGalpon,
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildSummaryRow(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final labelColor =
+        isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
               decoration: BoxDecoration(
-                color: isDark ? AppColors.darkCard : AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                color: AppColors.primary.withValues(alpha: isDark ? 0.18 : 0.12),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 children: [
                   Text('$_totalLiquidaciones',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w900,
-                        color: _accentColor,
+                        color: AppColors.primary,
                       )),
                   const SizedBox(height: 2),
                   Text('Liquidaciones',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                        color: labelColor,
                       )),
                 ],
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
               decoration: BoxDecoration(
-                color: isDark ? AppColors.darkCard : AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                color: AppColors.info.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 children: [
                   Text('$_totalAves',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w900,
-                        color: _accentColor,
+                        color: AppColors.info,
                       )),
                   const SizedBox(height: 2),
                   Text('Total aves',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                        color: labelColor,
                       )),
                 ],
               ),
@@ -872,22 +1004,24 @@ class _LiquidacionReportScreenState extends State<LiquidacionReportScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.fact_check_outlined, size: 56,
-                color: context.mutedTextColor.withValues(alpha: 0.5)),
+            Icon(Icons.fact_check_outlined,
+                size: 56,
+                color: context.azulAccent.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text(
               'Sin liquidaciones',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
-                color: context.primaryTextColor,
+                color: context.azulTexto,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _error ?? 'No hay auditorias registradas.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: context.mutedTextColor, height: 1.4),
+              style: TextStyle(
+                  color: context.azulTextoMuted, height: 1.4),
             ),
           ],
         ),

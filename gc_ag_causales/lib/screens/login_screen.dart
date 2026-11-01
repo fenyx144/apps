@@ -1,12 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/catalog_service.dart';
-import '../services/catalog_sync_service.dart';
 import '../services/storage_service.dart';
+import '../utils/aes_offline.dart';
 import '../utils/constants.dart';
 import '../utils/dialog_helper.dart';
 import '../utils/dialog_utils.dart';
@@ -51,73 +53,110 @@ class _LoginScreenState extends State<LoginScreen> {
     return 'unknown';
   }
 
-  Future<void> _syncCatalogsAfterLogin() async {
-    final storage = context.read<StorageService>();
-    final catalog = context.read<CatalogService>();
-    final close = showChickenLoadingDialog(context, 'Descargando catálogos...');
-    try {
-      final result = await CatalogSyncService().syncAll(
-        storage: storage,
-        catalog: catalog,
-        forzar: true,
-      );
-      close();
-      if (!mounted) return;
-      if (!result.hadInternet) {
-        showErrorToast(
-          context,
-          '${AppStrings.sinConexion} Puede descargar desde el menú.',
-        );
-      } else if (!storage.hasCencosGalponesLocal()) {
-        showErrorToast(
-          context,
-          'No se descargaron galpones. Use el menú → Descargar catálogos.',
-        );
-      }
-    } catch (e) {
-      close();
-      if (mounted) {
-        showErrorToast(context, 'Error al descargar catálogos: $e');
-      }
-    }
-  }
-
   Future<void> _attemptOfflineLogin() async {
     final close = showChickenLoadingDialog(context, 'Verificando credenciales...');
     try {
       final catalog = context.read<CatalogService>();
       await catalog.loadFromPrefs();
-      final usuarios = catalog.catalogos['usuarios'] as List?;
-      if (usuarios == null || usuarios.isEmpty) {
-        close();
-        showErrorToast(context, AppStrings.sinConexion);
-        return;
-      }
-      final userIn = _usuarioController.text.trim();
+      final storage = context.read<StorageService>();
+      final deviceId = await _getDeviceId();
+      final userIn = _usuarioController.text.trim().toLowerCase();
       final passIn = _passwordController.text;
-      for (final u in usuarios) {
-        if (u is! Map) continue;
-        final m = Map<String, dynamic>.from(u);
-        final codigo = (m['codigo'] ?? '').toString().trim();
-        final libtri = (m['libtri'] ?? '').toString();
-        if (codigo.toUpperCase() == userIn.toUpperCase() && libtri == passIn) {
-          final nombre = (m['nombre'] ?? codigo).toString();
-          await context.read<StorageService>().saveLoginSession(
-                userCode: codigo,
-                userName: nombre,
-                deviceId: await _getDeviceId(),
-              );
+
+      // 1) offline_hash (enviado por flutter/login.php en el login online)
+      final storedHash = storage.getOfflineHash() ?? '';
+      if (storedHash.isNotEmpty) {
+        final inputHash = sha256
+            .convert(utf8.encode(passIn + AppConstants.offlineSalt))
+            .toString();
+        if (inputHash == storedHash) {
+          await storage.saveLoginSession(
+            userCode: storage.getUserCodeSync() ?? userIn,
+            userName: storage.getUserName() ?? 'Usuario',
+            deviceId: deviceId,
+          );
           close();
-          showSuccessToast(context, 'Inicio de sesión exitoso');
+          if (!mounted) return;
+          showSuccessToast(context, 'Inicio de sesión exitoso (offline)');
           Get.off(() => const DashboardScreen());
           return;
         }
       }
+
+      // 2) AES password_hex + enom (catálogo usuarios/conempre)
+      final usuarios = catalog.catalogos['usuarios'] as List?;
+      final conempreList = catalog.catalogos['conempre'] as List?;
+      final enomCandidates = <String>[];
+      final savedEnom = storage.getLoginEnom() ?? '';
+      if (savedEnom.isNotEmpty) enomCandidates.add(savedEnom);
+      if (conempreList != null) {
+        for (final ce in conempreList) {
+          if (ce is! Map) continue;
+          final raw = ce['enom']?.toString() ?? '';
+          if (raw.isNotEmpty) enomCandidates.add(raw);
+        }
+      }
+      final uniqueEnoms = enomCandidates.toSet().toList();
+      if (usuarios != null && uniqueEnoms.isNotEmpty) {
+        for (final u in usuarios) {
+          if (u is! Map) continue;
+          final codigo = u['codigo']?.toString().trim().toLowerCase() ?? '';
+          final passHex =
+              (u['password_hex']?.toString() ?? '').trim().toUpperCase();
+          if (codigo != userIn || passHex.isEmpty) continue;
+          for (final enom in uniqueEnoms) {
+            if (computePasswordHex(passIn, enom) == passHex) {
+              final nombre = u['nombre']?.toString() ?? codigo;
+              await storage.saveLoginSession(
+                userCode: codigo,
+                userName: nombre,
+                deviceId: deviceId,
+              );
+              close();
+              if (!mounted) return;
+              showSuccessToast(context, 'Inicio de sesión exitoso (offline)');
+              Get.off(() => const DashboardScreen());
+              return;
+            }
+          }
+        }
+      }
+
+      // 3) libtri (fallback)
+      if (usuarios != null) {
+        for (final u in usuarios) {
+          if (u is! Map) continue;
+          final codigo = u['codigo']?.toString().trim().toLowerCase() ?? '';
+          if (codigo != userIn) continue;
+          final libtri = u['libtri']?.toString() ?? '';
+          if (libtri.isNotEmpty && passIn == libtri) {
+            final nombre = u['nombre']?.toString() ?? codigo;
+            await storage.saveLoginSession(
+              userCode: codigo,
+              userName: nombre,
+              deviceId: deviceId,
+            );
+            close();
+            if (!mounted) return;
+            showSuccessToast(context, 'Inicio de sesión exitoso (offline)');
+            Get.off(() => const DashboardScreen());
+            return;
+          }
+        }
+      }
+
       close();
-      showErrorToast(context, 'Usuario o contraseña incorrectos.');
+      if (mounted) {
+        showErrorToast(
+          context,
+          storedHash.isEmpty && (usuarios == null || usuarios.isEmpty)
+              ? AppStrings.sinConexion
+              : 'Usuario o contraseña incorrectos.',
+        );
+      }
     } catch (e) {
       close();
-      showErrorToast(context, 'Error en login offline.');
+      if (mounted) showErrorToast(context, 'Error en login offline.');
     }
   }
 
@@ -167,15 +206,26 @@ class _LoginScreenState extends State<LoginScreen> {
           codigo = (u['codigo'] ?? codigo).toString();
           nombre = (u['nombre'] ?? codigo).toString();
         }
-        await context.read<StorageService>().saveLoginSession(
-              userCode: codigo,
-              userName: nombre,
-              deviceId: deviceId,
-            );
+        final storage = context.read<StorageService>();
+        await storage.saveLoginSession(
+          userCode: codigo,
+          userName: nombre,
+          deviceId: deviceId,
+        );
+        final computedHash = sha256
+            .convert(utf8.encode(_passwordController.text + AppConstants.offlineSalt))
+            .toString();
+        await storage.saveOfflineHash(computedHash);
+        if (data is Map) {
+          final serverHash = data['offline_hash']?.toString() ?? '';
+          if (serverHash.isNotEmpty && serverHash != computedHash) {
+            await storage.saveOfflineHash(serverHash);
+          }
+          final enom = data['enom']?.toString() ?? '';
+          if (enom.isNotEmpty) await storage.saveLoginEnom(enom);
+        }
         close();
         showSuccessToast(context, 'Inicio de sesión exitoso');
-        await _syncCatalogsAfterLogin();
-        if (!mounted) return;
         Get.off(() => const DashboardScreen());
       } else {
         close();
@@ -284,12 +334,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildHeader() {
+    final topPad = 32 + MediaQuery.viewPaddingOf(context).top;
     return ClipPath(
       clipper: TopWaveClipper(),
       child: Container(
-        height: 280,
         width: double.infinity,
-        decoration: BoxDecoration(
+        constraints: const BoxConstraints(minHeight: 260),
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [AppColors.primary, AppColors.primaryLight],
             begin: Alignment.topCenter,
@@ -297,47 +348,52 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: Padding(
-          padding: EdgeInsets.only(
-            top: 40 + MediaQuery.viewPaddingOf(context).top,
-            bottom: 60,
-          ),
+          padding: EdgeInsets.fromLTRB(28, topPad, 28, 56),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 100,
-                height: 100,
+                width: 84,
+                height: 84,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: Image.asset(
                     'assets/images/logo_grs.png',
-                    width: 70,
-                    height: 70,
+                    width: 58,
+                    height: 58,
                     color: Colors.white,
                     fit: BoxFit.contain,
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              Text(
-                AppConstants.appTitle,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                  shadows: [
-                    Shadow(
-                      blurRadius: 8,
-                      color: Colors.black26,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: Text(
+                  AppConstants.appTitle,
+                  textAlign: TextAlign.center,
+                  softWrap: true,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                    height: 1.2,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 4,
+                        color: Colors.black12,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
                 ),
-                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -384,13 +440,18 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  OutlineInputBorder _loginFieldBorder(Color color, {double width = 1}) {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: color, width: width),
+    );
+  }
+
   Widget _buildUserField() {
     final isDark = context.isAppDark;
     return Container(
       decoration: BoxDecoration(
-        color: context.surfaceElevated,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.borderSubtle, width: 1),
         boxShadow: isDark ? null : context.cardShadow(blur: 4, dy: 2),
       ),
       child: TextFormField(
@@ -407,10 +468,16 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         decoration: InputDecoration(
           labelText: 'Usuario',
+          floatingLabelBehavior: FloatingLabelBehavior.auto,
           labelStyle: TextStyle(
             color: context.textThemeMuted,
             fontWeight: FontWeight.w500,
-            fontSize: 14,
+            fontSize: AppColors.inputLabelFontSize,
+          ),
+          floatingLabelStyle: const TextStyle(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
+            fontSize: AppColors.inputFloatingLabelFontSize,
           ),
           hintText: 'Ingresa tu usuario',
           hintStyle: TextStyle(color: context.textThemeMuted.withValues(alpha: 0.7)),
@@ -423,27 +490,12 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           filled: true,
-          fillColor: context.surfaceElevated,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.error, width: 1),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.error, width: 2),
-          ),
+          fillColor: context.surfaceCard,
+          border: _loginFieldBorder(context.borderSubtle),
+          enabledBorder: _loginFieldBorder(context.borderSubtle),
+          focusedBorder: _loginFieldBorder(AppColors.primary, width: 2),
+          errorBorder: _loginFieldBorder(AppColors.error),
+          focusedErrorBorder: _loginFieldBorder(AppColors.error, width: 2),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 16,
@@ -494,12 +546,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final isDark = context.isAppDark;
     return Container(
       decoration: BoxDecoration(
-        color: context.surfaceElevated,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: isDark ? 0.5 : 0.3),
-          width: 1,
-        ),
         boxShadow: isDark ? null : context.cardShadow(blur: 4, dy: 2),
       ),
       child: TextFormField(
@@ -516,10 +563,16 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         decoration: InputDecoration(
           labelText: 'Contraseña',
+          floatingLabelBehavior: FloatingLabelBehavior.auto,
           labelStyle: TextStyle(
             color: context.textThemeMuted,
             fontWeight: FontWeight.w500,
-            fontSize: 14,
+            fontSize: AppColors.inputLabelFontSize,
+          ),
+          floatingLabelStyle: const TextStyle(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
+            fontSize: AppColors.inputFloatingLabelFontSize,
           ),
           hintText: 'Ingresa tu contraseña',
           hintStyle: TextStyle(color: context.textThemeMuted.withValues(alpha: 0.7)),
@@ -546,27 +599,12 @@ class _LoginScreenState extends State<LoginScreen> {
             },
           ),
           filled: true,
-          fillColor: context.surfaceElevated,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.error, width: 1),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.error, width: 2),
-          ),
+          fillColor: context.surfaceCard,
+          border: _loginFieldBorder(context.borderSubtle),
+          enabledBorder: _loginFieldBorder(context.borderSubtle),
+          focusedBorder: _loginFieldBorder(AppColors.primary, width: 2),
+          errorBorder: _loginFieldBorder(AppColors.error),
+          focusedErrorBorder: _loginFieldBorder(AppColors.error, width: 2),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 16,

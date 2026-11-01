@@ -1,0 +1,783 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../services/api_service.dart';
+import '../services/catalog_service.dart';
+import '../services/ingreso_presencia_service.dart';
+import '../services/plan_visitas_service.dart';
+import '../services/storage_service.dart';
+import '../utils/constants.dart';
+import '../utils/documento_persona.dart';
+import '../utils/placa_ocr_parser.dart';
+import '../utils/theme_colors.dart';
+import '../utils/toast_helper.dart';
+import 'bio_table.dart';
+import 'granja_campania_fields.dart';
+import 'scan_presencia_bar.dart';
+
+/// Salida vs regreso: distinto criterio de alerta bajo nombre/placa.
+enum PresenciaEscaneoFlujo { salida, regreso }
+
+class PresenciaEscaneoPersonaFila {
+  PresenciaEscaneoPersonaFila({
+    required this.persona,
+    required this.grupo,
+    this.mostrarAlerta = false,
+    this.edicionManual = false,
+    TextEditingController? dniCtrl,
+  }) : dniCtrl = edicionManual ? (dniCtrl ?? TextEditingController()) : null;
+
+  PersonaPresencia persona;
+  GrupoPresencia grupo;
+  bool mostrarAlerta;
+  final bool edicionManual;
+  final TextEditingController? dniCtrl;
+
+  /// En filas manuales: el documento escrito ya se buscó en presencia.
+  bool resuelto = false;
+  Timer? debounce;
+
+  bool get listaParaGuardar => !edicionManual || resuelto;
+
+  void dispose() {
+    debounce?.cancel();
+    dniCtrl?.dispose();
+  }
+}
+
+class PresenciaEscaneoVehiculoFila {
+  PresenciaEscaneoVehiculoFila({
+    required this.vehiculo,
+    required this.grupo,
+    this.mostrarAlerta = false,
+    this.edicionManual = false,
+    TextEditingController? placaCtrl,
+  }) : placaCtrl = edicionManual ? (placaCtrl ?? TextEditingController()) : null;
+
+  VehiculoPresencia vehiculo;
+  GrupoPresencia grupo;
+  bool mostrarAlerta;
+  final bool edicionManual;
+  final TextEditingController? placaCtrl;
+
+  /// En filas manuales: la placa escrita ya se buscó en presencia.
+  bool resuelto = false;
+  Timer? debounce;
+
+  bool get listaParaGuardar => !edicionManual || resuelto;
+
+  void dispose() {
+    debounce?.cancel();
+    placaCtrl?.dispose();
+  }
+}
+
+class PresenciaEscaneoGrupoPlan {
+  const PresenciaEscaneoGrupoPlan({
+    required this.grupo,
+    required this.personas,
+    required this.vehiculos,
+  });
+
+  final GrupoPresencia grupo;
+  final List<PersonaPresencia> personas;
+  final List<VehiculoPresencia> vehiculos;
+}
+
+/// Escaneo + tabla editable (documento/placa a mano), compartido por salida y regreso.
+class PresenciaEscaneoIdentificar extends StatefulWidget {
+  const PresenciaEscaneoIdentificar({
+    super.key,
+    required this.flujo,
+    required this.fechaYmd,
+    this.granja = '',
+    this.granjaNombre = '',
+    this.granjaFormulario = '',
+    this.onChanged,
+  });
+
+  final PresenciaEscaneoFlujo flujo;
+  final String fechaYmd;
+  final String granja;
+  final String granjaNombre;
+  final String granjaFormulario;
+  final VoidCallback? onChanged;
+
+  @override
+  PresenciaEscaneoIdentificarState createState() =>
+      PresenciaEscaneoIdentificarState();
+}
+
+class PresenciaEscaneoIdentificarState extends State<PresenciaEscaneoIdentificar> {
+  static const _sepCampo = 12.0;
+  static const _largoDocMax = DocumentoPersona.maxLength;
+
+  final List<PresenciaEscaneoPersonaFila> personas = [];
+  final List<PresenciaEscaneoVehiculoFila> vehiculos = [];
+  GrupoPresencia? _grupoManualUnico;
+  bool _avisoMultiMostrado = false;
+
+  bool get hayEscaneos => personas.isNotEmpty || vehiculos.isNotEmpty;
+
+  bool get hayFilasConAlerta =>
+      personas.any((f) => f.mostrarAlerta) || vehiculos.any((f) => f.mostrarAlerta);
+
+  String get _textoAlerta => widget.flujo == PresenciaEscaneoFlujo.salida
+      ? 'No registro ingreso'
+      : 'Sin salida temporal';
+
+  String get _listaDuplicadoDni => widget.flujo == PresenciaEscaneoFlujo.salida
+      ? 'Ese DNI ya está en la lista de salida.'
+      : 'Ese DNI ya está en la lista de regreso.';
+
+  String get _listaDuplicadoPlaca => widget.flujo == PresenciaEscaneoFlujo.salida
+      ? 'Esa placa ya está en la lista de salida.'
+      : 'Esa placa ya está en la lista de regreso.';
+
+  String _claveGrupo(GrupoPresencia g) =>
+      g.grupoId.isNotEmpty ? g.grupoId : '__manual__';
+
+  bool _requiereAlerta(PresenciaCoincidencia c) {
+    if (widget.flujo == PresenciaEscaneoFlujo.salida) {
+      return !c.encontrado ||
+          c.ubicacion == PresenciaUbicacion.fueraDefinitiva;
+    }
+    return !c.encontrado ||
+        c.ubicacion != PresenciaUbicacion.fueraTemporal;
+  }
+
+  void limpiar() {
+    _disposeFilas();
+    setState(() {
+      _grupoManualUnico = null;
+      _avisoMultiMostrado = false;
+      personas.clear();
+      vehiculos.clear();
+    });
+    widget.onChanged?.call();
+  }
+
+  void _disposeFilas() {
+    for (final f in personas) {
+      f.dispose();
+    }
+    for (final f in vehiculos) {
+      f.dispose();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeFilas();
+    super.dispose();
+  }
+
+  List<PresenciaEscaneoGrupoPlan> gruposParaGuardar() {
+    final orden = <String>[];
+    final mapPersonas = <String, List<PersonaPresencia>>{};
+    final mapVehiculos = <String, List<VehiculoPresencia>>{};
+    final grupos = <String, GrupoPresencia>{};
+
+    void acumular<T>(
+      String k,
+      GrupoPresencia g,
+      T item,
+      Map<String, List<T>> dest,
+    ) {
+      if (!grupos.containsKey(k)) {
+        grupos[k] = g;
+        orden.add(k);
+      }
+      dest.putIfAbsent(k, () => []).add(item);
+    }
+
+    for (final f in personas) {
+      if (!f.listaParaGuardar || !DocumentoPersona.esCompleto(f.persona.dni)) {
+        continue;
+      }
+      if (f.mostrarAlerta && widget.flujo == PresenciaEscaneoFlujo.regreso) {
+        continue;
+      }
+      acumular(_claveGrupo(f.grupo), f.grupo, f.persona, mapPersonas);
+    }
+    for (final f in vehiculos) {
+      if (!f.listaParaGuardar || f.vehiculo.clave.length < 5) continue;
+      if (f.mostrarAlerta && widget.flujo == PresenciaEscaneoFlujo.regreso) {
+        continue;
+      }
+      acumular(_claveGrupo(f.grupo), f.grupo, f.vehiculo, mapVehiculos);
+    }
+
+    return [
+      for (final k in orden)
+        PresenciaEscaneoGrupoPlan(
+          grupo: grupos[k]!,
+          personas: mapPersonas[k] ?? const [],
+          vehiculos: mapVehiculos[k] ?? const [],
+        ),
+    ];
+  }
+
+  bool get hayMultiGrupo => gruposParaGuardar().length > 1;
+
+  String etiquetaGrupo(GrupoPresencia g, {required int indice}) {
+    final p = g.proveedor.trim();
+    if (p.isNotEmpty && p != '—') {
+      return hayMultiGrupo ? 'Ingreso $indice · $p' : p;
+    }
+    return hayMultiGrupo ? 'Ingreso $indice' : 'Ingreso';
+  }
+
+  GrupoPresencia _grupoManual() {
+    return GrupoPresencia(
+      grupoId: '',
+      granja: widget.granja,
+      granjaNombre: widget.granjaNombre,
+      campania: '',
+      turno: 'Dia',
+      proveedor: '—',
+      motivo: '—',
+      horaIngreso: '—',
+      fechaIngreso: widget.fechaYmd,
+    );
+  }
+
+  GrupoPresencia _grupoParaManual() {
+    _grupoManualUnico ??= _grupoManual();
+    return _grupoManualUnico!;
+  }
+
+  PresenciaCoincidencia _resolverDni(String dni) {
+    final storage = context.read<StorageService>();
+    final a = alcancePresenciaGranjas(
+      storage,
+      granjaFormulario: widget.granjaFormulario,
+    );
+    var c = IngresoPresenciaService.resolverPorDni(
+      storage,
+      dni: dni,
+      granja: a.granja,
+      granjas: a.granjas,
+    );
+    if (!c.encontrado && (a.granja.isNotEmpty || a.granjas.isNotEmpty)) {
+      c = IngresoPresenciaService.resolverPorDni(storage, dni: dni);
+    }
+    return c;
+  }
+
+  PresenciaCoincidencia _resolverPlaca(String placa) {
+    final storage = context.read<StorageService>();
+    final a = alcancePresenciaGranjas(
+      storage,
+      granjaFormulario: widget.granjaFormulario,
+    );
+    var c = IngresoPresenciaService.resolverPorPlaca(
+      storage,
+      placa: placa,
+      granja: a.granja,
+      granjas: a.granjas,
+    );
+    if (!c.encontrado && (a.granja.isNotEmpty || a.granjas.isNotEmpty)) {
+      c = IngresoPresenciaService.resolverPorPlaca(storage, placa: placa);
+    }
+    return c;
+  }
+
+  Future<void> _consultarNombre(String dni) async {
+    if (dni.length != 8) return;
+    final catalogo = context.read<CatalogService>();
+    var nombre = catalogo.nombrePorDni(dni);
+    if (nombre.isNotEmpty && mounted) {
+      _aplicarNombre(dni, nombre);
+    }
+    final res = await ApiService().consultarDni(dni);
+    if (!mounted) return;
+    final enLinea =
+        res['success'] == true ? (res['nombre'] ?? '').toString().trim() : '';
+    if (enLinea.isNotEmpty) nombre = enLinea;
+    if (nombre.isNotEmpty) _aplicarNombre(dni, nombre);
+  }
+
+  void _aplicarNombre(String dni, String nombre) {
+    setState(() {
+      for (final f in personas) {
+        if (f.persona.dni != dni) continue;
+        f.persona = PersonaPresencia(dni: dni, nombre: nombre);
+      }
+    });
+    widget.onChanged?.call();
+  }
+
+  void _avisarMultiGrupo(GrupoPresencia grupoNuevo) {
+    if (_avisoMultiMostrado || !hayEscaneos) return;
+    final prev =
+        personas.isNotEmpty ? personas.first.grupo : vehiculos.first.grupo;
+    if (_claveGrupo(prev) == _claveGrupo(grupoNuevo)) return;
+    _avisoMultiMostrado = true;
+  }
+
+  void _notify() {
+    setState(() {});
+    widget.onChanged?.call();
+  }
+
+  /// Otras coincidencias del mismo documento en otras granjas (mismo dia y ubicacion).
+  List<PresenciaCoincidencia> _otrasCoincidenciasDni(
+    String dni,
+    PresenciaCoincidencia c,
+  ) {
+    final base = c.grupo;
+    if (!c.encontrado || base == null) return const [];
+    final storage = context.read<StorageService>();
+    final a = alcancePresenciaGranjas(
+      storage,
+      granjaFormulario: widget.granjaFormulario,
+    );
+    final todas = IngresoPresenciaService.coincidenciasDni(
+      storage,
+      dni: dni,
+      granja: a.granja,
+      granjas: a.granjas,
+    );
+    final vistos = <String>{_claveGrupo(base)};
+    final out = <PresenciaCoincidencia>[];
+    for (final o in todas) {
+      final g = o.grupo;
+      if (g == null || o.persona == null) continue;
+      if (o.ubicacion != c.ubicacion) continue;
+      if (g.fechaIngreso != base.fechaIngreso) continue;
+      if (!vistos.add(_claveGrupo(g))) continue;
+      out.add(o);
+    }
+    return out;
+  }
+
+  /// Si la persona sigue dentro en varias granjas, agrega una fila por cada una.
+  void _agregarFilasOtrasGranjas(String dni, PresenciaCoincidencia c) {
+    var agrego = false;
+    for (final o in _otrasCoincidenciasDni(dni, c)) {
+      final p = o.persona;
+      final g = o.grupo;
+      if (p == null || g == null) continue;
+      if (personas.any((f) =>
+          f.persona.dni == p.dni &&
+          f.listaParaGuardar &&
+          _claveGrupo(f.grupo) == _claveGrupo(g))) {
+        continue;
+      }
+      personas.add(
+        PresenciaEscaneoPersonaFila(
+          persona: p,
+          grupo: g,
+          mostrarAlerta: _requiereAlerta(o),
+        ),
+      );
+      agrego = true;
+    }
+    if (agrego) _notify();
+  }
+
+  void _onCoincidencia(PresenciaCoincidencia c) {
+    PersonaPresencia? persona = c.persona;
+    VehiculoPresencia? vehiculo = c.vehiculo;
+    GrupoPresencia? grupo = c.grupo;
+    final alerta = _requiereAlerta(c);
+
+    if (!c.encontrado) {
+      final dni = c.escaneoDni?.trim();
+      final placaRaw = c.escaneoPlaca?.trim();
+      if (dni != null && DocumentoPersona.esCompleto(dni)) {
+        persona = PersonaPresencia(dni: dni);
+      } else if (placaRaw != null && placaRaw.isNotEmpty) {
+        vehiculo = VehiculoPresencia(placa: placaRaw);
+      } else {
+        return;
+      }
+      grupo = _grupoParaManual();
+    } else if (grupo == null) {
+      return;
+    }
+
+    _avisarMultiGrupo(grupo);
+
+    final pAdd = persona;
+    if (pAdd != null &&
+        personas.any((f) =>
+            f.persona.dni == pAdd.dni &&
+            f.listaParaGuardar &&
+            _claveGrupo(f.grupo) == _claveGrupo(grupo!))) {
+      showInfoToast(context, _listaDuplicadoDni);
+      return;
+    }
+    final vAdd = vehiculo;
+    if (vAdd != null &&
+        vehiculos.any((f) => f.vehiculo.clave == vAdd.clave && f.listaParaGuardar)) {
+      showInfoToast(context, _listaDuplicadoPlaca);
+      return;
+    }
+
+    if (pAdd != null) {
+      personas.add(
+        PresenciaEscaneoPersonaFila(
+          persona: pAdd,
+          grupo: grupo,
+          mostrarAlerta: alerta,
+        ),
+      );
+    }
+    if (vAdd != null) {
+      vehiculos.add(
+        PresenciaEscaneoVehiculoFila(
+          vehiculo: vAdd,
+          grupo: grupo,
+          mostrarAlerta: alerta,
+        ),
+      );
+    }
+    _notify();
+    if (pAdd != null && c.encontrado) _agregarFilasOtrasGranjas(pAdd.dni, c);
+    if (pAdd != null && pAdd.nombre.trim().isEmpty) {
+      unawaited(_consultarNombre(pAdd.dni));
+    }
+  }
+
+  void _agregarDocumentoManual() {
+    personas.add(
+      PresenciaEscaneoPersonaFila(
+        persona: const PersonaPresencia(dni: '', nombre: ''),
+        grupo: _grupoParaManual(),
+        edicionManual: true,
+      ),
+    );
+    _notify();
+  }
+
+  void _agregarPlacaManual() {
+    vehiculos.add(
+      PresenciaEscaneoVehiculoFila(
+        vehiculo: const VehiculoPresencia(placa: ''),
+        grupo: _grupoParaManual(),
+        edicionManual: true,
+      ),
+    );
+    _notify();
+  }
+
+  static const _esperaEscritura = Duration(milliseconds: 450);
+
+  /// Resuelve ya las filas manuales con espera pendiente (p. ej. al guardar).
+  void confirmarPendientes() {
+    for (final f in personas) {
+      if (f.edicionManual && !f.resuelto && f.debounce != null) {
+        f.debounce!.cancel();
+        _resolverFilaDni(f);
+      }
+    }
+    for (final f in vehiculos) {
+      if (f.edicionManual && !f.resuelto && f.debounce != null) {
+        f.debounce!.cancel();
+        _resolverFilaPlaca(f);
+      }
+    }
+  }
+
+  void _alCambiarDniManual(PresenciaEscaneoPersonaFila fila) {
+    if (!fila.edicionManual || fila.dniCtrl == null) return;
+    fila.debounce?.cancel();
+    fila.debounce = null;
+    if (fila.resuelto || fila.mostrarAlerta || fila.persona.dni.isNotEmpty) {
+      fila
+        ..resuelto = false
+        ..mostrarAlerta = false
+        ..persona = const PersonaPresencia(dni: '', nombre: '')
+        ..grupo = _grupoParaManual();
+      _notify();
+    }
+    final dni = DocumentoPersona.normalizar(fila.dniCtrl!.text.trim());
+    if (!DocumentoPersona.esCompleto(dni)) return;
+    fila.debounce = Timer(_esperaEscritura, () => _resolverFilaDni(fila));
+  }
+
+  void _resolverFilaDni(PresenciaEscaneoPersonaFila fila) {
+    fila.debounce = null;
+    if (!mounted || !personas.contains(fila) || fila.dniCtrl == null) return;
+    final dni = DocumentoPersona.normalizar(fila.dniCtrl!.text.trim());
+    if (!DocumentoPersona.esCompleto(dni)) return;
+    final c = _resolverDni(dni);
+    final claveNueva =
+        c.encontrado && c.grupo != null ? _claveGrupo(c.grupo!) : '__manual__';
+    if (personas.any((f) =>
+        !identical(f, fila) &&
+        f.listaParaGuardar &&
+        f.persona.dni == dni &&
+        _claveGrupo(f.grupo) == claveNueva)) {
+      showInfoToast(context, _listaDuplicadoDni);
+      return;
+    }
+    final GrupoPresencia grupo = c.encontrado
+        ? (c.grupo ?? _grupoParaManual())
+        : _grupoParaManual();
+    final persona = c.encontrado
+        ? (c.persona ?? PersonaPresencia(dni: dni))
+        : PersonaPresencia(dni: dni);
+    _avisarMultiGrupo(grupo);
+    fila
+      ..persona = persona
+      ..grupo = grupo
+      ..mostrarAlerta = _requiereAlerta(c)
+      ..resuelto = true;
+    _notify();
+    if (c.encontrado) _agregarFilasOtrasGranjas(dni, c);
+    if (persona.nombre.trim().isEmpty) {
+      unawaited(_consultarNombre(dni));
+    }
+  }
+
+  void _alCambiarPlacaManual(PresenciaEscaneoVehiculoFila fila) {
+    if (!fila.edicionManual || fila.placaCtrl == null) return;
+    fila.debounce?.cancel();
+    fila.debounce = null;
+    if (fila.resuelto || fila.mostrarAlerta || fila.vehiculo.placa.isNotEmpty) {
+      fila
+        ..resuelto = false
+        ..mostrarAlerta = false
+        ..vehiculo = const VehiculoPresencia(placa: '')
+        ..grupo = _grupoParaManual();
+      _notify();
+    }
+    final legible = PlacaOcrParser.paraCampo(fila.placaCtrl!.text);
+    if (PlanDescarga.normPlaca(legible).length < 5) return;
+    fila.debounce = Timer(_esperaEscritura, () => _resolverFilaPlaca(fila));
+  }
+
+  void _resolverFilaPlaca(PresenciaEscaneoVehiculoFila fila) {
+    fila.debounce = null;
+    if (!mounted || !vehiculos.contains(fila) || fila.placaCtrl == null) return;
+    final legible = PlacaOcrParser.paraCampo(fila.placaCtrl!.text);
+    final clave = PlanDescarga.normPlaca(legible);
+    if (clave.length < 5) return;
+    if (vehiculos.any((f) =>
+        !identical(f, fila) && f.listaParaGuardar && f.vehiculo.clave == clave)) {
+      showInfoToast(context, _listaDuplicadoPlaca);
+      return;
+    }
+    final c = _resolverPlaca(legible);
+    final GrupoPresencia grupo = c.encontrado
+        ? (c.grupo ?? _grupoParaManual())
+        : _grupoParaManual();
+    final vehiculo = c.encontrado
+        ? (c.vehiculo ?? VehiculoPresencia(placa: legible))
+        : VehiculoPresencia(placa: legible);
+    _avisarMultiGrupo(grupo);
+    fila
+      ..vehiculo = vehiculo
+      ..grupo = grupo
+      ..mostrarAlerta = _requiereAlerta(c)
+      ..resuelto = true;
+    _notify();
+  }
+
+  Widget _celdaNombre(BuildContext context, String nombre, bool alerta) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          nombre,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12.5,
+            color: context.textThemeSecondary,
+          ),
+        ),
+        if (alerta)
+          Text(
+            _textoAlerta,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.errorDark,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTablas(BuildContext context) {
+    final planes = gruposParaGuardar();
+    final multi = planes.length > 1;
+    final indiceGrupo = {
+      for (var i = 0; i < planes.length; i++)
+        _claveGrupo(planes[i].grupo): i + 1,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (personas.isNotEmpty) ...[
+          BioTable(
+            caption: 'Personas',
+            rowHeight: 56,
+            columns: [
+              const BioColumn('Documento', width: 96, align: TextAlign.left, flex: 1),
+              const BioColumn('Nombre', width: 120, align: TextAlign.left, flex: 2),
+              if (multi)
+                const BioColumn('Ingreso', width: 88, align: TextAlign.left, flex: 1),
+              const BioColumn('', width: 38),
+            ],
+            rowCount: personas.length,
+            rowBuilder: (context, index) {
+              final fila = personas[index];
+              final idx = indiceGrupo[_claveGrupo(fila.grupo)] ?? 1;
+              final nombre = fila.persona.nombre.trim().isNotEmpty
+                  ? fila.persona.nombre.trim()
+                  : '—';
+              final docCell = fila.edicionManual && fila.dniCtrl != null
+                  ? BioTextField(
+                      controller: fila.dniCtrl!,
+                      hint: 'DNI o CEE',
+                      keyboardType: TextInputType.text,
+                      maxLength: _largoDocMax,
+                      soloDigitos: false,
+                      onChanged: (_) => _alCambiarDniManual(fila),
+                    )
+                  : Text(
+                      fila.persona.dni,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    );
+              return [
+                docCell,
+                _celdaNombre(context, nombre, fila.mostrarAlerta),
+                if (multi)
+                  Text(
+                    etiquetaGrupo(fila.grupo, indice: idx),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: context.textThemeMuted,
+                    ),
+                  ),
+                InkWell(
+                  onTap: () {
+                    personas[index].dispose();
+                    personas.removeAt(index);
+                    _notify();
+                  },
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: AppColors.errorDark,
+                  ),
+                ),
+              ];
+            },
+          ),
+        ],
+        if (vehiculos.isNotEmpty) ...[
+          if (personas.isNotEmpty) const SizedBox(height: _sepCampo),
+          BioTable(
+            caption: 'Vehículos',
+            rowHeight: 56,
+            columns: [
+              const BioColumn('Placa', width: 120, align: TextAlign.left, flex: 2),
+              if (multi)
+                const BioColumn('Ingreso', width: 88, align: TextAlign.left, flex: 1),
+              const BioColumn('', width: 38),
+            ],
+            rowCount: vehiculos.length,
+            rowBuilder: (context, index) {
+              final fila = vehiculos[index];
+              final idx = indiceGrupo[_claveGrupo(fila.grupo)] ?? 1;
+              final placaCell = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (fila.edicionManual && fila.placaCtrl != null)
+                          BioTextField(
+                            controller: fila.placaCtrl!,
+                            hint: 'Placa',
+                            maxLength: 15,
+                            textCapitalization: TextCapitalization.characters,
+                            onChanged: (_) => _alCambiarPlacaManual(fila),
+                          )
+                        else
+                          Text(
+                            fila.vehiculo.etiqueta,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        if (fila.mostrarAlerta)
+                          Text(
+                            _textoAlerta,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.errorDark,
+                            ),
+                          ),
+                      ],
+                    );
+              return [
+                placaCell,
+                if (multi)
+                  Text(
+                    etiquetaGrupo(fila.grupo, indice: idx),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: context.textThemeMuted,
+                    ),
+                  ),
+                InkWell(
+                  onTap: () {
+                    vehiculos[index].dispose();
+                    vehiculos.removeAt(index);
+                    _notify();
+                  },
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: AppColors.errorDark,
+                  ),
+                ),
+              ];
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ScanPresenciaBar(
+          granjaFormulario: widget.granjaFormulario,
+          onCoincidencia: _onCoincidencia,
+          onDocumentoAMano: _agregarDocumentoManual,
+          onPlacaAMano: _agregarPlacaManual,
+        ),
+        if (hayEscaneos) ...[
+          const SizedBox(height: _sepCampo),
+          _buildTablas(context),
+        ],
+      ],
+    );
+  }
+}

@@ -99,7 +99,7 @@ Future<String?> showProduccionRegistroDialog({
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.agriculture_outlined, color: AppColors.primary, size: 22),
+                      const Icon(Icons.agriculture_outlined, color: AppColors.textSecondary, size: 22),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(

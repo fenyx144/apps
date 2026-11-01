@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/app_version_service.dart';
 import '../services/catalog_service.dart';
-import '../services/catalog_sync_service.dart';
 import '../services/storage_service.dart';
 import '../utils/aes_offline.dart';
 import '../utils/constants.dart';
@@ -54,37 +54,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return 'unknown';
   }
 
-  Future<void> _syncCatalogsAfterLogin() async {
-    final storage = context.read<StorageService>();
-    final catalog = context.read<CatalogService>();
-    final close = showChickenLoadingDialog(context, 'Descargando catálogos...');
-    try {
-      final result = await CatalogSyncService().syncAll(
-        storage: storage,
-        catalog: catalog,
-        forzar: true,
-      );
-      close();
-      if (!mounted) return;
-      if (!result.hadInternet) {
-        showErrorToast(
-          context,
-          '${AppStrings.sinConexion} Puede descargar desde el menú.',
-        );
-      } else if (!storage.hasCencosGalponesLocal()) {
-        showErrorToast(
-          context,
-          'No se descargaron galpones. Use el menú → Descargar catálogos.',
-        );
-      }
-    } catch (e) {
-      close();
-      if (mounted) {
-        showErrorToast(context, 'Error al descargar catálogos: $e');
-      }
-    }
-  }
-
   Future<void> _attemptOfflineLogin() async {
     final close = showChickenLoadingDialog(context, 'Verificando credenciales...');
     try {
@@ -95,21 +64,24 @@ class _LoginScreenState extends State<LoginScreen> {
       final userIn = _usuarioController.text.trim().toLowerCase();
       final passIn = _passwordController.text;
 
-      // 1) offline_hash
+      // 1) offline_hash (del último login online del dispositivo)
       final storedHash = storage.getOfflineHash() ?? '';
+      final savedUser = storage.getUserCodeSync()?.trim().toLowerCase() ?? '';
       if (storedHash.isNotEmpty) {
         final inputHash = sha256
             .convert(utf8.encode(passIn + AppConstants.offlineSalt))
             .toString();
-        if (inputHash == storedHash) {
+        final userOk = savedUser.isEmpty || userIn == savedUser;
+        if (inputHash == storedHash && userOk) {
           await storage.saveLoginSession(
-            userCode: userIn,
-            userName: storage.getUserName() ?? 'Usuario',
+            userCode: savedUser.isNotEmpty ? savedUser : userIn,
+            userName: storage.getUserName() ?? userIn,
             deviceId: deviceId,
           );
           close();
           if (!mounted) return;
           showSuccessToast(context, 'Inicio de sesión exitoso (offline)');
+          await AppVersionService.notifyIfNeeded(context, storage);
           Get.off(() => const DashboardScreen());
           return;
         }
@@ -147,6 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
               close();
               if (!mounted) return;
               showSuccessToast(context, 'Inicio de sesión exitoso (offline)');
+              await AppVersionService.notifyIfNeeded(context, storage);
               Get.off(() => const DashboardScreen());
               return;
             }
@@ -171,6 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
             close();
             if (!mounted) return;
             showSuccessToast(context, 'Inicio de sesión exitoso (offline)');
+            await AppVersionService.notifyIfNeeded(context, storage);
             Get.off(() => const DashboardScreen());
             return;
           }
@@ -244,16 +218,34 @@ class _LoginScreenState extends State<LoginScreen> {
           if (oh.isNotEmpty) await storage.saveOfflineHash(oh);
           final enom = data['enom']?.toString() ?? '';
           if (enom.isNotEmpty) await storage.saveLoginEnom(enom);
+          final verPayload = AppVersionService.extractPayload(data);
+          if (verPayload != null) {
+            await AppVersionService.mergeServerPayload(storage, verPayload);
+          }
         }
         close();
         showSuccessToast(context, 'Inicio de sesión exitoso');
-        await _syncCatalogsAfterLogin();
-        if (!mounted) return;
+        if (mounted) {
+          await AppVersionService.notifyIfNeeded(context, storage);
+        }
         Get.off(() => const DashboardScreen());
       } else {
         close();
         final code = result['errorCode']?.toString() ?? '';
-        if (code == 'DEVICE_NOT_REGISTERED' || code == 'DEVICE_INACTIVE') {
+        if (code == 'APP_VERSION_BLOCKED') {
+          final storage = context.read<StorageService>();
+          final verPayload = AppVersionService.extractPayload(result['data']);
+          if (verPayload != null) {
+            await AppVersionService.mergeServerPayload(storage, verPayload);
+          }
+          if (mounted) {
+            await AppVersionService.showStatusDialog(
+              context,
+              AppVersionService.fromStorage(storage),
+              barrierDismissible: false,
+            );
+          }
+        } else if (code == 'DEVICE_NOT_REGISTERED' || code == 'DEVICE_INACTIVE') {
           showAppDialog<void>(
             context: context,
             builder: (ctx) => AlertDialog(
@@ -357,12 +349,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildHeader() {
+    final topPad = 32 + MediaQuery.viewPaddingOf(context).top;
     return ClipPath(
       clipper: TopWaveClipper(),
       child: Container(
-        height: 280,
         width: double.infinity,
-        decoration: BoxDecoration(
+        constraints: const BoxConstraints(minHeight: 260),
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [AppColors.primary, AppColors.primaryLight],
             begin: Alignment.topCenter,
@@ -370,47 +363,52 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: Padding(
-          padding: EdgeInsets.only(
-            top: 40 + MediaQuery.viewPaddingOf(context).top,
-            bottom: 60,
-          ),
+          padding: EdgeInsets.fromLTRB(28, topPad, 28, 56),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 100,
-                height: 100,
+                width: 84,
+                height: 84,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: Image.asset(
                     'assets/images/logo_grs.png',
-                    width: 70,
-                    height: 70,
+                    width: 58,
+                    height: 58,
                     color: Colors.white,
                     fit: BoxFit.contain,
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              Text(
-                AppConstants.appTitle,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                  shadows: [
-                    Shadow(
-                      blurRadius: 8,
-                      color: Colors.black26,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: Text(
+                  AppConstants.appTitle,
+                  textAlign: TextAlign.center,
+                  softWrap: true,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                    height: 1.2,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 4,
+                        color: Colors.black12,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
                 ),
-                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -425,12 +423,14 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: context.surfaceCard,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: context.borderSubtle),
-          boxShadow: context.cardShadow(blur: 12, dy: 6),
+          borderRadius: BorderRadius.circular(AppColors.radiusXl),
+          border: Border.all(
+            color: context.borderSubtle.withValues(alpha: 0.9),
+          ),
+          boxShadow: AppColors.mediumShadow,
         ),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
           child: Form(
             key: _formKey,
             child: Column(
@@ -457,13 +457,25 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  OutlineInputBorder _loginFieldBorder(Color color, {double width = 1}) {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: color, width: width),
+      gapPadding: 6,
+    );
+  }
+
+  Color get _loginFieldBorderColor =>
+      context.isAppDark ? context.borderSubtle : const Color(0xFFCBD5E1);
+
+  Color get _loginFieldFillColor =>
+      context.isAppDark ? context.surfaceCard : AppColors.background;
+
   Widget _buildUserField() {
     final isDark = context.isAppDark;
     return Container(
       decoration: BoxDecoration(
-        color: context.surfaceElevated,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.borderSubtle, width: 1),
         boxShadow: isDark ? null : context.cardShadow(blur: 4, dy: 2),
       ),
       child: TextFormField(
@@ -480,10 +492,16 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         decoration: InputDecoration(
           labelText: 'Usuario',
+          floatingLabelBehavior: FloatingLabelBehavior.auto,
           labelStyle: TextStyle(
             color: context.textThemeMuted,
             fontWeight: FontWeight.w500,
             fontSize: 14,
+          ),
+          floatingLabelStyle: const TextStyle(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
           ),
           hintText: 'Ingresa tu usuario',
           hintStyle: TextStyle(color: context.textThemeMuted.withValues(alpha: 0.7)),
@@ -496,27 +514,12 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           filled: true,
-          fillColor: context.surfaceElevated,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.error, width: 1),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.error, width: 2),
-          ),
+          fillColor: _loginFieldFillColor,
+          border: _loginFieldBorder(_loginFieldBorderColor),
+          enabledBorder: _loginFieldBorder(_loginFieldBorderColor),
+          focusedBorder: _loginFieldBorder(AppColors.primary, width: 2),
+          errorBorder: _loginFieldBorder(AppColors.error),
+          focusedErrorBorder: _loginFieldBorder(AppColors.error, width: 2),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 16,
@@ -567,12 +570,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final isDark = context.isAppDark;
     return Container(
       decoration: BoxDecoration(
-        color: context.surfaceElevated,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: isDark ? 0.5 : 0.3),
-          width: 1,
-        ),
         boxShadow: isDark ? null : context.cardShadow(blur: 4, dy: 2),
       ),
       child: TextFormField(
@@ -589,10 +587,16 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         decoration: InputDecoration(
           labelText: 'Contraseña',
+          floatingLabelBehavior: FloatingLabelBehavior.auto,
           labelStyle: TextStyle(
             color: context.textThemeMuted,
             fontWeight: FontWeight.w500,
             fontSize: 14,
+          ),
+          floatingLabelStyle: const TextStyle(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
           ),
           hintText: 'Ingresa tu contraseña',
           hintStyle: TextStyle(color: context.textThemeMuted.withValues(alpha: 0.7)),
@@ -619,27 +623,12 @@ class _LoginScreenState extends State<LoginScreen> {
             },
           ),
           filled: true,
-          fillColor: context.surfaceElevated,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.error, width: 1),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.error, width: 2),
-          ),
+          fillColor: _loginFieldFillColor,
+          border: _loginFieldBorder(_loginFieldBorderColor),
+          enabledBorder: _loginFieldBorder(_loginFieldBorderColor),
+          focusedBorder: _loginFieldBorder(AppColors.primary, width: 2),
+          errorBorder: _loginFieldBorder(AppColors.error),
+          focusedErrorBorder: _loginFieldBorder(AppColors.error, width: 2),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 16,

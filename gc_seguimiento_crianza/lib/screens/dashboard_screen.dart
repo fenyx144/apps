@@ -2,13 +2,12 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../services/catalog_service.dart';
-import '../services/catalog_sync_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../utils/theme_colors.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/granja_campania_picker.dart';
 import '../widgets/section_app_bar.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -27,14 +26,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final now = DateTime.now();
     _weekStart = DateTime(now.year, now.month, now.day)
         .subtract(Duration(days: now.weekday - 1));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncCatalogsSilent());
-  }
-
-  Future<void> _syncCatalogsSilent() async {
-    final storage = context.read<StorageService>();
-    final catalog = context.read<CatalogService>();
-    await CatalogSyncService().syncAll(storage: storage, catalog: catalog);
-    if (mounted) setState(() {});
   }
 
   void _changeWeek(int offset) {
@@ -57,7 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final tc = context;
     final storage = context.watch<StorageService>();
-    final all = storage.getAllRecords();
+    final all = storage.getMyRecords();
     final week = _weekRecords(all);
     final synced = week.where((r) => r['synced'] == true).length;
     final pending = week.length - synced;
@@ -68,11 +59,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return week.where((r) => r['fecha']?.toString() == ds).length;
     });
 
-    final byGranja = <String, int>{};
+    final porGranja = <String, Map<String, dynamic>>{};
     for (final r in week) {
-      final g = r['granjaNombre']?.toString() ?? r['granja']?.toString() ?? '?';
-      byGranja[g] = (byGranja[g] ?? 0) + 1;
+      final g3 = r['granja']?.toString() ?? '';
+      final nom = r['granjaNombre']?.toString() ?? '';
+      final camp = GranjaCampaniaPicker.padCampania(
+        r['campania']?.toString() ?? '',
+      );
+      final label = GranjaCampaniaPicker.formatGranjaLabel(g3, nom);
+      final key = '$g3|$camp';
+      final entry = porGranja.putIfAbsent(
+        key,
+        () => {
+          'label': label.isNotEmpty ? label : (g3.isNotEmpty ? g3 : '?'),
+          'camp': camp,
+          'count': 0,
+        },
+      );
+      entry['count'] = (entry['count'] as int) + 1;
     }
+    final porGranjaList = porGranja.values.toList()
+      ..sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
     return Scaffold(
       drawer: const AppDrawer(),
@@ -83,29 +90,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: Theme.of(context).brightness == Brightness.dark
-                ? [
-                    const Color(0xFF1A1A1A),
-                    const Color(0xFF121212),
+                ? const [
+                    Color(0xFF1A1A1A),
+                    Color(0xFF121212),
                   ]
-                : const [
-              Color(0xFFF8F9FA),
-              Color(0xFFE8EEF3),
-              Color(0xFFD6E4F0),
-            ],
+                : [
+                    AppColors.background,
+                    const Color(0xFFE8F5E9),
+                    const Color(0xFFDCEDC8).withValues(alpha: 0.55),
+                  ],
           ),
         ),
         child: SafeArea(
           top: false,
           bottom: true,
           child: RefreshIndicator(
+            color: AppColors.primary,
             onRefresh: () async => setState(() {}),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -113,11 +121,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       'Resumen de tus registros',
                       style: TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
                         color: tc.textThemePrimary,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                   
+                    const SizedBox(height: 18),
                     AppCard(
                       borderRadius: 18,
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -131,12 +141,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             onPressed: () => _changeWeek(-1),
                           ),
-                          Text(
-                            'Semana: ${_weekRangeLabel()}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: tc.textThemePrimary,
+                          Flexible(
+                            child: Text(
+                              'Semana: ${_weekRangeLabel()}',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: tc.textThemePrimary,
+                              ),
                             ),
                           ),
                           IconButton(
@@ -189,7 +202,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: _buildBarChart(byDay, tc),
                       ),
                     ),
-                    if (byGranja.isNotEmpty) ...[
+                    if (porGranjaList.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       Row(
                         children: [
@@ -200,7 +213,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(
-                              Icons.category,
+                              Icons.warehouse_outlined,
                               size: 20,
                               color: AppColors.accent,
                             ),
@@ -219,10 +232,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(height: 12),
                       AppCard(
                         padding: const EdgeInsets.all(12),
-                        child: SizedBox(
-                          height: 180,
-                          child: _buildPieChartByGranja(byGranja),
-                        ),
+                        child: _buildPieChartByGranja(porGranjaList, tc),
                       ),
                     ],
                   ],
@@ -237,7 +247,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _weekRangeLabel() {
     final end = _weekStart.add(const Duration(days: 6));
-    final formatter = DateFormat('dd/MM');
+    final formatter = DateFormat('dd/MM/yyyy');
     return "${formatter.format(_weekStart)} - ${formatter.format(end)}";
   }
 
@@ -332,24 +342,109 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildPieChartByGranja(Map<String, int> byGranja) {
-    final sections = byGranja.entries.map((e) {
-      final idx = byGranja.keys.toList().indexOf(e.key);
-      final alpha = 0.4 + (idx % 5) * 0.12;
+  // Paleta variada para distinguir granjas en la gráfica de torta.
+  static const List<Color> _granjaPalette = [
+    Color(0xFF4CAF50), // verde
+    Color(0xFF42A5F5), // azul
+    Color(0xFFFFA726), // naranja
+    Color(0xFFAB47BC), // púrpura
+    Color(0xFF26A69A), // teal
+    Color(0xFFEF5350), // rojo
+    Color(0xFF7E57C2), // violeta
+    Color(0xFFFF7043), // naranja profundo
+    Color(0xFF29B6F6), // celeste
+    Color(0xFF66BB6A), // verde claro
+    Color(0xFFEC407A), // rosa
+    Color(0xFF8D6E63), // marrón
+    Color(0xFF78909C), // azul grisáceo
+    Color(0xFFFFD54F), // ámbar
+  ];
+
+  Widget _buildPieChartByGranja(
+    List<Map<String, dynamic>> porGranja,
+    BuildContext context,
+  ) {
+    Color pieColor(int idx) =>
+        _granjaPalette[idx % _granjaPalette.length];
+
+    final sections = porGranja.asMap().entries.map((e) {
       return PieChartSectionData(
-        value: e.value.toDouble(),
-        title: '${e.value}',
-        radius: 50,
-        color: AppColors.primary.withOpacity(alpha.clamp(0.0, 1.0)),
+        value: (e.value['count'] as int).toDouble(),
+        title: '${e.value['count']}',
+        radius: 44,
+        titleStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: context.textThemePrimary,
+        ),
+        color: pieColor(e.key),
       );
     }).toList();
 
-    return PieChart(
-      PieChartData(
-        sections: sections,
-        centerSpaceRadius: 35,
-        sectionsSpace: 2,
-      ),
+    return Column(
+      children: [
+        SizedBox(
+          height: 140,
+          child: PieChart(
+            PieChartData(
+              sections: sections,
+              centerSpaceRadius: 30,
+              sectionsSpace: 2,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        for (final e in porGranja.asMap().entries) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: pieColor(e.key),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    e.value['label'].toString(),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: context.textThemePrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if ((e.value['camp'] as String).isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    'Camp ${e.value['camp']}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: context.textThemeSecondary,
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 10),
+                Text(
+                  '${e.value['count']}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: pieColor(e.key),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

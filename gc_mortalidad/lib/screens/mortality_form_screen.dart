@@ -16,6 +16,7 @@ import '../utils/app_dialogs.dart';
 import '../utils/constants.dart';
 import '../utils/dialog_helper.dart';
 import '../utils/mortality_design.dart';
+import '../utils/text_utils.dart';
 import '../utils/theme_extensions.dart';
 import '../utils/toast_helper.dart';
 import '../widgets/app_bar.dart';
@@ -73,6 +74,7 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
   String? _errorDetallesAgregar;
   bool _dirty = false;
   bool _saving = false;
+  bool _sinMortalidad = false;
 
   List<Cenco> _cencos = [];
   List<Galpon> _galpones = [];
@@ -149,6 +151,11 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
         _fechaLlegada = DateFormat('yyyy-MM-dd').parse(llegadaStr);
       } catch (_) {}
     }
+    if (_permiteRegistroCero) {
+      final total = MortalityDetail.totalMachos(_detalles) +
+          MortalityDetail.totalHembras(_detalles);
+      _sinMortalidad = total == 0;
+    }
   }
 
   Future<void> _pickDate({
@@ -215,10 +222,7 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
 
   void _loadCatalogs() {
     final storage = context.read<StorageService>();
-    _cencos = storage
-        .getCencosLocal()
-        .map((e) => Cenco.fromJson(e))
-        .toList()
+    _cencos = storage.getCencosWithEdadActual()
       ..sort((a, b) => a.codigo.compareTo(b.codigo));
     _motivos = storage
         .getMotivosMortalidad()
@@ -301,6 +305,7 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
 
   bool get _useInlineAvesEntry {
     if (widget.type == MortalityType.incubacion) return true;
+    if (widget.type == MortalityType.transporte) return true;
     if (widget.type == MortalityType.produccion) {
       final o = _origenAnalisis;
       return o == 'Necropsia' || o == 'Laboratorio';
@@ -313,7 +318,7 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
     steps += 0.2;
     if (_selectedCenco != null) steps += 0.2;
     if (_selectedGalpon != null) steps += 0.15;
-    if (_detalles.isNotEmpty) steps += 0.25;
+    if (_sinMortalidad || _detalles.any((d) => d.hasContent)) steps += 0.25;
     if (_obsController.text.isNotEmpty) steps += 0.2;
     return steps.clamp(0, 1);
   }
@@ -338,6 +343,38 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
     return result ?? false;
   }
 
+  /// Tipos/orígenes que admiten registro sin mortalidad.
+  bool get _permiteRegistroCero {
+    if (widget.type == MortalityType.produccion) {
+      final o = (_origenAnalisis ?? '').trim();
+      if (o == 'Necropsia' || o == 'Laboratorio') return false;
+    }
+    return true;
+  }
+
+  /// Registro marcado explícitamente como sin mortalidad.
+  bool get _esRegistroCero => _permiteRegistroCero && _sinMortalidad;
+
+  void _setSinMortalidad(bool value) {
+    if (!_permiteRegistroCero && value) return;
+    setState(() {
+      _sinMortalidad = value;
+      _dirty = true;
+      if (value) {
+        final kept = _detalles
+            .map((d) => d.copyWith(cantidad: 0, procesoEtapas: const {}))
+            .where((d) => d.hasContent)
+            .toList();
+        _detalles
+          ..clear()
+          ..addAll(kept);
+        _errorDetallesCantidad = null;
+        _errorDetallesCausa = null;
+        _errorDetallesAgregar = null;
+      }
+    });
+  }
+
   bool _validate() {
     _errorGranja = _selectedCenco == null ? 'Seleccione granja' : null;
     _errorGalpon = _selectedGalpon == null ? 'Seleccione galpón' : null;
@@ -348,14 +385,18 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
     _errorDetallesCausa = null;
     _errorDetallesAgregar = null;
 
-    if (_detalles.isEmpty ||
-        (MortalityDetail.totalMachos(_detalles) + MortalityDetail.totalHembras(_detalles) == 0)) {
+    final totalAves = MortalityDetail.totalMachos(_detalles) +
+        MortalityDetail.totalHembras(_detalles);
+
+    if (!_esRegistroCero &&
+        (_detalles.isEmpty || totalAves == 0)) {
       if (_useInlineAvesEntry) {
         _errorDetallesCantidad = 'Ingrese cantidad en Machos o Hembras';
       } else {
         _errorDetallesAgregar = 'Agregue al menos un detalle de aves';
       }
-    } else if (mortalityShowsCausa(widget.type, origenAnalisis: _origenAnalisis)) {
+    } else if (!_esRegistroCero &&
+        mortalityShowsCausa(widget.type, origenAnalisis: _origenAnalisis)) {
       for (final d in _detalles) {
         if (d.cantidad > 0 &&
             (d.causaCodigo == null || d.causaCodigo!.isEmpty)) {
@@ -419,14 +460,19 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
   }
 
   List<MortalityDetail> get _detallesParaGuardar {
-    if (widget.type != MortalityType.transporte) return _detalles;
+    var conContenido = _detalles.where((d) => d.hasContent).toList();
+    if (_esRegistroCero) {
+      conContenido = conContenido
+          .map((d) => d.copyWith(cantidad: 0, procesoEtapas: const {}))
+          .where((d) => d.hasContent)
+          .toList();
+    }
+    if (widget.type != MortalityType.transporte) return conContenido;
     final c = mortalityCausaTransporte(_motivos);
-    return _detalles
-        .map(
-          (d) => d.cantidad > 0
-              ? d.copyWith(causaCodigo: c.codigo, causaNombre: c.nombre)
-              : d,
-        )
+    return conContenido
+        .map((d) => d.cantidad > 0
+            ? d.copyWith(causaCodigo: c.codigo, causaNombre: c.nombre)
+            : d)
         .toList();
   }
 
@@ -467,7 +513,7 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
       'cant_hembras': cantHembras,
       'causa_hembras': primeraH?.causaCodigo ?? '',
       'causa_hembras_nombre': primeraH?.causaNombre ?? '',
-      'observaciones': _obsController.text.trim(),
+      'observaciones': capitalizeText(_obsController.text),
       'fotos': allFotos
           .map((p) => {'path': p, 'nombre': p.split(Platform.pathSeparator).last})
           .toList(),
@@ -479,8 +525,10 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
       context: context,
       type: widget.type,
       motivos: _motivos,
+      sinMortalidad: _sinMortalidad,
     );
-    if (result == null || result.isEmpty || !mounted) return;
+    if (result == null || !mounted) return;
+    if (result.isEmpty) return;
     setState(() {
       _detalles.addAll(result);
       _dirty = true;
@@ -495,6 +543,7 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
       motivos: _motivos,
       existingMacho: group.macho,
       existingHembra: group.hembra,
+      sinMortalidad: _sinMortalidad,
     );
     if (result == null || !mounted) return;
     setState(() {
@@ -639,6 +688,72 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
     _obsController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Widget _buildSinMortalidadSwitch(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 8),
+      child: Material(
+        color: isDark ? AppColors.darkSurface : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: () => _setSinMortalidad(!_sinMortalidad),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _sinMortalidad
+                    ? AppColors.primary.withValues(alpha: 0.45)
+                    : AppColors.primary.withValues(alpha: 0.12),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.health_and_safety_outlined,
+                  size: 20,
+                  color: _sinMortalidad
+                      ? AppColors.primary
+                      : (isDark ? Colors.white54 : AppColors.textSecondary),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sin mortalidad',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          color: isDark ? Colors.white : AppColors.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Marca si no hubo aves muertas',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: isDark
+                              ? Colors.white54
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  value: _sinMortalidad,
+                  activeColor: AppColors.primary,
+                  onChanged: _setSinMortalidad,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -879,7 +994,7 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 FormSectionTitle(
-                                  title: 'Cantidad de aves',
+                                  title: 'Detalle de aves',
                                   leading: PoultryIcon(
                                     size: 18,
                                     color: widget.type.accentColor,
@@ -888,6 +1003,8 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
                                   topPadding: 0,
                                   bottomPadding: 0,
                                 ),
+                                if (_permiteRegistroCero)
+                                  _buildSinMortalidadSwitch(isDark),
                                 if (_useInlineAvesEntry)
                                   InlineMortalitySection(
                                     key: ValueKey('${_tuuid ?? 'new'}_${_origenAnalisis ?? ''}'),
@@ -900,6 +1017,7 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
                                     ),
                                     motivos: _motivos,
                                     tabAccentColor: widget.type.accentColor,
+                                    sinMortalidad: _sinMortalidad,
                                     onChanged: (detalles) {
                                       setState(() {
                                         _detalles
@@ -914,6 +1032,8 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
                                   MortalityDetailsSection(
                                     detalles: _detalles,
                                     type: widget.type,
+                                    permiteRegistroCero: _permiteRegistroCero,
+                                    sinMortalidad: _sinMortalidad,
                                     agregarError: _errorDetallesAgregar,
                                     onAdd: _openDetailDialogForAdd,
                                     onEditGroup: _openDetailDialogForEditGroup,
@@ -938,6 +1058,7 @@ class _MortalityFormScreenState extends State<MortalityFormScreen> {
                             controller: _obsController,
                             maxLines: 3,
                             maxLength: 500,
+                            textCapitalization: TextCapitalization.sentences,
                             style: TextStyle(
                               color: isDark ? Colors.white : Colors.black87,
                               fontSize: 15,

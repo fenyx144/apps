@@ -1,7 +1,7 @@
 name: seguimiento_crianza
-description: App móvil Seguimiento de crianza (Historia Clínica)
+description: App móvil Seguimiento Productivo
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.2+1
 
 environment:
   sdk: ^3.10.0
@@ -27,7 +27,11 @@ dependencies:
   intl: ^0.20.2
   crypto: ^3.0.6
   pointycastle: ^4.0.0
-  vosk_flutter: ^0.3.48
+  # pub.dev (0.3.48) pinnea http ^0.13; el repo ya soporta http ^1.x y Dart 3
+  vosk_flutter:
+    git:
+      url: https://github.com/alphacep/vosk-flutter
+      ref: master
   permission_handler: ^11.3.0
 
 dev_dependencies:
@@ -35,9 +39,6 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
-
-dependency_overrides:
-  permission_handler: ^11.3.0
 
 flutter:
   uses-material-design: true

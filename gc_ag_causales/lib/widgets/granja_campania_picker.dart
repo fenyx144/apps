@@ -71,33 +71,56 @@ class GranjaCampaniaPicker {
     return padCampania(c);
   }
 
-  /// Ej: `621-0001 - Granja Sur C=001`
+  /// Quita sufijos tipo `C=193` del nombre de granja.
+  static String cleanNombreGranja(String nombre) {
+    var n = nombre.trim();
+    if (n.isEmpty) return '';
+    n = n.replaceAll(RegExp(r'\s*C\s*=\s*\d+\s*', caseSensitive: false), ' ');
+    return n.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  }
+
+  /// Etiqueta visible: `621 GJA. SANTA TERESA` (código 3 dígitos + nombre).
+  static String formatGranjaLabel(String granjaCodigo, String nombre) {
+    final g3 = normGranja(granjaCodigo);
+    var nom = cleanNombreGranja(nombre);
+    if (g3.isNotEmpty && nom.startsWith(g3)) {
+      nom = nom.substring(g3.length).replaceFirst(RegExp(r'^[\s\-–—]+'), '').trim();
+    }
+    if (g3.isEmpty) return nom;
+    if (nom.isEmpty) return g3;
+    return '$g3 $nom';
+  }
+
+  /// Lista del diálogo: granja + campaña al final para distinguir filas.
+  static String formatListaOpcion(Map<String, String> it) {
+    final base = formatGranjaLabel(
+      it['granja3'] ?? it['granja'] ?? '',
+      it['granjaNombre'] ?? '',
+    );
+    final camp = padCampania(it['campania'] ?? '');
+    if (camp.isEmpty) return base;
+    return '$base  ·  $camp';
+  }
+
+  /// @deprecated Prefer [formatGranjaLabel].
   static String formatEtiqueta({
     required String codigo6,
     required String nombre,
     required String campania,
   }) {
-    final cod = codigo6.trim();
-    final camp = padCampania(campania);
-    final nom = nombre.trim();
-    if (normalizarCodigoCenco(cod).length < 6) {
-      return nom.isNotEmpty ? nom : camp;
-    }
-    final displayCod = cod.contains('-')
-        ? cod
-        : formatCodigoCorrelativo(cod.substring(0, 3), camp);
-    if (nom.isNotEmpty) return '$displayCod - $nom C=$camp';
-    return '$displayCod C=$camp';
+    final g3 = normGranja(
+      normalizarCodigoCenco(codigo6).length >= 3
+          ? normalizarCodigoCenco(codigo6).substring(0, 3)
+          : codigo6,
+    );
+    return formatGranjaLabel(g3, nombre);
   }
 
   static String formatEtiquetaFromSeleccion(Map<String, String> sel) {
-    final cod = sel['granja'] ?? '';
-    final camp = sel['campania'] ?? '';
-    final nom = sel['granjaNombre'] ?? '';
-    final codDisplay = normalizarCodigoCenco(cod).length >= 6
-        ? (cod.contains('-') ? cod : formatCodigoCorrelativo(cod, camp))
-        : formatCodigoCorrelativo(cod, camp);
-    return formatEtiqueta(codigo6: codDisplay, nombre: nom, campania: camp);
+    return formatGranjaLabel(
+      sel['granja3'] ?? sel['granja'] ?? '',
+      sel['granjaNombre'] ?? '',
+    );
   }
 
   static List<Map<String, String>> _parseCampanias(dynamic raw) {
@@ -131,20 +154,20 @@ class GranjaCampaniaPicker {
     Map<String, dynamic>? proyeccion, {
     Map<String, dynamic>? cencosGalpones,
   }) {
-    if (proyeccion == null) return [];
-
-    final granjas = (proyeccion['granjas'] as List?) ?? [];
+    final granjas = (proyeccion?['granjas'] as List?) ?? [];
     final campMap = Map<String, dynamic>.from(
-      (proyeccion['campanias_por_granja'] as Map?) ?? {},
+      (proyeccion?['campanias_por_granja'] as Map?) ?? {},
     );
-    final cencos = (proyeccion['cencos'] as List?) ?? [];
+    final cencos = (proyeccion?['cencos'] as List?) ?? [];
 
     final nombres = <String, String>{};
     for (final g in granjas) {
       if (g is! Map) continue;
       final g3 = normGranja((g['granja'] ?? '').toString());
       if (g3.isEmpty) continue;
-      final nom = (g['nombre'] ?? g['nombre_granja'] ?? '').toString().trim();
+      final nom = cleanNombreGranja(
+        (g['nombre'] ?? g['nombre_granja'] ?? '').toString(),
+      );
       if (nom.isNotEmpty) nombres[g3] = nom;
     }
 
@@ -153,7 +176,9 @@ class GranjaCampaniaPicker {
       final cod = (c['codigo'] ?? '').toString().trim();
       if (cod.length < 3) continue;
       final g3 = normGranja(cod);
-      final nom = (c['nombre'] ?? c['nombre_granja'] ?? '').toString().trim();
+      final nom = cleanNombreGranja(
+        (c['nombre'] ?? c['nombre_granja'] ?? '').toString(),
+      );
       if (nom.isNotEmpty && !nombres.containsKey(g3)) {
         nombres[g3] = nom;
       }
@@ -219,7 +244,9 @@ class GranjaCampaniaPicker {
         final cod6 = (c['codigo'] ?? '').toString().trim();
         if (cod6.length < 6) continue;
         final g3 = normGranja(cod6);
-        final nom = (c['nombre'] ?? c['nombre_granja'] ?? '').toString().trim();
+        final nom = cleanNombreGranja(
+          (c['nombre'] ?? c['nombre_granja'] ?? '').toString(),
+        );
         if (nom.isNotEmpty && !nombres.containsKey(g3)) {
           nombres[g3] = nom;
         }
@@ -229,17 +256,7 @@ class GranjaCampaniaPicker {
     }
 
     opciones.sort((a, b) {
-      final la = formatEtiqueta(
-        codigo6: a['codigo']!,
-        nombre: a['granjaNombre']!,
-        campania: a['campania']!,
-      );
-      final lb = formatEtiqueta(
-        codigo6: b['codigo']!,
-        nombre: b['granjaNombre']!,
-        campania: b['campania']!,
-      );
-      return la.compareTo(lb);
+      return formatListaOpcion(a).compareTo(formatListaOpcion(b));
     });
 
     return opciones;
@@ -261,7 +278,7 @@ class GranjaCampaniaPicker {
           title: const Text('Sin granjas'),
           content: const Text(
             'No hay granjas/campañas para la fecha seleccionada. '
-            'Descargue datos desde el menú o elija otra fecha.',
+            'Descargue datos desde el menú.',
           ),
           actions: [
             TextButton(
@@ -276,23 +293,16 @@ class GranjaCampaniaPicker {
 
     final sel = await _showSearchList<Map<String, String>>(
       context,
-      title: 'Granja y campaña',
-      hint: 'Buscar por código, nombre o campaña...',
+      title: 'Seleccionar Granja',
+      hint: 'Buscar por código o nombre',
       items: opciones,
-      labelOf: (it) => formatEtiqueta(
-        codigo6: it['codigo']!,
-        nombre: it['granjaNombre']!,
-        campania: it['campania']!,
-      ),
+      labelOf: formatListaOpcion,
       filterOf: (it, q) {
-        final label = formatEtiqueta(
-          codigo6: it['codigo']!,
-          nombre: it['granjaNombre']!,
-          campania: it['campania']!,
-        ).toLowerCase();
+        final label = formatListaOpcion(it).toLowerCase();
         return label.contains(q) ||
-            it['codigo']!.contains(q) ||
-            it['granja3']!.contains(q);
+            it['codigo']!.toLowerCase().contains(q) ||
+            it['granja3']!.contains(q) ||
+            (it['campania'] ?? '').contains(q);
       },
     );
 

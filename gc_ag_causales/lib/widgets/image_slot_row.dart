@@ -1,12 +1,15 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+
 import '../screens/image_editor_screen.dart';
 import '../utils/constants.dart';
-import '../utils/dialog_utils.dart';
+import '../utils/media_permissions.dart';
 import '../utils/theme_colors.dart';
+import '../utils/toast_helper.dart';
 
 class ImageSlotRow extends StatelessWidget {
   final List<String?> paths;
@@ -18,221 +21,270 @@ class ImageSlotRow extends StatelessWidget {
     required this.onChanged,
   });
 
-  Future<XFile> _copyToTemp(XFile picked, int index) async {
-    try {
-      final bytes = await picked.readAsBytes();
-      final tempDir = await getTemporaryDirectory();
-      final ext = path.extension(picked.path).isEmpty
-          ? '.jpg'
-          : path.extension(picked.path);
-      final tempPath = path.join(
-        tempDir.path,
-        'ag_causales_${DateTime.now().millisecondsSinceEpoch}_$index$ext',
-      );
-      final tempFile = File(tempPath);
-      await tempFile.writeAsBytes(bytes);
-      return XFile(tempPath);
-    } catch (_) {
-      return picked;
+  Future<XFile> _copyToAppDir(XFile picked, int index) async {
+    final bytes = await picked.readAsBytes();
+    final dir = await getApplicationDocumentsDirectory();
+    final imagesDir = Directory('${dir.path}/ag_causales_images');
+    if (!imagesDir.existsSync()) {
+      imagesDir.createSync(recursive: true);
     }
-  }
-
-  Future<XFile?> _openEditor(BuildContext context, XFile imageFile) {
-    return Navigator.push<XFile?>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ImageEditorScreen(imageFile: imageFile),
-      ),
+    final ext = path.extension(picked.path).isEmpty
+        ? '.jpg'
+        : path.extension(picked.path);
+    final destPath = path.join(
+      imagesDir.path,
+      'agc_${DateTime.now().millisecondsSinceEpoch}_$index$ext',
     );
-  }
-
-  Future<bool?> _askEdit(BuildContext context) {
-    return showAppDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).brightness == Brightness.dark
-            ? null
-            : AppColors.dialogBackground,
-        title: Text(
-          '¿Editar imagen?',
-          style: TextStyle(color: ctx.textThemePrimary),
-        ),
-        content: Text(
-          '¿Deseas recortar, agregar texto o dibujar sobre la imagen?',
-          style: TextStyle(color: ctx.textThemePrimary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'No, usar tal cual',
-              style: TextStyle(color: ctx.textThemeMuted),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('Sí, editar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _processPickedImage(
-    BuildContext context,
-    int index,
-    XFile picked,
-  ) async {
-    var imageFile = await _copyToTemp(picked, index);
-
-    final shouldEdit = await _askEdit(context);
-    if (!context.mounted) return;
-
-    if (shouldEdit == true) {
-      var currentFile = imageFile;
-      var done = false;
-      while (!done && context.mounted) {
-        final result = await _openEditor(context, currentFile);
-        if (!context.mounted) return;
-        if (result != null) {
-          onChanged(index, result.path);
-          done = true;
-        } else {
-          final again = await _askEdit(context);
-          if (!context.mounted) return;
-          if (again != true) {
-            done = true;
-            if (again == false) {
-              onChanged(index, currentFile.path);
-            }
-          }
-        }
-      }
-    } else if (shouldEdit == false) {
-      onChanged(index, imageFile.path);
-    }
+    await File(destPath).writeAsBytes(bytes);
+    return XFile(destPath);
   }
 
   Future<void> _pickNew(BuildContext context, int index) async {
-    final source = await showAppDialog<ImageSource>(
+    final source = await showModalBottomSheet<ImageSource>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          'Seleccionar imagen',
-          style: TextStyle(color: ctx.textThemePrimary),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: AppColors.iconAccent),
-              title: Text('Cámara', style: TextStyle(color: ctx.textThemePrimary)),
-              onTap: () => Navigator.pop(ctx, ImageSource.camera),
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.photo_library, color: AppColors.iconAccent),
-              title: Text('Galería', style: TextStyle(color: ctx.textThemePrimary)),
-              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-            ),
-          ],
+      backgroundColor: context.isAppDark ? const Color(0xFF2D2D4A) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_camera_rounded,
+                  color: AppColors.iconAccent,
+                ),
+                title: Text('Cámara', style: TextStyle(color: ctx.textThemePrimary)),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_library_rounded,
+                  color: AppColors.iconAccent,
+                ),
+                title: Text('Galería', style: TextStyle(color: ctx.textThemePrimary)),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+            ],
+          ),
         ),
       ),
     );
     if (source == null) return;
 
+    if (source == ImageSource.camera) {
+      if (!await MediaPermissions.ensureCamera()) {
+        if (context.mounted) {
+          showErrorToast(context, 'Se necesita permiso de cámara.');
+        }
+        return;
+      }
+    } else {
+      if (!await MediaPermissions.ensureGallery()) {
+        if (context.mounted) {
+          showErrorToast(
+            context,
+            'Se necesita permiso para acceder a la galería.',
+          );
+        }
+        return;
+      }
+    }
+
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: source, imageQuality: 85);
     if (picked == null || !context.mounted) return;
 
-    await _processPickedImage(context, index, picked);
+    final saved = await _copyToAppDir(picked, index);
+    if (!context.mounted) return;
+    onChanged(index, saved.path);
   }
 
-  Future<void> _onSlotTap(BuildContext context, int index) async {
-    final existing = index < paths.length ? paths[index] : null;
-    final hasImage = existing != null && existing.isNotEmpty;
-
-    if (hasImage) {
-      final result = await _openEditor(context, XFile(existing));
-      if (result != null && context.mounted) {
-        onChanged(index, result.path);
-      }
-    } else {
-      await _pickNew(context, index);
+  Future<void> _editImage(BuildContext context, int index, String existing) async {
+    final result = await Navigator.push<XFile?>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ImageEditorScreen(imageFile: XFile(existing)),
+      ),
+    );
+    if (result != null && context.mounted) {
+      onChanged(index, result.path);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF757575)
-        : const Color(0xFFBDBDBD);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: List.generate(3, (i) {
+          final imagePath = i < paths.length ? paths[i] : null;
+          return _DashedPhotoSlot(
+            imagePath: imagePath,
+            onAdd: () => _pickNew(context, i),
+            onTapImage: imagePath != null && imagePath.isNotEmpty
+                ? () => _editImage(context, i, imagePath)
+                : null,
+            onDeleteImage: imagePath != null && imagePath.isNotEmpty
+                ? () => onChanged(i, null)
+                : null,
+          );
+        }),
+      ),
+    );
+  }
+}
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: List.generate(3, (i) {
-        final path = i < paths.length ? paths[i] : null;
-        final hasImage = path != null && path.isNotEmpty;
+class _DashedPhotoSlot extends StatelessWidget {
+  final String? imagePath;
+  final VoidCallback onAdd;
+  final VoidCallback? onTapImage;
+  final VoidCallback? onDeleteImage;
 
-        return GestureDetector(
-          onTap: () => _onSlotTap(context, i),
-          child: Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: borderColor, width: 1.5),
-            ),
-            child: hasImage
-                ? Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.file(File(path), fit: BoxFit.cover),
-                      ),
-                      Positioned(
-                        top: 4,
-                        right: 4,
-                        child: GestureDetector(
-                          onTap: () => onChanged(i, null),
-                          child: Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.75),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.close,
-                              size: 14,
-                              color: Colors.white,
+  static const double size = 96;
+
+  const _DashedPhotoSlot({
+    this.imagePath,
+    required this.onAdd,
+    this.onTapImage,
+    this.onDeleteImage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isAppDark;
+    final hasImage = imagePath != null && imagePath!.isNotEmpty;
+
+    return GestureDetector(
+      onTap: hasImage ? onTapImage : onAdd,
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: hasImage
+            ? Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(1),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(size * 0.15),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.file(File(imagePath!), fit: BoxFit.cover),
+                          Container(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            child: const Center(
+                              child: Icon(
+                                Icons.edit_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Center(
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: const BoxDecoration(
-                        color: AppColors.iconAccent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 22,
+                        ],
                       ),
                     ),
                   ),
-          ),
-        );
-      }),
+                  if (onDeleteImage != null)
+                    Positioned(
+                      top: -8,
+                      right: -8,
+                      child: GestureDetector(
+                        onTap: onDeleteImage,
+                        child: Container(
+                          width: 26,
+                          height: 26,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              )
+            : CustomPaint(
+                painter: _DashedBorderPainter(
+                  color: AppColors.primary.withValues(alpha: 0.45),
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(size * 0.15),
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : AppColors.primary.withValues(alpha: 0.04),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.add_a_photo_outlined,
+                          color: AppColors.iconAccent,
+                          size: size * 0.3,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Agregar',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.iconAccent.withValues(alpha: 0.85),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+      ),
     );
   }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+
+  _DashedBorderPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+    final radius = size.shortestSide * 0.15;
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(1, 1, size.width - 2, size.height - 2),
+      Radius.circular(radius),
+    );
+
+    final borderPath = Path()..addRRect(rrect);
+    for (final metric in borderPath.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final len = (distance + dashWidth < metric.length)
+            ? dashWidth
+            : metric.length - distance;
+        canvas.drawPath(metric.extractPath(distance, distance + len), paint);
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

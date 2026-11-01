@@ -10,6 +10,9 @@ class MortalityDetail {
   final List<String> fotos;
   /// Agrupa machos y hembras ingresados en la misma sesión del diálogo.
   final String? grupoId;
+  /// Cantidad de aves por etapa del proceso de despacho
+  /// (columna camelCase → cantidad). Solo aplica a mortalidad tipo Despacho.
+  final Map<String, int> procesoEtapas;
 
   const MortalityDetail({
     required this.id,
@@ -20,12 +23,27 @@ class MortalityDetail {
     this.observacion,
     this.fotos = const [],
     this.grupoId,
+    this.procesoEtapas = const {},
   });
 
   bool get isMacho => sexo == 'M';
   bool get isHembra => sexo == 'H';
 
   String get sexoLabel => isMacho ? 'Machos' : 'Hembras';
+
+  /// Hay algo que persistir: aves, observación o fotos.
+  bool get hasContent =>
+      cantidad > 0 ||
+      (observacion?.trim().isNotEmpty ?? false) ||
+      fotos.isNotEmpty ||
+      procesoEtapas.values.any((v) => v > 0);
+
+  /// Suma de las cantidades de las etapas de despacho de este detalle.
+  int get procesoTotal =>
+      procesoEtapas.values.fold(0, (sum, v) => sum + v);
+
+  /// Valor de una etapa concreta (0 si no está registrada).
+  int procesoEtapa(String etapaId) => procesoEtapas[etapaId] ?? 0;
 
   MortalityDetail copyWith({
     String? id,
@@ -36,6 +54,7 @@ class MortalityDetail {
     String? observacion,
     List<String>? fotos,
     String? grupoId,
+    Map<String, int>? procesoEtapas,
   }) {
     return MortalityDetail(
       id: id ?? this.id,
@@ -46,6 +65,7 @@ class MortalityDetail {
       observacion: observacion ?? this.observacion,
       fotos: fotos ?? this.fotos,
       grupoId: grupoId ?? this.grupoId,
+      procesoEtapas: procesoEtapas ?? this.procesoEtapas,
     );
   }
 
@@ -57,6 +77,9 @@ class MortalityDetail {
         'causa_nombre': causaNombre ?? '',
         'observacion': observacion ?? '',
         'grupo_id': grupoId ?? '',
+        'proceso_etapas': procesoEtapas.isEmpty
+            ? null
+            : procesoEtapas.map((k, v) => MapEntry(k, v)),
         'fotos': fotos.map((p) => {'path': p}).toList(),
       };
 
@@ -74,6 +97,19 @@ class MortalityDetail {
     }
     final obs = json['observacion']?.toString().trim();
     final grupoRaw = json['grupo_id']?.toString().trim();
+
+    // Etapas de despacho desde el sub-mapa 'proceso_etapas' (claves camelCase).
+    final procesoEtapas = <String, int>{};
+    final peRaw = json['proceso_etapas'];
+    if (peRaw is Map) {
+      peRaw.forEach((k, v) {
+        final parsed = int.tryParse(v?.toString() ?? '');
+        if (parsed != null && parsed > 0) {
+          procesoEtapas[k.toString()] = parsed;
+        }
+      });
+    }
+
     return MortalityDetail(
       id: json['id']?.toString() ?? const Uuid().v4(),
       sexo: json['sexo']?.toString() ?? 'M',
@@ -83,6 +119,7 @@ class MortalityDetail {
       observacion: obs != null && obs.isNotEmpty ? obs : null,
       fotos: paths,
       grupoId: grupoRaw != null && grupoRaw.isNotEmpty ? grupoRaw : null,
+      procesoEtapas: procesoEtapas,
     );
   }
 

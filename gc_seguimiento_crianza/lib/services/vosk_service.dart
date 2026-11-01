@@ -49,6 +49,16 @@ class VoskService {
     return _initFuture!;
   }
 
+  /// Destruye el SpeechService nativo si quedó vivo de un hot restart anterior.
+  Future<void> _destroySpeechService() async {
+    try {
+      await const MethodChannel('vosk_flutter')
+          .invokeMethod('speechService.destroy');
+    } catch (_) {
+      // No existía (primera ejecución) o ya fue destruido: es esperado.
+    }
+  }
+
   Future<void> _doInit() async {
     if (_isLoading || _isReady) return;
     _isLoading = true;
@@ -63,6 +73,10 @@ class VoskService {
     }
 
     try {
+      // Hot restart: el nativo conserva el SpeechService del arranque previo.
+      // Destruirlo permite re-crearlo sin reiniciar la app.
+      await _destroySpeechService();
+
       String modelPath;
       try {
         final list = await _modelLoader.loadModelsList();
@@ -94,15 +108,20 @@ class VoskService {
           (e.message?.contains('already exist') ?? false);
       _isLoading = false;
       if (isAlreadyExist) {
-        // Solo en desarrollo (hot restart) o casos raros: el nativo ya tiene instancia.
-        _error = 'Cierra la app por completo y ábrela de nuevo para usar el dictado.';
+        // Caso límite: el destroy no llegó a ejecutarse o hubo una carrera.
+        // Destruir de nuevo y reintentar una sola vez.
+        await _destroySpeechService();
+        _initFuture = null;
+        try {
+          await init();
+        } catch (_) {}
       } else {
         _initFuture = null;
         // ignore: avoid_print
         print('VoskService init error: $e\n$st');
         _error = e.toString();
+        _notify.value++;
       }
-      _notify.value++;
     }
   }
 }

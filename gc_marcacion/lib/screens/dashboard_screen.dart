@@ -1,0 +1,348 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:provider/provider.dart';
+
+import '../services/catalog_service.dart';
+import '../services/storage_service.dart';
+import '../utils/comida_horario.dart';
+import '../utils/constants.dart';
+import '../utils/theme_colors.dart';
+import '../widgets/app_card.dart';
+import '../widgets/app_drawer.dart';
+import '../widgets/section_app_bar.dart';
+import 'marcacion_screen.dart';
+
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final storage = context.watch<StorageService>();
+    final catalog = context.watch<CatalogService>();
+    final registros = storage.getMyRecords();
+    final pendientes = storage.getMyPendingCount();
+    final subidos = registros.length - pendientes;
+    final hoy = hoyYmd();
+    final deHoy = registros.where((r) => (r['fecha']?.toString() ?? '').startsWith(hoy));
+    final nombre = storage.getUserName() ?? 'USUARIO';
+
+    int de(Comida comida) => deHoy.where((r) {
+          final tipo = int.tryParse('${r['tipo']}') ?? -1;
+          return TipoMarcacion.comidaDe(tipo) == comida;
+        }).length;
+
+    return Scaffold(
+      drawer: const AppDrawer(),
+      appBar: const SectionAppBar(
+        title: AppStrings.dashboardTitle,
+        sectionIcon: Icons.dashboard_rounded,
+      ),
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 32 + MediaQuery.viewPaddingOf(context).bottom),
+        children: [
+          _saludo(context, nombre, _fechaLarga(DateTime.now())),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _stat(context, 'Hoy', '${deHoy.length}', AppColors.primary),
+              const SizedBox(width: 10),
+              _stat(context, AppStrings.pendientes, '$pendientes', AppColors.desayuno),
+              const SizedBox(width: 10),
+              _stat(context, AppStrings.subidos, '$subidos', AppColors.mollendo),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _acceso(context),
+          const SizedBox(height: 16),
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hoy',
+                  style: TextStyle(
+                    color: context.textThemePrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _comida(Comida.desayuno, de(Comida.desayuno)),
+                    const SizedBox(width: 8),
+                    _comida(Comida.almuerzo, de(Comida.almuerzo)),
+                    const SizedBox(width: 8),
+                    _comida(Comida.cena, de(Comida.cena)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  catalog.hasPersonal
+                      ? '${catalog.personal.length} en programación'
+                      : 'Personal sin descargar',
+                  style: TextStyle(color: context.textThemeMuted, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (deHoy.isNotEmpty)
+            AppCard(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+              child: Column(
+                children: [
+                  for (final r in deHoy.toList().reversed.take(8))
+                    _fila(context, r),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _saludo(BuildContext context, String nombre, String fecha) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: AppColors.headerGradient,
+        borderRadius: BorderRadius.circular(AppColors.radiusXl),
+        boxShadow: AppColors.primaryShadow,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.waving_hand_rounded, color: Colors.white),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hola, ${nombre.toUpperCase()}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  fecha,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stat(BuildContext context, String label, String value, Color color) {
+    return Expanded(
+      child: AppCard(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(color: context.textThemeMuted, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _acceso(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        onTap: () => Get.to(
+          () => const MarcacionScreen(),
+          routeName: '/marcacion',
+        ),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: context.surfaceCard,
+            borderRadius: BorderRadius.circular(AppColors.radiusLg),
+            border: Border.all(color: context.borderSubtle),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: AppColors.desayuno.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.restaurant_rounded,
+                    color: AppColors.desayuno,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    AppStrings.menuMarcacion,
+                    style: TextStyle(
+                      color: context.textThemePrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: context.textThemeMuted),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _comida(Comida comida, int total) {
+    final color = _color(comida);
+    final icon = _icono(comida);
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 4),
+            Text(
+              '$total',
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+              ),
+            ),
+            Text(
+              etiquetaComida(comida),
+              style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fila(BuildContext context, Map<String, dynamic> r) {
+    final tipo = int.tryParse('${r['tipo']}') ?? 0;
+    final comida = TipoMarcacion.comidaDe(tipo);
+    final momento = TipoMarcacion.momentoDe(tipo);
+    final color = comida == null ? AppColors.primary : _color(comida);
+    final hora = (r['hora']?.toString() ?? '');
+    final hh = hora.length >= 5 ? hora.substring(0, 5) : hora;
+    return ListTile(
+      dense: true,
+      leading: Icon(
+        comida == null ? Icons.schedule : _icono(comida),
+        color: color,
+      ),
+      title: Text(
+        (r['nombre'] ?? '').toString(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: context.textThemePrimary,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        comida == null
+            ? ''
+            : '${etiquetaComida(comida)} · ${momento == null ? '' : etiquetaMomento(momento)}',
+        style: TextStyle(color: context.textThemeMuted, fontSize: 12),
+      ),
+      trailing: Text(
+        hh,
+        style: const TextStyle(
+          color: AppColors.horaText,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  static Color _color(Comida comida) {
+    return switch (comida) {
+      Comida.desayuno => AppColors.desayuno,
+      Comida.almuerzo => AppColors.almuerzo,
+      Comida.cena => AppColors.cena,
+    };
+  }
+
+  static IconData _icono(Comida comida) {
+    return switch (comida) {
+      Comida.desayuno => Icons.wb_twilight_rounded,
+      Comida.almuerzo => Icons.lunch_dining_rounded,
+      Comida.cena => Icons.nights_stay_rounded,
+    };
+  }
+
+  static String _fechaLarga(DateTime d) {
+    const dias = [
+      '',
+      'lunes',
+      'martes',
+      'miércoles',
+      'jueves',
+      'viernes',
+      'sábado',
+      'domingo',
+    ];
+    const meses = [
+      '',
+      'enero',
+      'febrero',
+      'marzo',
+      'abril',
+      'mayo',
+      'junio',
+      'julio',
+      'agosto',
+      'septiembre',
+      'octubre',
+      'noviembre',
+      'diciembre',
+    ];
+    final dia = dias[d.weekday];
+    return '${dia[0].toUpperCase()}${dia.substring(1)} ${d.day} de ${meses[d.month]}';
+  }
+}

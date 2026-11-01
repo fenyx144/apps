@@ -1,3 +1,5 @@
+import '../utils/text_utils.dart';
+
 class Galpon {
   final String tcencos;
   final String tcodint;
@@ -10,6 +12,10 @@ class Galpon {
     this.fecIngMin,
     this.edad = '0',
   });
+
+  /// Edad actual calculada desde fec_ing_min; usa el valor almacenado como respaldo.
+  int get edadDias =>
+      computeEdadInDias(fecIngMin) ?? (int.tryParse(edad.trim()) ?? 0);
 
   factory Galpon.fromJson(Map<String, dynamic> json) {
     return Galpon(

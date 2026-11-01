@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -9,12 +8,11 @@ import '../models/motivo_mortalidad.dart';
 import '../models/mortality_detail.dart';
 import '../utils/constants.dart';
 import '../utils/mortality_design.dart';
-import '../utils/theme_extensions.dart';
+import '../utils/text_utils.dart';
 import '../utils/toast_helper.dart';
-import 'dashed_photo_slot.dart';
-import 'searchable_select_dialog.dart';
-import 'styled_select_field.dart';
 import '../screens/image_editor_screen.dart';
+import 'searchable_select_dialog.dart';
+import 'sexo_table.dart';
 
 const int _maxPhotosPerDetail = 3;
 
@@ -24,6 +22,7 @@ Future<List<MortalityDetail>?> showMortalityDetailDialog({
   required List<MotivoMortalidad> motivos,
   MortalityDetail? existingMacho,
   MortalityDetail? existingHembra,
+  bool sinMortalidad = false,
 }) {
   return showDialog<List<MortalityDetail>>(
     context: context,
@@ -32,15 +31,17 @@ Future<List<MortalityDetail>?> showMortalityDetailDialog({
       motivos: motivos,
       existingMacho: existingMacho,
       existingHembra: existingHembra,
+      sinMortalidad: sinMortalidad,
     ),
   );
 }
 
+/// Datos editables de un sexo dentro del diálogo.
 class _SexTabData {
   final TextEditingController cantidadController = TextEditingController();
   final TextEditingController observacionController = TextEditingController();
-  final FocusNode cantidadFocus = FocusNode();
-  final FocusNode observacionFocus = FocusNode();
+  /// Controllers de las etapas del proceso de despacho (solo tipo despacho).
+  final Map<String, TextEditingController> etapaControllers = {};
   String? detailId;
   String? causaCodigo;
   String? causaNombre;
@@ -49,15 +50,35 @@ class _SexTabData {
   String? errorCausa;
 
   void dispose() {
-    cantidadFocus.dispose();
-    observacionFocus.dispose();
     cantidadController.dispose();
     observacionController.dispose();
+    for (final c in etapaControllers.values) {
+      c.dispose();
+    }
+    etapaControllers.clear();
   }
 
   int get cantidad => int.tryParse(cantidadController.text.trim()) ?? 0;
 
-  bool get hasContent => cantidad > 0 || fotos.isNotEmpty || (causaCodigo?.isNotEmpty ?? false);
+  int get procesoSuma => etapaControllers.values.fold(
+      0, (sum, c) => sum + (int.tryParse(c.text.trim()) ?? 0));
+
+  /// Construye el mapa columna camelCase → cantidad (solo valores > 0).
+  Map<String, int> get procesoEtapas {
+    final map = <String, int>{};
+    etapaControllers.forEach((id, c) {
+      final v = int.tryParse(c.text.trim()) ?? 0;
+      if (v > 0) map[id] = v;
+    });
+    return map;
+  }
+
+  /// Muestra el bloque de observación/fotos si hay cantidad o contenido.
+  bool get hasBlock =>
+      procesoSuma > 0 ||
+      cantidad > 0 ||
+      observacionController.text.trim().isNotEmpty ||
+      fotos.isNotEmpty;
 
   void clearErrors() {
     errorCantidad = null;
@@ -70,38 +91,48 @@ class _MortalityDetailDialog extends StatefulWidget {
   final List<MotivoMortalidad> motivos;
   final MortalityDetail? existingMacho;
   final MortalityDetail? existingHembra;
+  final bool sinMortalidad;
 
   const _MortalityDetailDialog({
     required this.type,
     required this.motivos,
     this.existingMacho,
     this.existingHembra,
+    this.sinMortalidad = false,
   });
 
   @override
   State<_MortalityDetailDialog> createState() => _MortalityDetailDialogState();
 }
 
-class _MortalityDetailDialogState extends State<_MortalityDetailDialog>
-    with SingleTickerProviderStateMixin {
+class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
   final _picker = ImagePicker();
-  late final TabController _tabController;
   late final _SexTabData _macho;
   late final _SexTabData _hembra;
   String? _errorGeneral;
 
   bool get _showCausa => mortalityShowsCausa(widget.type);
+  bool get _isDespacho => widget.type == MortalityType.despacho;
+  bool get _sinMortalidad => widget.sinMortalidad;
+  bool get _isEditing =>
+      widget.existingMacho != null || widget.existingHembra != null;
 
   ({String codigo, String nombre}) get _causaTransporte =>
       mortalityCausaTransporte(widget.motivos);
-  bool get _isEditing =>
-      widget.existingMacho != null || widget.existingHembra != null;
 
   @override
   void initState() {
     super.initState();
     _macho = _SexTabData();
     _hembra = _SexTabData();
+
+    if (_isDespacho) {
+      for (final tab in [_macho, _hembra]) {
+        for (final etapa in kDespachoEtapas) {
+          tab.etapaControllers[etapa.id] = TextEditingController();
+        }
+      }
+    }
 
     if (widget.existingMacho != null) {
       _loadDetail(widget.existingMacho!, _macho);
@@ -110,133 +141,141 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog>
       _loadDetail(widget.existingHembra!, _hembra);
     }
 
-    _tabController = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: widget.existingMacho == null && widget.existingHembra != null
-          ? 1
-          : 0,
-    );
-    _tabController.addListener(_onTabChanged);
-    _macho.cantidadController.addListener(_onCantidadFieldChanged);
-    _hembra.cantidadController.addListener(_onCantidadFieldChanged);
-  }
-
-  void _onCantidadFieldChanged() {
-    var changed = false;
-
-    if (_macho.cantidad > 0 && _macho.errorCantidad != null) {
-      _macho.errorCantidad = null;
-      changed = true;
-    }
-    if (_hembra.cantidad > 0 && _hembra.errorCantidad != null) {
-      _hembra.errorCantidad = null;
-      changed = true;
-    }
-    if ((_macho.cantidad > 0 || _hembra.cantidad > 0) && _errorGeneral != null) {
-      _errorGeneral = null;
-      changed = true;
-    }
-
-    if (changed && mounted) setState(() {});
-  }
-
-  void _onTabChanged() {
-    if (_tabController.indexIsChanging) {
-      _unfocusKeyboard();
-    } else {
-      setState(() {});
+    _macho.cantidadController.addListener(_onInputChanged);
+    _hembra.cantidadController.addListener(_onInputChanged);
+    if (_isDespacho) {
+      for (final tab in [_macho, _hembra]) {
+        for (final c in tab.etapaControllers.values) {
+          c.addListener(_onInputChanged);
+        }
+      }
     }
   }
 
   @override
   void dispose() {
-    _macho.cantidadController.removeListener(_onCantidadFieldChanged);
-    _hembra.cantidadController.removeListener(_onCantidadFieldChanged);
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
+    _macho.cantidadController.removeListener(_onInputChanged);
+    _hembra.cantidadController.removeListener(_onInputChanged);
+    if (_isDespacho) {
+      for (final tab in [_macho, _hembra]) {
+        for (final c in tab.etapaControllers.values) {
+          c.removeListener(_onInputChanged);
+        }
+      }
+    }
     _macho.dispose();
     _hembra.dispose();
     super.dispose();
   }
 
-  void _unfocusKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
-
-  void _focusCantidad(_SexTabData tab) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) tab.cantidadFocus.requestFocus();
+  void _onInputChanged() {
+    if (!mounted) return;
+    // En despacho la cantidad es la suma de las etapas (sin input manual).
+    bool actividad(_SexTabData tab) =>
+        _isDespacho ? tab.procesoSuma > 0 : tab.cantidad > 0;
+    setState(() {
+      for (final tab in [_macho, _hembra]) {
+        if (actividad(tab) && tab.errorCantidad != null) {
+          tab.errorCantidad = null;
+        }
+        if (actividad(tab) &&
+            _showCausa &&
+            (tab.causaCodigo?.isNotEmpty ?? false) &&
+            tab.errorCausa != null) {
+          tab.errorCausa = null;
+        }
+      }
+      if ((actividad(_macho) || actividad(_hembra)) && _errorGeneral != null) {
+        _errorGeneral = null;
+      }
     });
   }
 
-  void _advanceFromCantidad(_SexTabData tab, String sexoLabel) {
-    if (_showCausa && (tab.causaCodigo == null || tab.causaCodigo!.isEmpty)) {
-      _openCausaDialog(tab, sexoLabel, focusObservacionAfter: true);
-      return;
-    }
-    tab.observacionFocus.requestFocus();
-  }
-
-  void _advanceFromObservacion({required bool isLastTab}) {
-    if (isLastTab) {
-      _unfocusKeyboard();
-      return;
-    }
-    _unfocusKeyboard();
-    _tabController.animateTo(1);
-    _focusCantidad(_hembra);
-  }
+  void _unfocusKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
 
   void _loadDetail(MortalityDetail detail, _SexTabData tab) {
     tab.detailId = detail.id;
-    tab.cantidadController.text = detail.cantidad > 0 ? '${detail.cantidad}' : '';
+    // En despacho la cantidad es la suma de las etapas (no hay campo manual).
+    if (!_isDespacho) {
+      tab.cantidadController.text =
+          detail.cantidad > 0 ? '${detail.cantidad}' : '';
+    }
     tab.causaCodigo = detail.causaCodigo;
     tab.causaNombre = detail.causaNombre;
     tab.observacionController.text = detail.observacion ?? '';
     tab.fotos.addAll(detail.fotos);
+    // Cargar etapas del despacho guardadas en el detalle.
+    if (_isDespacho && detail.procesoEtapas.isNotEmpty) {
+      detail.procesoEtapas.forEach((etapaId, value) {
+        tab.etapaControllers[etapaId]?.text = '$value';
+      });
+    }
   }
 
-  bool _validateTab(_SexTabData tab, String sexoLabel) {
-    tab.clearErrors();
-    final cant = tab.cantidad;
-
-    if (cant <= 0) {
-      tab.errorCantidad = 'Ingrese una cantidad válida';
-      return false;
-    }
-    if (_showCausa && (tab.causaCodigo == null || tab.causaCodigo!.isEmpty)) {
-      tab.errorCausa = 'Seleccione causa';
-      return false;
-    }
-    return true;
-  }
-
+  /// Valida ambos sexos y deja los mensajes en cada tab.
   bool _validateAll() {
     _errorGeneral = null;
     _macho.clearErrors();
     _hembra.clearErrors();
 
-    if (_macho.cantidad <= 0 && _hembra.cantidad <= 0) {
-      _errorGeneral = 'Ingrese cantidad en al menos una pestaña';
-      setState(() {});
+    if (_sinMortalidad) return true;
+
+    // Despacho: la cantidad es la suma de las 6 etapas (solo se muestra),
+    // por lo que no hay cuadre que validar. Solo se exige causa si se
+    // registraron aves en ese sexo. Sin etapas = se puede guardar igual
+    // (el switch de sin mortalidad cubre el caso 0 aves).
+    if (_isDespacho) {
+      var ok = true;
+      for (final e in [(_macho, 'Machos'), (_hembra, 'Hembras')]) {
+        final tab = e.$1;
+        if (tab.procesoSuma > 0 &&
+            _showCausa &&
+            (tab.causaCodigo == null || tab.causaCodigo!.isEmpty)) {
+          tab.errorCausa = 'Seleccione causa';
+          ok = false;
+        }
+      }
+      return ok;
+    }
+
+    final anyCantidad = _macho.cantidad > 0 || _hembra.cantidad > 0;
+    if (!anyCantidad) {
+      _errorGeneral = 'Ingrese cantidad en al menos un sexo';
       return false;
     }
 
-    var valid = true;
-    if (_macho.cantidad > 0) {
-      if (!_validateTab(_macho, 'Machos')) {
-        valid = false;
-        if (_tabController.index != 0) _tabController.animateTo(0);
-      }
-    }
-    if (_hembra.cantidad > 0) {
-      if (!_validateTab(_hembra, 'Hembras')) {
-        valid = false;
-        if (_tabController.index != 1) _tabController.animateTo(1);
-      }
-    }
+    var ok = true;
+    for (final e in [(_macho, 'Machos'), (_hembra, 'Hembras')]) {
+      final tab = e.$1;
+      final cant = tab.cantidad;
 
-    setState(() {});
-    return valid;
+      if (cant <= 0) {
+        continue;
+      }
+
+      if (_showCausa && (tab.causaCodigo == null || tab.causaCodigo!.isEmpty)) {
+        tab.errorCausa = 'Seleccione causa';
+        ok = false;
+      }
+    }
+    return ok;
+  }
+
+  List<String> _errorLines() {
+    final lines = <String>[];
+    final general = _errorGeneral;
+    if (general != null && general.trim().isNotEmpty) lines.add(general);
+    for (final e in [(_macho, 'Machos'), (_hembra, 'Hembras')]) {
+      final tab = e.$1;
+      final label = e.$2;
+      if (tab.errorCantidad != null) {
+        lines.add('$label: ${tab.errorCantidad}');
+      }
+      if (tab.errorCausa != null) {
+        lines.add('$label: ${tab.errorCausa}');
+      }
+    }
+    return lines;
   }
 
   MortalityDetail _buildDetail(
@@ -258,35 +297,44 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog>
     return MortalityDetail(
       id: id ?? tab.detailId ?? const Uuid().v4(),
       sexo: sexo,
-      cantidad: tab.cantidad,
-      causaCodigo: causaCodigo,
-      causaNombre: causaNombre,
+      // En despacho no se captura cantidad: equivale a la suma de las etapas.
+      cantidad: _sinMortalidad
+          ? 0
+          : (_isDespacho ? tab.procesoSuma : tab.cantidad),
+      causaCodigo: _sinMortalidad ? null : causaCodigo,
+      causaNombre: _sinMortalidad ? null : causaNombre,
       observacion: _observacionText(tab),
       fotos: List.from(tab.fotos),
       grupoId: grupoId,
+      procesoEtapas: _sinMortalidad || !_isDespacho
+          ? const {}
+          : tab.procesoEtapas,
     );
   }
 
   String? _observacionText(_SexTabData tab) {
-    final t = tab.observacionController.text.trim();
+    final t = capitalizeText(tab.observacionController.text);
     return t.isEmpty ? null : t;
   }
 
   void _save() {
     _unfocusKeyboard();
-    if (!_validateAll()) return;
+    if (!_validateAll()) {
+      setState(() {});
+      return;
+    }
 
     final grupoId = widget.existingMacho?.grupoId ??
         widget.existingHembra?.grupoId ??
         const Uuid().v4();
 
     final results = <MortalityDetail>[];
-    if (_macho.cantidad > 0) {
+    if (_macho.hasBlock) {
       results.add(
         _buildDetail('M', _macho, id: widget.existingMacho?.id, grupoId: grupoId),
       );
     }
-    if (_hembra.cantidad > 0) {
+    if (_hembra.hasBlock) {
       results.add(
         _buildDetail('H', _hembra, id: widget.existingHembra?.id, grupoId: grupoId),
       );
@@ -315,12 +363,12 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_camera_rounded, color: AppColors.primary),
+                leading: const Icon(Icons.photo_camera_rounded, color: AppColors.textSecondary),
                 title: const Text('Cámara'),
                 onTap: () => Navigator.pop(ctx, ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+                leading: const Icon(Icons.photo_library_rounded, color: AppColors.textSecondary),
                 title: const Text('Galería'),
                 onTap: () => Navigator.pop(ctx, ImageSource.gallery),
               ),
@@ -361,11 +409,7 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog>
     setState(() => tab.fotos.removeAt(index));
   }
 
-  Future<void> _openCausaDialog(
-    _SexTabData tab,
-    String sexoLabel, {
-    bool focusObservacionAfter = false,
-  }) async {
+  Future<void> _openCausaDialog(_SexTabData tab, String sexoLabel) async {
     _unfocusKeyboard();
     if (widget.motivos.isEmpty) {
       showInfoToast(context, 'No hay causas disponibles. Descargue desde el menú.');
@@ -395,119 +439,117 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog>
           tab.causaNombre = found?.nombre ?? code;
           tab.errorCausa = null;
         });
-        if (focusObservacionAfter) {
-          tab.observacionFocus.requestFocus();
-        }
       },
     );
 
-    if (mounted && !focusObservacionAfter) _unfocusKeyboard();
+    _unfocusKeyboard();
   }
 
-  Widget _buildTabContent({
-    required _SexTabData tab,
-    required String sexoLabel,
-    required Color accent,
-    required bool isLastTab,
-    String? generalError,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildTable(BuildContext context, bool isDark, Color accent) {
+    final rows = <Widget>[
+      // Despacho: la cantidad se obtiene de la suma de las etapas, por lo que
+      // no se muestra el campo manual de cantidad.
+      if (!_isDespacho)
+        SexoGridRow(
+          label: 'Cantidad',
+          cellM: SexoNumField(
+            controller: _macho.cantidadController,
+            accent: accent,
+            hasError: _macho.errorCantidad != null,
+            enabled: !_sinMortalidad,
+          ),
+          cellH: SexoNumField(
+            controller: _hembra.cantidadController,
+            accent: accent,
+            hasError: _hembra.errorCantidad != null,
+            enabled: !_sinMortalidad,
+          ),
+        ),
+    ];
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: tab.cantidadController,
-            focusNode: tab.cantidadFocus,
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.next,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onSubmitted: (_) => _advanceFromCantidad(tab, sexoLabel),
-            onTapOutside: (_) => _unfocusKeyboard(),
-            style: TextStyle(
-              color: isDark ? Colors.white : Colors.black87,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+    if (_showCausa) {
+      rows.add(
+        SexoGridRow(
+          label: 'Causa',
+          cellM: SexoSelectCell(
+            value: _macho.causaNombre,
+            accent: accent,
+            hasError: _macho.errorCausa != null,
+            enabled: !_sinMortalidad,
+            onTap: () => _openCausaDialog(_macho, 'Machos'),
+          ),
+          cellH: SexoSelectCell(
+            value: _hembra.causaNombre,
+            accent: accent,
+            hasError: _hembra.errorCausa != null,
+            enabled: !_sinMortalidad,
+            onTap: () => _openCausaDialog(_hembra, 'Hembras'),
+          ),
+        ),
+      );
+    }
+
+    if (_isDespacho) {
+      for (final etapa in kDespachoEtapas) {
+        rows.add(
+          SexoGridRow(
+            label: etapa.nombre,
+            icon: etapa.icon,
+            cellM: SexoNumField(
+              controller: _macho.etapaControllers[etapa.id]!,
+              accent: accent,
+              enabled: !_sinMortalidad,
             ),
-            decoration: AppInputStyles.decoration(
-              context,
-              r: 12,
-              labelText: 'Cantidad',
-              hintText: 'Ej: 5',
-              errorText: tab.errorCantidad ?? generalError,
-              accentBorder: tab.errorCantidad == null && generalError == null,
-              prefixIcon: const Icon(Icons.numbers_rounded, color: AppColors.primary),
+            cellH: SexoNumField(
+              controller: _hembra.etapaControllers[etapa.id]!,
+              accent: accent,
+              enabled: !_sinMortalidad,
             ),
           ),
-          if (_showCausa) ...[
-            const SizedBox(height: 14),
-            StyledSelectField(
-              label: 'Causa de mortalidad',
-              value: tab.causaNombre,
-              placeholder: 'Seleccionar causa...',
-              icon: Icons.medical_information_outlined,
-              errorText: tab.errorCausa,
-              onTap: () => _openCausaDialog(tab, sexoLabel),
-            ),
-          ],
-          const SizedBox(height: 14),
-          TextField(
-            controller: tab.observacionController,
-            focusNode: tab.observacionFocus,
-            maxLines: 2,
-            maxLength: 250,
-            textInputAction: isLastTab ? TextInputAction.done : TextInputAction.next,
-            onSubmitted: (_) => _advanceFromObservacion(isLastTab: isLastTab),
-            onTapOutside: (_) => _unfocusKeyboard(),
-            style: TextStyle(
-              color: isDark ? Colors.white : Colors.black87,
-              fontSize: 14,
-            ),
-            decoration: AppInputStyles.decoration(
-              context,
-              r: 12,
-              labelText: 'Observación',
-              hintText: 'Notas para $sexoLabel...',
-              accentBorder: true,
-              prefixIcon: const Icon(Icons.notes_rounded, color: AppColors.primary),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const Icon(Icons.photo_camera_outlined, size: 18, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Text(
-                'Fotos (${tab.fotos.length}/$_maxPhotosPerDetail)',
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                ...tab.fotos.asMap().entries.map(
-                      (e) => Padding(
-                        padding: const EdgeInsets.only(right: 10),
-                        child: DashedPhotoSlot(
-                          imagePath: e.value,
-                          onAdd: () => _pickImage(tab),
-                          onTapImage: () => _editPhoto(tab, e.key),
-                          onDeleteImage: () => _removePhoto(tab, e.key),
-                        ),
-                      ),
-                    ),
-                if (tab.fotos.length < _maxPhotosPerDetail)
-                  DashedPhotoSlot(onAdd: () => _pickImage(tab)),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      }
+      rows.add(
+        SexoGridRow(
+          label: 'Suma',
+          cellM: _buildSumaCell(_macho, isDark, accent),
+          cellH: _buildSumaCell(_hembra, isDark, accent),
+        ),
+      );
+    }
+
+    return SexoGridTable(
+      accent: accent,
+      rows: rows,
+      errors: _errorLines(),
+    );
+  }
+
+  Widget _buildSumaCell(_SexTabData tab, bool isDark, Color accent) {
+    final suma = tab.procesoSuma;
+    if (suma <= 0) {
+      return SexoStatusChip(
+        text: '—',
+        color: isDark ? Colors.white38 : Colors.grey.shade500,
+      );
+    }
+    // Solo muestra el total de las etapas (sin verificación contra cantidad).
+    return SexoStatusChip(
+      text: '$suma',
+      color: accent,
+    );
+  }
+
+  Widget _buildBlock(_SexTabData tab, String label, IconData icon, Color color) {
+    return SexoObsFotoBlock(
+      sexoLabel: label,
+      icon: icon,
+      accent: color,
+      obsController: tab.observacionController,
+      fotos: tab.fotos,
+      maxFotos: _maxPhotosPerDetail,
+      onAddFoto: () => _pickImage(tab),
+      onEditFoto: (i) => _editPhoto(tab, i),
+      onRemoveFoto: (i) => _removePhoto(tab, i),
     );
   }
 
@@ -523,13 +565,13 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog>
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
               child: Row(
                 children: [
                   Icon(
@@ -561,45 +603,30 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog>
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: TabBar(
-                controller: _tabController,
-                onTap: (_) => _unfocusKeyboard(),
-                indicatorColor: accent,
-                labelColor: accent,
-                unselectedLabelColor: isDark ? Colors.white54 : Colors.grey.shade600,
-                tabs: const [
-                  Tab(
-                    icon: Icon(Icons.male_rounded, size: 20),
-                    text: 'Machos',
-                  ),
-                  Tab(
-                    icon: Icon(Icons.female_rounded, size: 20),
-                    text: 'Hembras',
-                  ),
-                ],
-              ),
-            ),
             Flexible(
-              child: IndexedStack(
-                index: _tabController.index,
-                children: [
-                  _buildTabContent(
-                    tab: _macho,
-                    sexoLabel: 'Machos',
-                    accent: accent,
-                    isLastTab: false,
-                    generalError: _errorGeneral,
-                  ),
-                  _buildTabContent(
-                    tab: _hembra,
-                    sexoLabel: 'Hembras',
-                    accent: accent,
-                    isLastTab: true,
-                    generalError: _errorGeneral,
-                  ),
-                ],
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTable(context, isDark, accent),
+                    const SizedBox(height: 10),
+                    _buildBlock(
+                      _macho,
+                      'Machos',
+                      Icons.male_rounded,
+                      AppColors.maleDark,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildBlock(
+                      _hembra,
+                      'Hembras',
+                      Icons.female_rounded,
+                      AppColors.femaleDark,
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                ),
               ),
             ),
             Padding(

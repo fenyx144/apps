@@ -7,6 +7,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
+import 'app_version_service.dart';
+import 'storage_service.dart';
 import '../utils/galpones_resolver.dart';
 import '../utils/record_id.dart';
 
@@ -31,12 +33,16 @@ class ApiService {
       final url = Uri.parse(
         '${AppConstants.baseUrl}${AppConstants.loginEndpoint}',
       );
+      final prefs = await SharedPreferences.getInstance();
+      final storage = StorageService(prefs);
+      final avisoDesde = AppVersionService.warningDesdeForApi(storage);
       final body = jsonEncode({
         'usuario': usuario,
         'password': base64Encode(utf8.encode(password)),
         'android': androidId,
         'version': version,
         'app': AppConstants.appName,
+        if (avisoDesde != null) 'version_warning_desde': avisoDesde,
       });
       final response = await http
           .post(url, headers: _headers, body: body)
@@ -64,13 +70,18 @@ class ApiService {
       final url = Uri.parse(
         '${AppConstants.baseUrl}${AppConstants.registerDeviceEndpoint}',
       );
+      final prefs = await SharedPreferences.getInstance();
+      final storage = StorageService(prefs);
+      final avisoDesde = AppVersionService.warningDesdeForApi(storage);
       final body = jsonEncode({
         'android': androidId,
         'fabricante': fabricante,
         'familia': familia,
         'modelo': modelo,
         'descripcion': descripcion,
+        'version': AppConstants.appVersion,
         'app': AppConstants.appName,
+        if (avisoDesde != null) 'version_warning_desde': avisoDesde,
       });
       final response = await http
           .post(url, headers: _headers, body: body)
@@ -80,6 +91,7 @@ class ApiService {
         'success': data['success'] ?? false,
         'message': data['message'] ?? '',
         'errorCode': data['errorCode'],
+        'data': data['data'],
       };
     } catch (e) {
       return {'success': false, 'message': 'Error de conexión: $e'};
@@ -96,7 +108,7 @@ class ApiService {
       }
       final response = await http
           .get(url, headers: _headers)
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode == 200 && data['success'] == true) {
         return {
@@ -111,20 +123,108 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> downloadCencosGalpones() async {
+    final usuario = await _getUsuarioSesion();
+
+    Uri withUsuario(String path) {
+      final base = Uri.parse('${AppConstants.baseUrl}$path');
+      if (usuario.isEmpty) return base;
+      return base.replace(queryParameters: {'usuario': usuario});
+    }
+
+    final candidates = <({Uri url, bool auth})>[
+      (
+        url: withUsuario(
+          '${AppConstants.seguimientoPath}/get_cencos_galpones_movil.php',
+        ),
+        auth: true,
+      ),
+      (
+        url: withUsuario(
+          '${AppConstants.seguimientoPath}/get_cencos_galpones.php',
+        ),
+        auth: true,
+      ),
+    ];
+
+    String lastError = 'No se pudo descargar CENCOS/galpones';
+    for (final c in candidates) {
+      final url = c.url;
+      try {
+        final headers = c.auth
+            ? _headers
+            : <String, String>{
+                'Content-Type': 'application/json; charset=utf-8',
+              };
+        debugPrint(
+          'ApiService: descargando CENCOS/galpones $url (auth=${c.auth})',
+        );
+        final response = await http
+            .get(url, headers: headers)
+            .timeout(const Duration(seconds: 15));
+        if (response.statusCode != 200) {
+          lastError = 'HTTP ${response.statusCode} en ${url.path}';
+          debugPrint(
+            'ApiService: $lastError body=${response.body.length > 160 ? response.body.substring(0, 160) : response.body}',
+          );
+          continue;
+        }
+        dynamic decoded;
+        try {
+          decoded = jsonDecode(response.body);
+        } catch (_) {
+          lastError = 'JSON inválido en ${url.path}';
+          debugPrint('ApiService: $lastError');
+          continue;
+        }
+        if (decoded is Map &&
+            decoded['success'] == true &&
+            decoded['data'] is Map) {
+          final data = Map<String, dynamic>.from(decoded['data'] as Map);
+          final indices = GalponesResolver.buildIndicesFromApiData(data);
+          debugPrint(
+            'ApiService: OK CENCOS=${indices.cencos.length}, '
+            'granjas=${indices.galponesPorGranja.length}, '
+            'galpones=${indices.totalGalpones} (desde ${url.path})',
+          );
+          if (indices.cencos.isEmpty) {
+            lastError = 'Respuesta OK pero sin CENCOS (${url.path})';
+            continue;
+          }
+          return {
+            'success': true,
+            'data': data,
+            'indices': indices,
+            'source': url.path,
+          };
+        }
+        lastError = decoded is Map
+            ? (decoded['message']?.toString() ?? 'Respuesta inválida')
+            : 'Respuesta inválida';
+        debugPrint('ApiService: $lastError en ${url.path}');
+      } catch (e) {
+        lastError = e.toString();
+        debugPrint('ApiService: error downloadCencosGalpones ($url): $e');
+      }
+    }
+    return {'success': false, 'message': lastError};
+  }
+
+  Future<Map<String, dynamic>> downloadAppInfo({
+    String? versionWarningDesde,
+  }) async {
     try {
-      final usuario = await _getUsuarioSesion();
-      final baseUri = Uri.parse(
-        '${AppConstants.baseUrl}${AppConstants.seguimientoPath}/get_cencos_galpones_movil.php',
-      );
-      final url = usuario.isNotEmpty
-          ? baseUri.replace(queryParameters: {'usuario': usuario})
-          : baseUri;
-      debugPrint('ApiService: descargando CENCOS/galpones $url');
+      final url = Uri.parse(
+        '${AppConstants.baseUrl}${AppConstants.seguimientoPath}/get_app_info_movil.php',
+      ).replace(queryParameters: {
+        'tcod': AppConstants.appName,
+        'version': AppConstants.appVersion,
+        if (versionWarningDesde != null && versionWarningDesde.isNotEmpty)
+          'version_warning_desde': versionWarningDesde,
+      });
       final response = await http
           .get(url, headers: _headers)
-          .timeout(const Duration(seconds: 60));
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) {
-        debugPrint('ApiService: HTTP ${response.statusCode} en get_cencos_galpones_movil');
         return {
           'success': false,
           'message': 'Error HTTP ${response.statusCode}',
@@ -132,25 +232,17 @@ class ApiService {
       }
       final decoded = jsonDecode(response.body);
       if (decoded is Map && decoded['success'] == true && decoded['data'] is Map) {
-        final data = Map<String, dynamic>.from(decoded['data'] as Map);
-        final indices = GalponesResolver.buildIndicesFromApiData(data);
-        debugPrint(
-          'ApiService: CENCOS=${indices.cencos.length}, '
-          'granjas=${indices.galponesPorGranja.length}, '
-          'galpones=${indices.totalGalpones}',
-        );
         return {
           'success': true,
-          'data': data,
-          'indices': indices,
+          'data': Map<String, dynamic>.from(decoded['data'] as Map),
         };
       }
       return {
         'success': false,
-        'message': decoded is Map ? (decoded['message'] ?? 'Error') : 'Error',
+        'message': decoded is Map ? decoded['message'] : 'Error',
+        'errorCode': decoded is Map ? decoded['errorCode'] : null,
       };
     } catch (e) {
-      debugPrint('ApiService: error downloadCencosGalpones: $e');
       return {'success': false, 'message': e.toString()};
     }
   }
@@ -160,13 +252,30 @@ class ApiService {
       final usuario = await _getUsuarioSesion();
       final f = fecha ?? DateTime.now().toIso8601String().substring(0, 10);
       final url = Uri.parse(
-        '${AppConstants.baseUrl}${AppConstants.seguimientoPath}/get_cencos_proyeccion_movil.php?fecha=$f&usuario=$usuario',
-      );
+        '${AppConstants.baseUrl}${AppConstants.seguimientoPath}/get_cencos_proyeccion_movil.php',
+      ).replace(queryParameters: {
+        'fecha': f,
+        if (usuario.isNotEmpty) 'usuario': usuario,
+      });
+      debugPrint('ApiService: descargando proyección $url');
       final response = await http
           .get(url, headers: _headers)
-          .timeout(const Duration(seconds: 60));
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        final snippet = response.body.length > 200
+            ? response.body.substring(0, 200)
+            : response.body;
+        debugPrint(
+          'ApiService: HTTP ${response.statusCode} proyección: $snippet',
+        );
+        return {
+          'success': false,
+          'message': 'Error HTTP ${response.statusCode}',
+        };
+      }
       final decoded = jsonDecode(response.body);
       if (decoded is Map && decoded['success'] == true) {
+        _logProyeccionCampanias(decoded['data'], f);
         return {'success': true, 'data': decoded['data']};
       }
       return {
@@ -174,10 +283,12 @@ class ApiService {
         'message': decoded is Map ? decoded['message'] : 'Error',
       };
     } catch (e) {
+      debugPrint('ApiService: error downloadProyeccion: $e');
       return {'success': false, 'message': e.toString()};
     }
   }
 
+  /// [galpon] acepta uno o varios códigos separados por coma (promedio en servidor).
   Future<Map<String, dynamic>> getCampaniaInfo({
     required String granja,
     required String campania,
@@ -234,6 +345,7 @@ class ApiService {
   Future<Map<String, dynamic>> uploadSeguimiento(
     Map<String, dynamic> record, {
     bool isUpdate = false,
+    Duration timeout = const Duration(minutes: 3),
   }) async {
     try {
       final endpoint = isUpdate
@@ -254,15 +366,21 @@ class ApiService {
         };
       }
 
+      final prefs = await SharedPreferences.getInstance();
+      final storage = StorageService(prefs);
+      final avisoDesde = AppVersionService.warningDesdeForApi(storage);
       final dataPayload = {
         'usuario': usuario.isNotEmpty ? usuario : record['usuario'],
         'granja': record['granja'],
         'campania': record['campania'],
         'galpon': record['galpon'] ?? '',
         'obs': record['obs'] ?? '',
+        'agente_causal': record['agente_causal'] ?? '',
         'fecha': record['fecha'],
         'edad': record['edad'],
         'id': recordId,
+        'app_version': AppConstants.appVersion,
+        if (avisoDesde != null) 'version_warning_desde': avisoDesde,
       };
 
       request.fields['data'] = jsonEncode(dataPayload);
@@ -286,8 +404,8 @@ class ApiService {
         }
       }
 
-      final streamed = await request.send().timeout(const Duration(minutes: 3));
-      final body = await streamed.stream.bytesToString();
+      final streamed = await request.send().timeout(timeout);
+      final body = await streamed.stream.bytesToString().timeout(timeout);
       final decoded = jsonDecode(body);
       if (decoded is Map && decoded['success'] == true) {
         return {
@@ -312,6 +430,68 @@ class ApiService {
       };
     } catch (e) {
       return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// Diagnóstico: verifica si el backend envía fechas HC por campaña.
+  static void _logProyeccionCampanias(dynamic data, String fecha) {
+    if (data is! Map) return;
+    final campMap = data['campanias_por_granja'];
+    if (campMap is! Map || campMap.isEmpty) {
+      debugPrint(
+        'ApiService: proyección fecha=$fecha sin campanias_por_granja',
+      );
+      return;
+    }
+    var total = 0;
+    var conInicio = 0;
+    var conFin = 0;
+    final multi = <String, List<String>>{};
+    campMap.forEach((gk, raw) {
+      if (raw is! List) return;
+      final g3 = gk.toString();
+      final lineas = <String>[];
+      for (final item in raw) {
+        if (item is! Map) continue;
+        total++;
+        final camp = item['campania']?.toString() ?? '?';
+        final fi = item['fecha_inicio']?.toString().trim() ??
+            item['fec_inicio']?.toString().trim() ??
+            '';
+        final ff = item['fecha_fin']?.toString().trim() ??
+            item['fec_fin']?.toString().trim() ??
+            '';
+        if (fi.isNotEmpty && fi != '0000-00-00') conInicio++;
+        if (ff.isNotEmpty && ff != '0000-00-00') conFin++;
+        lineas.add('$camp[inicio=${fi.isEmpty ? "—" : fi}, fin=${ff.isEmpty ? "—" : ff}]');
+      }
+      if (lineas.length > 1) multi[g3] = lineas;
+    });
+    debugPrint(
+      'ApiService: proyección fecha=$fecha campañas=$total '
+      'con_fecha_inicio=$conInicio con_fecha_fin=$conFin',
+    );
+    final fuenteFechas = data['fuente_fechas']?.toString();
+    if (fuenteFechas != null && fuenteFechas.isNotEmpty) {
+      debugPrint('ApiService: fuente_fechas=$fuenteFechas');
+    }
+    if (total > 0 && conInicio == 0) {
+      debugPrint(
+        'ApiService: AVISO — el backend NO envía fecha_inicio/fecha_fin '
+        '(esperado fuente_fechas=hc_cab vía get_cencos_proyeccion_movil.php).',
+      );
+    }
+    if (multi.isNotEmpty) {
+      debugPrint('ApiService: granjas con varias campañas (fecha=$fecha):');
+      var n = 0;
+      multi.forEach((g3, lineas) {
+        if (n >= 8) return;
+        debugPrint('  granja $g3: ${lineas.join(" | ")}');
+        n++;
+      });
+      if (multi.length > 8) {
+        debugPrint('  ... y ${multi.length - 8} granjas más');
+      }
     }
   }
 }

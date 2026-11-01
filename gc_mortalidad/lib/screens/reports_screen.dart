@@ -2,17 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../models/cenco.dart';
 import '../services/storage_service.dart';
-import '../services/api_service.dart';
 import '../utils/constants.dart';
 import '../utils/mortality_design.dart';
 import '../utils/theme_extensions.dart';
-import '../utils/toast_helper.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/mortality_summary_sheet.dart';
-import '../widgets/auditoria_summary_sheet.dart';
+import '../widgets/photo_thumb.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -22,8 +19,6 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  final _apiService = ApiService();
-
   DateTime? _desde;
   DateTime? _hasta;
   List<Map<String, dynamic>> _records = [];
@@ -43,6 +38,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
+    // Rango por defecto: año actual (desde 01/01 hasta hoy)
+    final now = DateTime.now();
+    _desde = DateTime(now.year, 1, 1);
+    _hasta = DateTime(now.year, now.month, now.day);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -51,33 +50,118 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final granjaNombre = r['granja_nombre']?.toString() ?? '';
     final granja = r['granja']?.toString() ?? '';
     final campania = r['campania']?.toString() ?? '';
+    final galpon = r['galpon']?.toString() ?? '';
 
-    if (granjaNombre.isNotEmpty) {
-      return campania.isNotEmpty ? '$granjaNombre / $campania' : granjaNombre;
+    if (granja.isNotEmpty || granjaNombre.isNotEmpty || campania.isNotEmpty) {
+      return _ubicacionLinea(
+        granja: granja,
+        granjaNombre: granjaNombre,
+        campania: campania,
+        galpon: galpon,
+      );
     }
-    if (granja.isNotEmpty) {
-      return campania.isNotEmpty ? '$granja / $campania' : granja;
+
+    final detalleRaw = r['registros_detalle'];
+    if (detalleRaw is List && detalleRaw.isNotEmpty) {
+      final first = detalleRaw.first;
+      if (first is Map) {
+        return _ubicacionLinea(
+          granja: first['granja']?.toString() ?? '',
+          granjaNombre: first['granja_nombre']?.toString() ?? '',
+          campania: first['campania']?.toString() ?? '',
+          galpon: first['galpon']?.toString() ?? '',
+        );
+      }
     }
 
     final registrosRaw = r['registros'];
     final registros =
         registrosRaw is List ? registrosRaw.whereType<Map>().toList() : <Map>[];
     for (final reg in registros) {
-      final rGranjaNombre = reg['granja_nombre']?.toString() ?? '';
-      final rGranja = reg['granja']?.toString() ?? '';
-      final rCampania = reg['campania']?.toString() ?? '';
-
-      if (rGranjaNombre.isNotEmpty) {
-        return rCampania.isNotEmpty
-            ? '$rGranjaNombre / $rCampania'
-            : rGranjaNombre;
-      }
-      if (rGranja.isNotEmpty) {
-        return rCampania.isNotEmpty ? '$rGranja / $rCampania' : rGranja;
-      }
+      final linea = _ubicacionLinea(
+        granja: reg['granja']?.toString() ?? '',
+        granjaNombre: reg['granja_nombre']?.toString() ?? '',
+        campania: reg['campania']?.toString() ?? '',
+        galpon: reg['galpon']?.toString() ?? '',
+      );
+      if (linea.isNotEmpty) return linea;
     }
 
     return '';
+  }
+
+  String _ubicacionLinea({
+    required String granja,
+    required String granjaNombre,
+    required String campania,
+    required String galpon,
+  }) {
+    final granjaConCodigo = [
+      if (granja.isNotEmpty) granja,
+      if (granjaNombre.isNotEmpty) granjaNombre,
+    ].join(' ');
+    final partes = <String>[
+      if (granjaConCodigo.isNotEmpty) 'Granja: $granjaConCodigo',
+      if (campania.isNotEmpty) 'Campa\u00f1a: $campania',
+      if (galpon.isNotEmpty) 'Galp\u00f3n: $galpon',
+    ];
+    return partes.join(' · ');
+  }
+
+  String _auditRegTipoLabel(Map<String, dynamic> reg) {
+    final label = reg['label']?.toString().trim() ?? '';
+    final clave = reg['clave']?.toString() ?? '';
+    if (label.isNotEmpty &&
+        label.toLowerCase() != 'produccion' &&
+        label.toLowerCase() != 'producción') {
+      return label;
+    }
+    if (clave.isNotEmpty) return _tipoFromClave(clave);
+    final tipo = reg['tipo_mortalidad']?.toString() ?? '';
+    if (tipo.isNotEmpty) return _tipoFromClave(tipo);
+    return 'Registro';
+  }
+
+  Color _auditRegTipoColor(Map<String, dynamic> reg) {
+    final clave = reg['clave']?.toString() ?? '';
+    final base = clave.split(':').first;
+    final tipo = base.isNotEmpty
+        ? base
+        : (reg['tipo_mortalidad']?.toString() ?? '');
+    switch (tipo.toLowerCase()) {
+      case 'incubacion':
+        return const Color(0xFFFFB300);
+      case 'transporte':
+        return const Color(0xFF42A5F5);
+      case 'produccion':
+        return const Color(0xFF66BB6A);
+      case 'despacho':
+        return const Color(0xFFFF7043);
+      default:
+        return AppColors.textSecondary;
+    }
+  }
+
+  /// Identifica el id de tipo de mortalidad de un registro local.
+  /// Los registros guardados localmente usan 'tipo_mortalidad' (id textual);
+  /// los provenientes del backend pueden traer 'mortality_type' (índice).
+  String? _mortalityTypeId(Map<String, dynamic> r) {
+    final rawId = (r['tipo_mortalidad']?.toString() ?? '').trim();
+    if (rawId.isNotEmpty) {
+      final t = MortalityTypeExt.fromId(rawId);
+      if (t != null) return t.id;
+    }
+    final idx = int.tryParse(r['mortality_type']?.toString() ?? '');
+    if (idx != null && idx >= 0 && idx < MortalityType.values.length) {
+      return MortalityType.values[idx].id;
+    }
+    return null;
+  }
+
+  /// Color del chip de filtro según el tipo (el color identifica el dato).
+  Color _tipoFiltroColor(String id) {
+    final t = MortalityTypeExt.fromId(id);
+    return t?.accentColor ?? AppColors.primary;
   }
 
   Future<void> _load() async {
@@ -114,12 +198,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         if (tipo == 'auditoria') {
           if (!_activeTipoFilters.contains('auditoria')) return false;
         } else {
-          final mortalityTypeRaw = r['mortality_type']?.toString() ?? '';
-          final mortalityIdx = int.tryParse(mortalityTypeRaw);
-          String? tipoMort;
-          if (mortalityIdx != null && mortalityIdx >= 0 && mortalityIdx < 4) {
-            tipoMort = _tipoFiltros[mortalityIdx].id;
-          }
+          final tipoMort = _mortalityTypeId(r);
           if (tipoMort == null || !_activeTipoFilters.contains(tipoMort)) {
             return false;
           }
@@ -176,44 +255,47 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: buildAppBar(
-        context,
-        'Mis Registros',
-        appIcon: Icons.assignment_rounded,
-      ),
-      drawer: const AppDrawer(),
-      body: SafeArea(
-        top: false,
-        child: RefreshIndicator(
-          onRefresh: _load,
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(child: _buildFilters(context)),
-                    if (_records.isEmpty)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: _buildEmptyState(context),
-                      )
-                    else
-                      SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final r = _records[index];
-                            final tipo = r['tipo']?.toString() ?? '';
-                            if (tipo == 'auditoria') {
-                              return _buildAuditoriaCard(context, r, isDark);
-                            }
-                            return _buildMortalityCard(context, r, isDark);
-                          },
-                          childCount: _records.length,
+    return Theme(
+      data: azulReporteTheme(context),
+      child: Scaffold(
+        appBar: buildAppBar(
+          context,
+          'Mis Registros',
+          appIcon: Icons.assignment_rounded,
+        ),
+        drawer: const AppDrawer(),
+        body: SafeArea(
+          top: false,
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(child: _buildFilters(context)),
+                      if (_records.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmptyState(context),
+                        )
+                      else
+                        SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final r = _records[index];
+                              final tipo = r['tipo']?.toString() ?? '';
+                              if (tipo == 'auditoria') {
+                                return _buildAuditoriaCard(context, r, isDark);
+                              }
+                              return _buildMortalityCard(context, r, isDark);
+                            },
+                            childCount: _records.length,
+                          ),
                         ),
-                      ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                  ],
-                ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
@@ -261,7 +343,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           : '---',
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDark ? Colors.white70 : AppColors.textPrimary,
+                        color: isDark ? Colors.white70 : context.azulTexto,
                       ),
                     ),
                   ),
@@ -289,7 +371,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           : '---',
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDark ? Colors.white70 : AppColors.textPrimary,
+                        color: isDark ? Colors.white70 : context.azulTexto,
                       ),
                     ),
                     ),
@@ -304,33 +386,46 @@ class _ReportsScreenState extends State<ReportsScreen> {
             runSpacing: 4,
             children: _tipoFiltros.map((tf) {
               final selected = _activeTipoFilters.contains(tf.id);
+              final accent = _tipoFiltroColor(tf.id);
               return FilterChip(
                 label: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(tf.icon, size: 14,
-                        color: selected ? Colors.white : AppColors.primary),
+                    Icon(tf.icon,
+                        size: 14,
+                        color: selected
+                            ? Colors.white
+                            : accent.withValues(alpha: 0.9)),
                     const SizedBox(width: 4),
-                    Text(tf.label, style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                        color: selected ? Colors.white : null)),
+                    Text(tf.label,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: selected
+                                ? Colors.white
+                                : (isDark
+                                    ? AppColors.darkTextSecondary
+                                    : AppColors.textSecondary))),
                   ],
                 ),
                 selected: selected,
-                selectedColor: AppColors.primary,
+                selectedColor: accent,
                 checkmarkColor: Colors.white,
-                showCheckmark: false,
+                showCheckmark: true,
                 backgroundColor: isDark
                     ? AppColors.darkSurface
                     : Colors.grey.shade100,
                 side: BorderSide(
                   color: selected
-                      ? AppColors.primary
-                      : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                      ? accent
+                      : (isDark
+                          ? AppColors.darkBorder
+                          : AppColors.borderLight),
                 ),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20)),
+                    borderRadius: BorderRadius.circular(12)),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.compact,
                 onSelected: (v) {
@@ -380,18 +475,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.fact_check_outlined,
-                size: 56, color: context.mutedTextColor.withValues(alpha: 0.5)),
+                size: 56,
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text('Sin registros',
                 style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
-                    color: context.primaryTextColor)),
+                    color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 8),
             Text('No hay registros guardados localmente.\n'
                 'Deslice hacia abajo para refrescar.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: context.mutedTextColor, height: 1.4)),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    height: 1.4)),
           ],
         ),
       ),
@@ -407,6 +505,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final hora = r['ttime_trans']?.toString() ?? '';
     final granja = r['granja']?.toString() ?? '';
     final granjaNombre = r['granja_nombre']?.toString() ?? '';
+    final campania = r['campania']?.toString() ?? '';
     final galpon = r['galpon']?.toString() ?? '';
     final cantMachos =
         int.tryParse(r['cant_machos']?.toString() ?? '0') ?? 0;
@@ -414,6 +513,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
         int.tryParse(r['cant_hembras']?.toString() ?? '0') ?? 0;
     final fechaDisplay = _fmtFecha(fecha);
     final horaDisplay = hora.length >= 5 ? hora.substring(0, 5) : hora;
+
+    // Granja display: código + nombre juntos (p. ej. '621 STA TERESA').
+    final granjaConCodigo = [
+      if (granja.isNotEmpty) granja,
+      if (granjaNombre.isNotEmpty) granjaNombre,
+    ].join(' ');
 
     // Tipo y subtipo
     final tipoRaw = r['tipo_mortalidad']?.toString() ?? '';
@@ -437,6 +542,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
         tipoIcon = Icons.warning_amber_rounded;
     }
 
+    // Color del tipo de registro (el color indica el tipo de dato).
+    final tipoAccent = MortalityTypeExt.fromId(tipoRaw)?.accentColor ??
+        Theme.of(context).colorScheme.primary;
+
     String? subtipoLabel;
     if (tipoRaw == 'transporte') {
       final st = (r['subtipo_transporte']?.toString() ?? '').toLowerCase();
@@ -454,30 +563,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
     }
 
-    // Granja display
-    final granjaDisplay = granjaNombre.isNotEmpty ? granjaNombre : granja;
-
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       color: Theme.of(context).cardColor,
-      elevation: 2,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 1,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: context.borderColor),
+      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         onTap: () => _showMortalityDetail(context, r, isDark),
-              child: Row(
-                children: [
-            Container(
-              width: 6,
-              height: 90,
-              decoration: const BoxDecoration(
-                color: Color(0xFFE53935),
-                borderRadius: BorderRadius.horizontal(
-                  left: Radius.circular(16),
-                ),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 6,
+                color: tipoAccent,
               ),
-            ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -489,7 +595,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE53935),
+                            color: tipoAccent,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(tipoIcon,
@@ -556,32 +662,45 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE53935).withValues(alpha: 0.1),
+                              color: tipoAccent.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(subtipoLabel,
-                                style: const TextStyle(
-                                    fontSize: 11, fontWeight: FontWeight.w600)),
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: tipoAccent)),
                           ),
                         ],
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        if (granjaDisplay.isNotEmpty)
-                          Text('Granja: $granjaDisplay',
+                        if (granjaConCodigo.isNotEmpty)
+                          Text('Granja: $granjaConCodigo',
                               style: TextStyle(
                                   fontSize: 12,
+                                  fontWeight: FontWeight.w500,
                                   color: Theme.of(context)
                                       .colorScheme
                                       .onSurfaceVariant)),
-                        if (granjaDisplay.isNotEmpty && galpon.isNotEmpty)
-                    const SizedBox(width: 8),
-                        if (galpon.isNotEmpty)
-                          Text('Galpon: $galpon',
+                        if (campania.isNotEmpty)
+                          Text('Campa\u00f1a: $campania',
                               style: TextStyle(
                                   fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant)),
+                        if (galpon.isNotEmpty)
+                          Text('Galp\u00f3n: $galpon',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
                                   color: Theme.of(context)
                                       .colorScheme
                                       .onSurfaceVariant)),
@@ -591,7 +710,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     Row(
                       children: [
                         if (cantMachos > 0)
-                          Text('M $cantMachos',
+                          Text('M: $cantMachos',
                               style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -599,7 +718,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         if (cantMachos > 0 && cantHembras > 0)
                           const SizedBox(width: 12),
                         if (cantHembras > 0)
-                          Text('H $cantHembras',
+                          Text('H: $cantHembras',
                               style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -615,9 +734,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ),
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.grey),
-            const SizedBox(width: 8),
+            const Center(
+              child: Icon(Icons.chevron_right_rounded, color: Colors.grey),
+            ),
+            const SizedBox(width: 10),
           ],
+          ),
         ),
       ),
     );
@@ -625,17 +747,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   void _showMortalityDetail(
       BuildContext context, Map<String, dynamic> r, bool isDark) async {
-    final tipoRaw = (r['mortality_type']?.toString() ?? '');
-    final tipoIndex = int.tryParse(tipoRaw) ?? -1;
-    final tipos = [
-      MortalityType.incubacion,
-      MortalityType.transporte,
-      MortalityType.produccion,
-      MortalityType.despacho,
-    ];
-    final type = tipoIndex >= 0 && tipoIndex < tipos.length
-        ? tipos[tipoIndex]
-        : MortalityType.produccion;
+    final tipoId = _mortalityTypeId(r);
+    final type = MortalityTypeExt.fromId(tipoId) ?? MortalityType.produccion;
 
     await MortalitySummarySheet.show(
       context: context,
@@ -648,18 +761,45 @@ class _ReportsScreenState extends State<ReportsScreen> {
   // ─── Tarjeta de auditoria ───
   Widget _buildAuditoriaCard(
       BuildContext context, Map<String, dynamic> r, bool isDark) {
-                      final synced = r['synced'] == true;
+    final synced = r['synced'] == true;
     final registrosRaw = r['registros'];
     final registros =
         registrosRaw is List ? registrosRaw.whereType<Map>().toList() : <Map>[];
-    final fechaHora = r['fecha']?.toString() ?? '';
-    final granjaDisplay = _extractGranjaDisplay(r);
+    final detalleRawCard = r['registros_detalle'];
+    final detalleCard = detalleRawCard is List
+        ? detalleRawCard.whereType<Map>().toList()
+        : <Map>[];
+    final fecha = r['fecha']?.toString() ?? r['tdate_trans']?.toString() ?? '';
+    final hora = r['ttime_trans']?.toString() ?? '';
+    final fechaDisplay = _fmtFecha(fecha);
+    final horaDisplay = hora.length >= 5 ? hora.substring(0, 5) : hora;
+    final granja = r['granja']?.toString() ?? '';
+    final granjaNombre = r['granja_nombre']?.toString() ?? '';
+    final campania = r['campania']?.toString() ?? '';
+    final granjaConCodigo = [
+      if (granja.isNotEmpty) granja,
+      if (granjaNombre.isNotEmpty) granjaNombre,
+    ].join(' ');
+    final cantMachos =
+        int.tryParse(r['cant_machos']?.toString() ?? '0') ?? 0;
+    final cantHembras =
+        int.tryParse(r['cant_hembras']?.toString() ?? '0') ?? 0;
 
     final tiposCount = <String, int>{};
-    for (final reg in registros) {
-      final clave = reg['clave']?.toString() ?? '';
-      if (clave.isNotEmpty) {
-        tiposCount[clave] = (tiposCount[clave] ?? 0) + 1;
+    if (detalleCard.isNotEmpty) {
+      for (final reg in detalleCard) {
+        final clave = reg['clave']?.toString() ?? '';
+        if (clave.isNotEmpty) {
+          tiposCount[clave] = (tiposCount[clave] ?? 0) + 1;
+        }
+      }
+    } else {
+      for (final reg in registros) {
+        final clave = reg['clave']?.toString() ?? '';
+        if (clave.isEmpty) continue;
+        final uuids = reg['registro_uuids'];
+        final count = uuids is List ? uuids.length : 1;
+        tiposCount[clave] = (tiposCount[clave] ?? 0) + count;
       }
     }
     final resumenTipos = tiposCount.entries.map((e) {
@@ -668,26 +808,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }).join(', ');
 
                       return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       color: Theme.of(context).cardColor,
-      elevation: 2,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 1,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: context.borderColor),
+      ),
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(12),
         onTap: () => _showAuditoriaDetail(context, r, isDark),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 90,
-              decoration: const BoxDecoration(
-                color: Color(0xFF1565C0),
-                borderRadius: BorderRadius.horizontal(
-                                    left: Radius.circular(16),
-                                  ),
+                          child: IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  color: AppColors.primary,
                                 ),
-                              ),
                               Expanded(
                                 child: Padding(
                                   padding: const EdgeInsets.all(14),
@@ -698,8 +838,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         children: [
                                           Container(
                                             padding: const EdgeInsets.all(6),
-                                            decoration: BoxDecoration(
-                            color: const Color(0xFF1565C0),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
                                               borderRadius: BorderRadius.circular(8),
                                             ),
                           child: const Icon(Icons.verified_rounded,
@@ -745,35 +885,112 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         ],
                                       ),
                                       const SizedBox(height: 6),
-                    if (fechaHora.isNotEmpty)
-                      Text('Fecha: $fechaHora',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant)),
-                    if (granjaDisplay.isNotEmpty)
-                      Text('Granja: $granjaDisplay',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant)),
-                    if (resumenTipos.isNotEmpty)
-                      Text(resumenTipos,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSurface)),
+                                      Row(
+                                        children: [
+                                          if (fechaDisplay.isNotEmpty)
+                                            Text(fechaDisplay,
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant)),
+                                          if (fechaDisplay.isNotEmpty &&
+                                              horaDisplay.isNotEmpty)
+                                            Text('  $horaDisplay',
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant)),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 2,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        children: [
+                                          if (granjaConCodigo.isNotEmpty)
+                                            Text('Granja: $granjaConCodigo',
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.w500,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant)),
+                                          if (campania.isNotEmpty)
+                                            Text('Campa\u00f1a: $campania',
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.w500,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant)),
+                                        ],
+                                      ),
+                                      if (resumenTipos.isNotEmpty)
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 4),
+                                          child: Text(resumenTipos,
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface)),
+                                        ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          if (cantMachos > 0)
+                                            Text('M: $cantMachos',
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                    color:
+                                                        AppColors.maleDark)),
+                                          if (cantMachos > 0 &&
+                                              cantHembras > 0)
+                                            const SizedBox(width: 12),
+                                          if (cantHembras > 0)
+                                            Text('H: $cantHembras',
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                    color: AppColors
+                                                        .femaleDark)),
+                                          if (cantMachos > 0 ||
+                                              cantHembras > 0)
+                                            const SizedBox(width: 12),
+                                          if (cantMachos > 0 ||
+                                              cantHembras > 0)
+                                            Text(
+                                                'Total: ${cantMachos + cantHembras}',
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.w700)),
+                                        ],
+                                      ),
                                     ],
                                   ),
                                 ),
                               ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.grey),
-                              const SizedBox(width: 8),
+                              const Center(
+                                child: Icon(Icons.chevron_right_rounded,
+                                    color: Colors.grey),
+                              ),
+                              const SizedBox(width: 10),
                             ],
                           ),
                         ),
+                      ),
                       );
   }
 
@@ -783,9 +1000,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final registros = registrosRaw is List
         ? registrosRaw.whereType<Map>().toList()
         : <Map>[];
-    final fechaHora = r['fecha']?.toString() ?? '';
-    final obs = r['observaciones']?.toString() ?? '';
+
+    // Registros auditados de forma individual (campo 'registros_detalle'
+    // guardado localmente). Si existen se muestran tal cual; si no, se usa el
+    // resumen agrupado por tipo de las auditorías guardadas antes del cambio.
+    final detalleRaw = r['registros_detalle'];
+    final detalleRegistros = detalleRaw is List
+        ? detalleRaw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+        : <Map<String, dynamic>>[];
+    // Solo mostramos bloques por registro cuando hay detalle local individual.
+    // El array 'registros' es el payload agrupado por tipo (para el servidor);
+    // no representa cada mortalidad por separado.
+    final items = detalleRegistros;
+
+    var totalRegistrosAudit = detalleRegistros.length;
+    if (detalleRegistros.isEmpty) {
+      for (final g in registros) {
+        final uuids = g['registro_uuids'];
+        totalRegistrosAudit += uuids is List ? uuids.length : 1;
+      }
+    }
+
+    final fechaRaw = r['fecha']?.toString() ?? r['tdate_trans']?.toString() ?? '';
+    final horaRaw = r['ttime_trans']?.toString() ?? '';
+    final fechaDisplay = _fmtFecha(fechaRaw);
+    final horaDisplay = horaRaw.length >= 5 ? horaRaw.substring(0, 5) : horaRaw;
+    final fechaHoraDisplay = [
+      if (fechaDisplay.isNotEmpty) fechaDisplay,
+      if (horaDisplay.isNotEmpty) horaDisplay,
+    ].join(' ');
     final granjaDisplay = _extractGranjaDisplay(r);
+    final synced = r['synced'] == true;
 
     showModalBottomSheet(
       context: context,
@@ -793,7 +1041,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       backgroundColor: Colors.transparent,
       isDismissible: true,
       enableDrag: true,
-      builder: (ctx) => DraggableScrollableSheet(
+      builder: (ctx) => Theme(
+        data: azulReporteTheme(ctx),
+        child: DraggableScrollableSheet(
         initialChildSize: 0.85,
         minChildSize: 0.5,
         maxChildSize: 0.98,
@@ -830,7 +1080,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         height: 4,
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color: AppColors.textMuted.withValues(alpha: 0.35),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant
+                              .withValues(alpha: 0.35),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -839,12 +1092,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1565C0)
-                                  .withValues(alpha: 0.15),
+                              color: AppColors.primary.withValues(
+                                  alpha: isDark ? 0.2 : 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(Icons.verified_rounded,
-                                color: Color(0xFF1565C0), size: 24),
+                                color: AppColors.primary, size: 24),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -852,7 +1105,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 style: TextStyle(
                                     color: isDark
                                         ? Colors.white
-                                        : AppColors.textPrimary,
+                                        : Theme.of(context).colorScheme.onSurface,
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold)),
                           ),
@@ -860,7 +1113,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             icon: Icon(Icons.close_rounded,
                                 color: isDark
                                     ? Colors.white70
-                                    : AppColors.textSecondary),
+                                    : Theme.of(context).colorScheme.onSurfaceVariant),
                             onPressed: () => Navigator.pop(context),
                           ),
                         ],
@@ -882,43 +1135,41 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           title: 'Informaci\u00f3n general',
                           icon: Icons.info_outline,
                           children: [
-                            _auditItem(context, 'Fecha/Hora', fechaHora),
+                            _auditItem(context, 'Fecha/Hora', fechaHoraDisplay),
                             if (granjaDisplay.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
-                                child: _auditItem(context, 'Granja / Campa\u00f1a',
+                                child: _auditItem(context, 'Ubicaci\u00f3n',
                                     granjaDisplay),
                               ),
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: _auditItem(context, 'Estado',
-                                  r['synced'] == true ? 'Subido' : 'Pendiente'),
+                                  synced ? 'Subido' : 'Pendiente'),
                             ),
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
-                              child: _auditItem(
-                                  context, 'Registros auditados', '${registros.length}'),
+                              child: _auditItem(context, 'Registros auditados',
+                                  '$totalRegistrosAudit'),
                             ),
                           ],
                         ),
-                        if (registros.isNotEmpty) ...[
+                        if (items.isNotEmpty) ...[
                           const SizedBox(height: 12),
                           _buildAuditCard(
                             isDark: isDark,
                             cardBg: cardBg,
                             title: 'Mortalidades',
                             icon: Icons.layers_outlined,
-                            children: registros.map((reg) {
-                              final clave = reg['clave']?.toString() ?? '';
-                              final aprobado = reg['aprobado'] == true;
-                              final regUuids = reg['registro_uuids'];
-                              final cantRegs =
-                                  regUuids is List ? regUuids.length : 0;
+                            children: items.map((reg) {
+                              final tipoTxt = _auditRegTipoLabel(reg);
+                              final tipoColor = _auditRegTipoColor(reg);
                               final obsReg =
-                                  reg['observaciones']?.toString() ?? '';
+                                  reg['observaciones']?.toString().trim() ?? '';
                               final fotos = reg['fotos'];
-                              final cantFotosReg =
-                                  fotos is List ? fotos.length : 0;
+                              final fotosList = fotos is List
+                                  ? fotos.map((e) => e.toString()).toList()
+                                  : <String>[];
                               final mMachos = int.tryParse(
                                       reg['cant_machos']?.toString() ?? '0') ??
                                   0;
@@ -927,76 +1178,75 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   0;
                               final mTotal = int.tryParse(
                                       reg['total_aves']?.toString() ?? '0') ??
-                                  0;
-                              final gGranja =
-                                  reg['granja']?.toString() ?? '';
-                              final gGranjaNombre =
-                                  reg['granja_nombre']?.toString() ?? '';
-                              final gCampania =
-                                  reg['campania']?.toString() ?? '';
-                              final gGalpon = reg['galpon']?.toString() ?? '';
-                              final gDisplay = [
-                                if (gGranjaNombre.isNotEmpty) gGranjaNombre,
-                                if (gGranjaNombre.isEmpty && gGranja.isNotEmpty)
-                                  gGranja,
-                                if (gCampania.isNotEmpty) '/ $gCampania',
-                                if (gGalpon.isNotEmpty) 'Galpon: $gGalpon',
-                              ].join(' ');
+                                  (mMachos + mHembras);
+                              final fechaReg =
+                                  reg['fecha_registro']?.toString() ?? '';
+                              final ubicacionReg = _ubicacionLinea(
+                                granja: reg['granja']?.toString() ?? '',
+                                granjaNombre:
+                                    reg['granja_nombre']?.toString() ?? '',
+                                campania: reg['campania']?.toString() ?? '',
+                                galpon: reg['galpon']?.toString() ?? '',
+                              );
 
                               return Container(
                                 padding: const EdgeInsets.all(12),
                                 margin: const EdgeInsets.only(bottom: 8),
                                 decoration: BoxDecoration(
                                   color: isDark
-                                      ? AppColors.darkSurface
+                                      ? AppColors.darkBackground
                                       : AppColors.background,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                      color: AppColors.primary
-                                          .withValues(alpha: 0.25)),
+                                      color: isDark
+                                          ? AppColors.darkBorder
+                                          : AppColors.borderLight),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
                                       children: [
+                                        Container(
+                                          width: 4,
+                                          height: 36,
+                                          decoration: BoxDecoration(
+                                            color: tipoColor,
+                                            borderRadius:
+                                                BorderRadius.circular(2),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
                                         Expanded(
-                                          child: Text(_tipoFromClave(clave),
+                                          child: Text(tipoTxt,
                                               style: const TextStyle(
                                                   fontWeight: FontWeight.w700,
                                                   fontSize: 13)),
                                         ),
-                                        Container(
-                                          padding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: aprobado
-                                                ? Colors.green
-                                                    .withValues(alpha: 0.15)
-                                                : Colors.orange
-                                                    .withValues(alpha: 0.15),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                              aprobado
-                                                  ? 'Aprobado'
-                                                  : 'Pendiente',
-                                              style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600)),
-                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 6),
-                                    if (gDisplay.isNotEmpty)
-                                      Text(gDisplay,
+                                    if (fechaReg.isNotEmpty)
+                                      Text(
+                                          'Fecha: ${_fmtFecha(fechaReg)}',
                                           style: TextStyle(
                                               fontSize: 11,
                                               color: isDark
                                                   ? Colors.white60
-                                                  : AppColors.textSecondary)),
+                                                  : Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant)),
+                                    if (ubicacionReg.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(ubicacionReg,
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: isDark
+                                                  ? Colors.white60
+                                                  : Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant)),
+                                    ],
                                     if (obsReg.isNotEmpty) ...[
                                       const SizedBox(height: 4),
                                       Text('Obs: $obsReg',
@@ -1005,47 +1255,50 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                               fontStyle: FontStyle.italic,
                                               color: isDark
                                                   ? Colors.white60
-                                                  : AppColors.textSecondary)),
+                                                  : Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant)),
                                     ],
                                     const SizedBox(height: 6),
                                     Row(
                                       children: [
-                                        Text('M: $mMachos',
-                                            style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: AppColors.maleDark)),
-                                        const SizedBox(width: 12),
-                                        Text('H: $mHembras',
-                                            style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: AppColors.femaleDark)),
-                                        const SizedBox(width: 12),
+                                        if (mMachos > 0)
+                                          Text('M: $mMachos',
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.maleDark)),
+                                        if (mMachos > 0 && mHembras > 0)
+                                          const SizedBox(width: 12),
+                                        if (mHembras > 0)
+                                          Text('H: $mHembras',
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.femaleDark)),
+                                        if (mMachos > 0 || mHembras > 0)
+                                          const SizedBox(width: 12),
                                         Text('Total: $mTotal',
                                             style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w700)),
                                       ],
                                     ),
-                                    if (cantRegs > 1)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: Text('Registros: $cantRegs',
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: isDark
-                                                    ? Colors.white60
-                                                    : AppColors.textSecondary)),
+                                    if (fotosList.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Text('Fotos (${fotosList.length}):',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant)),
+                                      const SizedBox(height: 5),
+                                      PhotoStrip(
+                                        fotos: fotosList,
+                                        size: 44,
                                       ),
-                                    if (cantFotosReg > 0)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: Text('Fotos: $cantFotosReg',
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: AppColors.primary)),
-                                      ),
+                                    ],
                                   ],
                                 ),
                               );
@@ -1060,6 +1313,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
           );
         },
+      ),
       ),
     );
   }
@@ -1127,19 +1381,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _fmtFecha(String? raw) {
     if (raw == null || raw.isEmpty) return '';
     try {
-      final parts = raw.split('-');
+      // Acepta 'yyyy-MM-dd' o con hora: 'yyyy-MM-dd HH:mm:ss'
+      final datePart = raw.trim().split(' ').first;
+      final parts = datePart.split('-');
       if (parts.length == 3) {
-        return '${parts[2]}/${parts[1]}/${parts[0].substring(2)}';
+        return '${parts[2]}/${parts[1]}/${parts[0]}';
       }
     } catch (_) {}
     return raw;
   }
 
   String _tipoFromClave(String clave) {
-    if (clave.contains('incubacion')) return 'Planta Incubaci\u00f3n';
-    if (clave.contains('despacho')) return 'Despacho';
-    if (clave.contains('transporte')) return 'Transporte';
-    if (clave.contains('produccion')) return 'Producci\u00f3n';
+    final parts = clave.split(':');
+    final base = parts.first.toLowerCase();
+    final sub = parts.length > 1 ? parts[1].toLowerCase() : '';
+    if (base == 'incubacion') return 'Planta Incubaci\u00f3n';
+    if (base == 'despacho') return 'Despacho';
+    if (base == 'transporte') {
+      return sub == 'evento' ? 'Evento' : 'Traslado';
+    }
+    if (base == 'produccion') {
+      const map = {
+        'crianza': 'Crianza',
+        'necropsia': 'Necropsia',
+        'laboratorio': 'Laboratorio',
+        'cuarentena': 'Cuarentena',
+      };
+      return map[sub] ?? 'Crianza';
+    }
     return clave;
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
+  // ── Marca verde: header, botones de acción y checks ──
   static const Color primary = Color(0xFF4CAF50);
   static const Color primaryLight = Color(0xFF81C784);
   static const Color primaryDark = Color(0xFF388E3C);
@@ -11,12 +12,25 @@ class AppColors {
   static const Color accentDark = Color(0xFF43A047);
   static const Color accentBright = Color(0xFF8BC34A);
 
-  static const Color background = Color(0xFFF1F8E9);
+  // ── Superficies (paleta pizarra, igual que gc_mortalidad) ──
+  static const Color background = Color(0xFFF8FAFC);
   static const Color cardBackground = Colors.white;
-  static const Color textPrimary = Color(0xFF2E7D32);
-  static const Color textSelectedValue = Color(0xFF66BB6A);
-  static const Color textSecondary = Color(0xFF66BB6A);
-  static const Color textMuted = Color(0xFF81C784);
+  static const Color darkBackground = Color(0xFF0F172A);
+  static const Color darkSurface = Color(0xFF1E293B);
+  static const Color darkCard = Color(0xFF1E293B);
+
+  // ── Bordes ──
+  static const Color borderLight = Color(0xFFE2E8F0);
+  static const Color darkBorder = Color(0xFF334155);
+
+  // ── Textos ──
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B);
+  static const Color textMuted = Color(0xFF94A3B8);
+  static const Color textSelectedValue = Color(0xFF1E293B);
+  static const Color darkTextPrimary = Color(0xFFF1F5F9);
+  static const Color darkTextSecondary = Color(0xFF94A3B8);
+  static const Color darkTextMuted = Color(0xFF64748B);
   static const Color dialogBackground = Colors.white;
   static const Color textOnPrimary = Colors.white;
 
@@ -29,7 +43,13 @@ class AppColors {
   static const Color warning = Color(0xFFFF9800);
   static const Color info = Color(0xFF2196F3);
 
-  static const Color iconAccent = Color(0xFF4FC3F7);
+  static const Color iconAccent = Color(0xFF4CAF50);
+
+  /// Radios de diseño unificados
+  static const double radiusSm = 10;
+  static const double radiusMd = 12;
+  static const double radiusLg = 16;
+  static const double radiusXl = 20;
 
   static const LinearGradient headerGradient = LinearGradient(
     colors: [primary, primaryLight],
@@ -63,23 +83,23 @@ class AppColors {
 
   static const List<BoxShadow> strongShadow = [
     BoxShadow(
-      color: Color(0x20000000),
-      blurRadius: 20,
-      offset: Offset(0, 10),
+      color: Color(0x18000000),
+      blurRadius: 18,
+      offset: Offset(0, 8),
     ),
   ];
 
   static const List<BoxShadow> mediumShadow = [
     BoxShadow(
-      color: Color(0x10000000),
+      color: Color(0x12000000),
       blurRadius: 12,
-      offset: Offset(0, 6),
+      offset: Offset(0, 5),
     ),
   ];
 
   static const List<BoxShadow> lightShadow = [
     BoxShadow(
-      color: Color(0x08000000),
+      color: Color(0x0A000000),
       blurRadius: 8,
       offset: Offset(0, 2),
     ),
@@ -87,7 +107,7 @@ class AppColors {
 
   static List<BoxShadow> get primaryShadow => [
         BoxShadow(
-          color: primary.withOpacity(0.3),
+          color: primary.withValues(alpha: 0.28),
           blurRadius: 12,
           offset: const Offset(0, 4),
         ),
@@ -95,14 +115,16 @@ class AppColors {
 }
 
 class AppConstants {
-  static const String baseUrl = 'http://10.28.139.5/sanidad/flutter';
+  static const String baseUrl = 'https://granjarinconadadelsur.com/sanidad/flutter';
+                               //'http://10.190.22.5/sanidad/flutter';
+                              //'http://localhost/sanidad/flutter';
   static const String seguimientoPath = '/seguimiento_crianza';
   static const String apiToken = 'd9f7a6b3-4c8e-11ee-be56-0242ac120002';
   static const String appName = 'PROD_SEGUIMIENTO_CRIANZA';
-  static const String appTitle = 'Seguimiento de crianza';
+  static const String appTitle = 'Seguimiento Productivo';
   static const String appDeveloper = 'JLSF Soft Soluciones EIRL.';
   static const String companyName = 'Granja Rinconada del Sur';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.2';
   static const String offlineSalt = 'M0rt4l1d4d_S4lt_2026';
 
   static const String keyIsLoggedIn = 'is_logged_in';
@@ -122,6 +144,13 @@ class AppConstants {
   static const String keyGalponesPorGranja = 'sc_galpones_por_granja';
   static const String keyCencosLista = 'sc_cencos_lista';
   static const String keyProyeccion = 'sc_proyeccion';
+  static const String keyAppInfo = 'sc_g_app_info';
+
+  /// Retención del catálogo ccos acumulado en el dispositivo (días hacia atrás).
+  static const int catalogHistoricoDias = 365;
+
+  /// Plazo para actualizar app cuando g_app.tversion es mayor (días desde tdate).
+  static const int appVersionGraceDays = 4;
 }
 
 class AppStrings {
@@ -141,6 +170,8 @@ class AppStrings {
   static const String descargaExitosa = 'Información descargada con éxito';
   static const String subidaExitosa = 'Registros subidos correctamente';
   static const String sinConexion = 'No hay conexión a internet.';
+  static const String sinCatalogosLocales =
+      'No hay catálogos guardados. Descargue desde el menú (Descargar).';
   static const String pendientes = 'Pendientes';
   static const String subidos = 'Subidos';
 }

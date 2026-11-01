@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_seguimiento_screen.dart';
 import '../screens/reports_screen.dart';
 import '../services/api_service.dart';
+import '../services/app_version_service.dart';
 import '../services/catalog_service.dart';
 import '../services/catalog_sync_service.dart';
 import '../services/storage_service.dart';
@@ -33,7 +35,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
 
   final List<Animation<double>> _itemAnimations = [];
   final List<Animation<Offset>> _itemSlideAnimations = [];
-
   @override
   void initState() {
     super.initState();
@@ -125,21 +126,36 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
       final result = await CatalogSyncService().syncAll(
         storage: storage,
         catalog: catalog,
-        forzar: true,
+        includeUsuariosConempre: true,
       );
       close();
       if (!hostContext.mounted) return;
       if (!result.hadInternet) {
         showErrorToast(
           hostContext,
-          '${AppStrings.sinConexion} Se usan los catálogos guardados.',
+          '${AppStrings.sinConexion} Se usarán los datos guardados.',
         );
-      } else if (result.downloadedAnything) {
+      } else if (result.cencosOk && result.catalogosOk) {
         showSuccessToast(hostContext, AppStrings.descargaExitosa);
+        if (result.fecIngWarning != null) {
+          showWarningToast(hostContext, result.fecIngWarning!);
+        }
+      } else if (result.cencosOk || result.catalogosOk) {
+        showWarningToast(
+          hostContext,
+          result.catalogosOk
+              ? 'CENCOS/galpones no se actualizaron; usuarios sí.'
+              : 'CENCOS actualizados; usuarios/conempre no se descargaron.',
+        );
+        if (result.fecIngWarning != null) {
+          showWarningToast(hostContext, result.fecIngWarning!);
+        }
       } else {
         showErrorToast(
           hostContext,
-          'No se pudo actualizar. Se usan los catálogos guardados.',
+          result.errorMessage?.isNotEmpty == true
+              ? 'No se pudo descargar: ${result.errorMessage}'
+              : 'No se pudo descargar. Verifique conexión e intente de nuevo.',
         );
       }
     } catch (e) {
@@ -151,20 +167,31 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   }
 
   Future<void> _uploadByDate(BuildContext hostContext) async {
-    final date = await showDatePicker(
-      context: hostContext,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-    );
+    final storage = hostContext.read<StorageService>();
+
+    // Conteos compactos por día: pendientes (P) y subidos (S)
+    final counts = <String, ({int pend, int sub})>{};
+    for (final r in storage.getMyRecords()) {
+      final fecha = r['fecha']?.toString() ?? '';
+      if (fecha.length < 10) continue;
+      final key = fecha.substring(0, 10);
+      final e = counts[key];
+      final esSubido = r['synced'] == true;
+      counts[key] = e == null
+          ? (esSubido ? (pend: 0, sub: 1) : (pend: 1, sub: 0))
+          : (esSubido
+              ? (pend: e.pend, sub: e.sub + 1)
+              : (pend: e.pend + 1, sub: e.sub));
+    }
+
+    final date = await _pickUploadDate(hostContext, counts);
     if (date == null) return;
     if (!await _hasInternet()) {
       showErrorToast(hostContext, AppStrings.sinConexion);
       return;
     }
 
-    final storage = hostContext.read<StorageService>();
-    final records = storage.getRecordsByDate(date);
+    final records = storage.getMyRecordsByDate(date);
     if (records.isEmpty) {
       showInfoToast(hostContext, 'No hay registros para esa fecha.');
       return;
@@ -180,6 +207,10 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
         final isUpdate = record['guardado_backend'] == true ||
             record['guardado_backend'] == 'true';
         final result = await api.uploadSeguimiento(record, isUpdate: isUpdate);
+        debugPrint(
+          '[subir desde drawer] respuesta: $result '
+          '(id=${EvidenciaRecordId.of(record)})',
+        );
         if (result['success'] == true) {
           await storage.markRecordAsSynced({
             ...record,
@@ -191,7 +222,9 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
           fail++;
         }
       }
-      await storage.setLastSyncDate();
+      if (ok > 0) {
+        await storage.setLastSyncDate();
+      }
       close();
       if (fail == 0) {
         showSuccessToast(hostContext, AppStrings.subidaExitosa);
@@ -201,12 +234,31 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
           'Subidos: $ok, fallidos: $fail',
         );
       }
+      // La subida nunca se bloquea por version: el avance del usuario no se
+      // pierde. Solo se le recuerda que debe actualizar para seguir registrando.
+      if (hostContext.mounted) {
+        await AppVersionService.notifyIfNeeded(hostContext, storage);
+      }
     } catch (e) {
       close();
       if (hostContext.mounted) {
         showErrorToast(hostContext, 'Error: $e');
       }
     }
+  }
+
+  Future<DateTime?> _pickUploadDate(
+    BuildContext hostContext,
+    Map<String, ({int pend, int sub})> counts,
+  ) {
+    return showDialog<DateTime>(
+      context: hostContext,
+      builder: (_) => _UploadDateDialog(
+        counts: counts,
+        firstDate: DateTime(2020),
+        lastDate: DateTime.now(),
+      ),
+    );
   }
 
   Future<void> _logout(BuildContext hostContext) async {
@@ -232,11 +284,23 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
     );
     if (confirm != true) return;
     if (!hostContext.mounted) return;
-    await hostContext.read<StorageService>().clearAll();
+    await hostContext.read<StorageService>().clearSession();
+    await hostContext.read<CatalogService>().loadFromPrefs();
     Get.offAll(() => const LoginScreen());
   }
 
-  void _showAcercaDe(BuildContext context) {
+  Future<void> _showAcercaDe(BuildContext context) async {
+    final storage = context.read<StorageService>();
+    final sync = CatalogSyncService();
+    if (await sync.hasInternet()) {
+      await sync.syncAppInfo(storage: storage);
+    }
+    if (!context.mounted) return;
+
+    final appInfo = storage.getAppInfo();
+    final mejoras = AppVersionService.parseMejorasUsuario(appInfo);
+    final versionServidor = (appInfo?['required_version'] ?? '').toString().trim();
+
     showAppDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -318,6 +382,18 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
+                      if (versionServidor.isNotEmpty &&
+                          versionServidor != AppConstants.appVersion) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          '· disponible v$versionServidor',
+                          style: TextStyle(
+                            color: ctx.textThemeMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -341,6 +417,44 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                       ),
                     ],
                   ),
+                  if (mejoras.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Novedades',
+                      style: TextStyle(
+                        color: ctx.textThemePrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...mejoras.map(
+                      (texto) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.check_circle_outline,
+                              size: 16,
+                              color: AppColors.accent.withValues(alpha: 0.9),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                texto,
+                                style: TextStyle(
+                                  color: ctx.textThemeSecondary,
+                                  fontSize: 13,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -395,7 +509,9 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final isDark = context.isAppDark;
     final storage = context.watch<StorageService>();
-    final pending = storage.getPendingCount();
+    final pending = storage.getMyPendingCount();
+    final lastDownloadDate = storage.lastDownloadDateDisplay;
+    final lastUploadDate = storage.lastSyncDateDisplay;
     final userName = storage.getUserName() ?? 'USUARIO';
 
     return Drawer(
@@ -524,7 +640,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                                     child: _SyncButton(
                                       icon: Icons.cloud_download_rounded,
                                       label: 'Descargar',
-                                      lastDate: '--/--/--',
+                                      lastDate: lastDownloadDate,
                                       onTap: () async {
                                         final hostContext = _screenContext(context);
                                         Navigator.pop(context);
@@ -537,7 +653,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                                     child: _SyncButton(
                                       icon: Icons.cloud_upload_rounded,
                                       label: 'Subir',
-                                      lastDate: '--/--/--',
+                                      lastDate: lastUploadDate,
                                       pendingCount: pending,
                                       onTap: () async {
                                         final hostContext = _screenContext(context);
@@ -766,8 +882,18 @@ class _SyncButton extends StatelessWidget {
     this.pendingCount,
   });
 
+  static bool _fechaTieneValor(String lastDate) =>
+      lastDate.isNotEmpty && lastDate != '--/--/--';
+
+  static String? _fechaSubtitulo(String label, String lastDate) {
+    if (_fechaTieneValor(lastDate)) return lastDate;
+    if (label == 'Subir') return '--/--/--';
+    return 'Sin descargar';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final subtituloFecha = _fechaSubtitulo(label, lastDate);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -898,16 +1024,22 @@ class _SyncButton extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 6),
-              Text(
-                lastDate,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.75),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
+              if (subtituloFecha != null && subtituloFecha.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  subtituloFecha,
+                  style: TextStyle(
+                    color: _SyncButton._fechaTieneValor(lastDate)
+                        ? Colors.white.withOpacity(0.95)
+                        : Colors.white.withOpacity(0.55),
+                    fontSize: 11,
+                    fontWeight: _SyncButton._fechaTieneValor(lastDate)
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
+              ],
             ],
           ),
         ),
@@ -1001,3 +1133,315 @@ class _DrawerItem extends StatelessWidget {
     );
   }
 }
+
+/// Calendario compacto para la subida: muestra por día los registros
+/// pendientes (P, naranja) y subidos (S, verde) del usuario actual.
+class _UploadDateDialog extends StatefulWidget {
+  const _UploadDateDialog({
+    required this.counts,
+    required this.firstDate,
+    required this.lastDate,
+  });
+
+  final Map<String, ({int pend, int sub})> counts;
+  final DateTime firstDate;
+  final DateTime lastDate;
+
+  @override
+  State<_UploadDateDialog> createState() => _UploadDateDialogState();
+}
+
+class _UploadDateDialogState extends State<_UploadDateDialog> {
+  static const _weekdays = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+  late DateTime _focus;
+  DateTime? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus = DateTime.now();
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  void _changeMonth(int delta) {
+    final next = DateTime(_focus.year, _focus.month + delta, 1);
+    if (next.isBefore(
+      DateTime(widget.firstDate.year, widget.firstDate.month, 1),
+    )) {
+      return;
+    }
+    if (next.isAfter(
+      DateTime(widget.lastDate.year, widget.lastDate.month, 1),
+    )) {
+      return;
+    }
+    setState(() => _focus = next);
+  }
+
+  Widget _countBadge(int n, bool pend) {
+    final bg = pend ? const Color(0xFFFFE0B2) : const Color(0xFFC8E6C9);
+    final fg = pend ? const Color(0xFFE65100) : const Color(0xFF1B5E20);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        pend ? 'P: $n' : 'S: $n',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          color: fg,
+          height: 1.1,
+        ),
+      ),
+    );
+  }
+
+  Widget _dayCell(double width, int dayNumber) {
+    final day = DateTime(_focus.year, _focus.month, dayNumber);
+    final key = DateFormat('yyyy-MM-dd').format(day);
+    final c = widget.counts[key];
+    final now = DateTime.now();
+    final isToday = _isSameDay(day, now);
+    final isSelected = _selected != null && _isSameDay(day, _selected!);
+    final first = DateTime(
+      widget.firstDate.year,
+      widget.firstDate.month,
+      widget.firstDate.day,
+    );
+    final last = DateTime(
+      widget.lastDate.year,
+      widget.lastDate.month,
+      widget.lastDate.day,
+    );
+    final disabled = day.isBefore(first) || day.isAfter(last);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: disabled
+          ? null
+          : () => setState(() => _selected = day),
+      child: Container(
+        width: width,
+        height: 52,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : null,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '$dayNumber',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.0,
+                fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                color: disabled
+                    ? (isDark
+                        ? const Color(0xFF6E6E6E)
+                        : const Color(0xFF9E9E9E))
+                    : isSelected
+                        ? Colors.white
+                        : isToday
+                            ? AppColors.primaryDark
+                            : isDark
+                                ? const Color(0xFFF5F5F5)
+                                : const Color(0xFF101D14),
+              ),
+            ),
+            if (c != null && (c.pend > 0 || c.sub > 0)) ...[
+              const SizedBox(height: 3),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (c.pend > 0) _countBadge(c.pend, true),
+                    if (c.pend > 0 && c.sub > 0) const SizedBox(width: 3),
+                    if (c.sub > 0) _countBadge(c.sub, false),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: context.textThemeSecondary),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final firstDay = DateTime(_focus.year, _focus.month, 1);
+    final offset = firstDay.weekday - 1; // semana inicia lunes
+    final daysInMonth = DateTime(_focus.year, _focus.month + 1, 0).day;
+
+    var totalPend = 0;
+    var totalSub = 0;
+    for (var d = 1; d <= daysInMonth; d++) {
+      final key = DateFormat('yyyy-MM-dd')
+          .format(DateTime(_focus.year, _focus.month, d));
+      final c = widget.counts[key];
+      if (c != null) {
+        totalPend += c.pend;
+        totalSub += c.sub;
+      }
+    }
+
+    final rawMonth = DateFormat('MMMM yyyy', 'es').format(_focus);
+    final monthLabel = rawMonth.isEmpty
+        ? rawMonth
+        : rawMonth[0].toUpperCase() + rawMonth.substring(1);
+
+    return Dialog(
+      backgroundColor: context.dialogSurface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header: mes/año + navegación
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: () => _changeMonth(-1),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  Expanded(
+                    child: Text(
+                      monthLabel,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: context.textThemePrimary,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: () => _changeMonth(1),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              // Totales del mes
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _countBadge(totalPend, true),
+                  const SizedBox(width: 6),
+                  _countBadge(totalSub, false),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Días de la semana
+              Row(
+                children: _weekdays
+                    .map(
+                      (w) => Expanded(
+                        child: Text(
+                          w,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: Theme.of(context).brightness ==
+                                    Brightness.dark
+                                ? const Color(0xFFCFCFCF)
+                                : const Color(0xFF263238),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 4),
+              // Grilla del mes
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cellW = constraints.maxWidth / 7;
+                  return Wrap(
+                    children: [
+                      for (var i = 0; i < offset; i++)
+                        SizedBox(width: cellW, height: 52),
+                      for (var d = 1; d <= daysInMonth; d++)
+                        _dayCell(cellW, d),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+              // Leyenda
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _legendDot(const Color(0xFFE65100), 'Pendientes'),
+                  const SizedBox(width: 14),
+                  _legendDot(AppColors.primary, 'Subidos'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Acciones
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancelar'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _selected == null
+                        ? null
+                        : () => Navigator.pop(context, _selected),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      disabledBackgroundColor:
+                          AppColors.primary.withValues(alpha: 0.4),
+                    ),
+                    child: const Text(
+                      'Subir',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

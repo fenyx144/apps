@@ -89,7 +89,7 @@ class DashedPhotoSlot extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.add_a_photo_outlined,
-                          color: AppColors.primary,
+                          color: AppColors.textSecondary,
                           size: size * 0.3,
                         ),
                         const SizedBox(height: 4),
@@ -97,7 +97,7 @@ class DashedPhotoSlot extends StatelessWidget {
                           'Agregar',
                           style: TextStyle(
                             fontSize: 10,
-                            color: AppColors.primary.withValues(alpha: 0.8),
+                            color: AppColors.textSecondary.withValues(alpha: 0.85),
                             fontWeight: FontWeight.w600,
                           ),
                         ),

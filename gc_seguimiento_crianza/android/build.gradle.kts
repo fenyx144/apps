@@ -15,6 +15,36 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+
+// vosk_flutter (pub/git) declara compileSdk 33 y a veces sin namespace;
+// AndroidX reciente exige API 34+ y AGP 8+ exige namespace.
+subprojects {
+    if (name != "vosk_flutter") return@subprojects
+
+    plugins.withId("com.android.library") {
+        val androidExt = extensions.findByName("android") ?: return@withId
+
+        val getNamespace = androidExt.javaClass.methods.firstOrNull { it.name == "getNamespace" }
+        val setNamespace =
+            androidExt.javaClass.methods.firstOrNull {
+                it.name == "setNamespace" &&
+                    it.parameterTypes.size == 1 &&
+                    it.parameterTypes[0] == String::class.java
+            }
+        val current = (getNamespace?.invoke(androidExt) as? String).orEmpty()
+        if (current.isBlank()) setNamespace?.invoke(androidExt, "org.vosk.vosk_flutter")
+
+        val setCompileSdk =
+            androidExt.javaClass.methods.firstOrNull {
+                it.name == "setCompileSdk" &&
+                    it.parameterTypes.size == 1 &&
+                    (it.parameterTypes[0] == Int::class.javaPrimitiveType ||
+                        it.parameterTypes[0] == Int::class.java)
+            }
+        setCompileSdk?.invoke(androidExt, 35)
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }

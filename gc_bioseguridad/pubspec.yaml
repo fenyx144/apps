@@ -1,0 +1,59 @@
+name: bioseguridad
+description: App móvil Bioseguridad (Garita, Cerco Eléctrico y Fómites)
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  provider: ^6.1.5+1
+  device_info_plus: ^12.3.0
+  get: ^4.7.3
+  shared_preferences: ^2.5.4
+  http: ^1.6.0
+  uuid: ^4.5.1
+  flutter_localizations:
+    sdk: flutter
+  image_picker: ^1.2.1
+  pro_image_editor: ^11.18.3
+  flutter_image_compress: ^2.3.0
+  path_provider: ^2.1.5
+  path: ^1.9.0
+  fl_chart: ^1.1.1
+  intl: ^0.20.2
+  crypto: ^3.0.6
+  pointycastle: ^4.0.0
+  permission_handler: ^11.3.0
+  mobile_scanner: ^7.4.2
+  google_mlkit_text_recognition: ^0.17.1
+  camera: ^0.12.1
+  image: ^4.5.4
+  ultralytics_yolo: ^0.6.16
+  mrz_parser: ^2.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo_grs.png
+    - assets/images/logo_encabezado.png
+    - assets/icon/icon.png
+    - assets/gifs/gallina.gif
+    - assets/models/placa_yolo.tflite
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#00000000"
+  adaptive_icon_foreground: "assets/icon/icon.png"

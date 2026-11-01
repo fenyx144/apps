@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/cenco.dart';
+import '../models/galpon.dart';
 import '../utils/constants.dart';
 
 class StorageService with ChangeNotifier {
@@ -306,6 +308,20 @@ class StorageService with ChangeNotifier {
       debugPrint('[CENCOS_STORAGE] getCencosLocal ERROR: $e');
       return [];
     }
+  }
+
+  /// Granjas con edad recalculada al día desde fec_ing_min de los galpones.
+  List<Cenco> getCencosWithEdadActual() {
+    final galponesMap = getGalponesPorCencoLocal();
+    return getCencosLocal().map((json) {
+      final cenco = Cenco.fromJson(json);
+      final prefijo = cenco.granjaCodigo;
+      final raw = galponesMap[prefijo] ??
+          galponesMap[cenco.codigo] ??
+          const <Map<String, dynamic>>[];
+      final galpones = raw.map(Galpon.fromJson).toList();
+      return cenco.withEdadFromGalpones(galpones);
+    }).toList();
   }
 
   Map<String, List<Map<String, dynamic>>> getGalponesPorCencoLocal() {

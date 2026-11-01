@@ -2,14 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
-import '../services/catalog_download_service.dart';
 import '../services/catalog_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
@@ -34,8 +31,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _usuarioFocusNode = FocusNode();
   final _passwordFocusNode = FocusNode();
+  final _scrollController = ScrollController();
   final _apiService = ApiService();
-  final _catalogDownload = CatalogDownloadService();
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _hasAttemptedValidation = false;
@@ -46,6 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordController.dispose();
     _usuarioFocusNode.dispose();
     _passwordFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -65,126 +63,6 @@ class _LoginScreenState extends State<LoginScreen> {
       return (await deviceInfo.iosInfo).identifierForVendor ?? 'UNKNOWN_IOS';
     }
     return 'UNKNOWN_DEVICE';
-  }
-
-  Future<void> _downloadAfterLogin() async {
-    if (!mounted) return;
-    final storage = context.read<StorageService>();
-    final catalogService = context.read<CatalogService>();
-    if (!await _checkInternet()) return;
-    try {
-      await _catalogDownload.downloadAll(
-        storage: storage,
-        catalogService: catalogService,
-      );
-      // Descargar bloques de liquidación y auditorías para offline
-      final usuario = storage.getUserCodeSync() ?? '';
-      debugPrint('[DOWNLOAD_AFTER_LOGIN] usuario="$usuario"');
-      if (usuario.isNotEmpty) {
-        debugPrint('[DOWNLOAD_AFTER_LOGIN] descargando bloques liquidacion...');
-        final resBloques = await _apiService.listarBloquesLiquidacion(usuario: usuario);
-        debugPrint('[DOWNLOAD_AFTER_LOGIN] bloques success=${resBloques['success']}');
-        if (resBloques['success'] == true) {
-          final data = resBloques['data'];
-          final map = data is Map<String, dynamic> ? data : <String, dynamic>{};
-          final raw = map['bloques'];
-          debugPrint('[DOWNLOAD_AFTER_LOGIN] bloques raw type=${raw.runtimeType} count=${raw is List ? raw.length : -1}');
-          if (raw is List) {
-            await storage.saveBloquesLiquidacion(
-              raw.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
-            );
-            debugPrint('[DOWNLOAD_AFTER_LOGIN] bloques guardados: ${raw.length} registros');
-          }
-        } else {
-          debugPrint('[DOWNLOAD_AFTER_LOGIN] bloques fallo: ${resBloques['message']}');
-        }
-        debugPrint('[DOWNLOAD_AFTER_LOGIN] descargando mis auditorias...');
-        final resAud = await _apiService.listarMisAuditorias(usuario: usuario);
-        debugPrint('[DOWNLOAD_AFTER_LOGIN] auditorias success=${resAud['success']}');
-        if (resAud['success'] == true) {
-          final data = resAud['data'];
-          final map = data is Map<String, dynamic> ? data : <String, dynamic>{};
-          final raw = map['auditorias'];
-          debugPrint('[DOWNLOAD_AFTER_LOGIN] auditorias raw type=${raw.runtimeType} count=${raw is List ? raw.length : -1}');
-          if (raw is List) {
-            await storage.saveMisAuditoriasCache(
-              raw.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
-            );
-            debugPrint('[DOWNLOAD_AFTER_LOGIN] mis auditorias guardadas: ${raw.length}');
-          }
-        } else {
-          debugPrint('[DOWNLOAD_AFTER_LOGIN] mis auditorias fallo: ${resAud['message']}');
-        }
-        // Descargar registros pendientes de auditoria para offline
-        debugPrint('[DOWNLOAD_AFTER_LOGIN] descargando auditoria pendiente...');
-        final resPend = await _apiService.listarAuditoriaPendiente();
-        debugPrint('[DOWNLOAD_AFTER_LOGIN] pendientes success=${resPend['success']}');
-        if (resPend['success'] == true) {
-          final data = resPend['data'];
-          final map = data is Map<String, dynamic> ? data : <String, dynamic>{};
-          final raw = map['registros'];
-          debugPrint('[DOWNLOAD_AFTER_LOGIN] pendientes raw type=${raw.runtimeType} count=${raw is List ? raw.length : -1}');
-          if (raw is List) {
-            await storage.saveAuditoriaPendienteCache(
-              raw.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
-            );
-            debugPrint('[DOWNLOAD_AFTER_LOGIN] auditoria pendiente guardada: ${raw.length} registros');
-          }
-        } else {
-          debugPrint('[DOWNLOAD_AFTER_LOGIN] auditoria pendiente fallo: ${resPend['message']}');
-        }
-        // Descargar cantidades de pollos en lote
-        debugPrint('[DOWNLOAD_AFTER_LOGIN] descargando cantidad pollos batch...');
-        await _downloadCantidadPollosBatch(storage);
-      } else {
-        debugPrint('[DOWNLOAD_AFTER_LOGIN] usuario vacio, se omite descarga offline');
-      }
-    } catch (e) {
-      debugPrint('Error descarga interna post-login: $e');
-    }
-  }
-
-  Future<void> _downloadCantidadPollosBatch(StorageService storage) async {
-    try {
-      final cencos = storage.getCencosLocal();
-      if (cencos.isEmpty) {
-        debugPrint('[CANTIDAD_BATCH] no hay cencos en cache, se omite');
-        return;
-      }
-      final tcencosList = cencos
-          .map((c) => c['codigo']?.toString() ?? '')
-          .where((c) => c.isNotEmpty)
-          .toList();
-      if (tcencosList.isEmpty) return;
-
-      final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      debugPrint('[CANTIDAD_BATCH] descargando para ${tcencosList.length} tcencos, fecha=$hoy');
-      final res = await _apiService.downloadCantidadPollosBatch(
-        tcencosList: tcencosList,
-        fechaCentral: hoy,
-      );
-      if (res['success'] == true) {
-        final items = res['items'] as Map<String, List<Map<String, dynamic>>>;
-        // Obtener cache existente y fusionar
-        final existing = storage.getCantidadPollos();
-        existing.addAll(items);
-        // También guardar copia sin fecha para el día de hoy (compatibilidad con pantallas)
-        final hoyStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-        for (final key in items.keys) {
-          // key format: "tcencos_tcodint_YYYY-MM-DD"
-          if (key.endsWith('_$hoyStr')) {
-            final baseKey = key.substring(0, key.length - hoyStr.length - 1); // quitar _fecha
-            existing[baseKey] = items[key]!;
-          }
-        }
-        await storage.saveCantidadPollos(existing);
-        debugPrint('[CANTIDAD_BATCH] descarga exitosa: ${items.length} claves');
-      } else {
-        debugPrint('[CANTIDAD_BATCH] error: ${res['message']}');
-      }
-    } catch (e) {
-      debugPrint('[CANTIDAD_BATCH] error inesperado: $e');
-    }
   }
 
   Future<void> _attemptOfflineLogin() async {
@@ -337,12 +215,44 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Cierra el teclado y muestra el error de validación de forma que siempre
+  /// se aprecie (aunque el teclado esté abierto o cerrándose): toast + scroll
+  /// para que los mensajes bajo los campos queden a la vista.
+  void _showValidationError({required bool usuarioVacio, required bool passwordVacio}) {
+    FocusScope.of(context).unfocus();
+    SystemChannels.textInput.invokeMethod('TextInput.hide');
+    final String mensaje;
+    if (usuarioVacio && passwordVacio) {
+      mensaje = 'Debe ingresar su usuario y contraseña';
+    } else if (usuarioVacio) {
+      mensaje = 'Debe ingresar su usuario';
+    } else {
+      mensaje = 'Debe ingresar su contraseña';
+    }
+    showErrorToast(context, mensaje);
+    // Desplazar el formulario hacia arriba para que se vean los mensajes
+    // de error ("Requerido") debajo de los campos.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
     // Pequeña pausa para que el teclado se cierre antes de mostrar diálogos
     await Future.delayed(const Duration(milliseconds: 150));
     setState(() => _hasAttemptedValidation = true);
-    if (_usuarioController.text.trim().isEmpty || _passwordController.text.isEmpty) return;
+    final usuarioVacio = _usuarioController.text.trim().isEmpty;
+    final passwordVacio = _passwordController.text.isEmpty;
+    if (usuarioVacio || passwordVacio) {
+      _showValidationError(usuarioVacio: usuarioVacio, passwordVacio: passwordVacio);
+      return;
+    }
 
     if (!await _checkInternet()) {
       await _attemptOfflineLogin();
@@ -423,12 +333,10 @@ class _LoginScreenState extends State<LoginScreen> {
         }
         // Forzar cierre del teclado
         SystemChannels.textInput.invokeMethod('TextInput.hide');
-        // Descargar catálogos ANTES de navegar para que estén disponibles offline
-        try {
-          await _downloadAfterLogin();
-        } catch (e) {
-          debugPrint('[LOGIN_POST_DOWNLOAD] error (no crítico): $e');
-        }
+        // El login ya NO descarga catálogos: navegar al Dashboard de inmediato.
+        // La descarga completa (usuarios, granjas, causas, cantidad de pollos,
+        // liquidaciones, auditorías, etc.) la hace el botón "Descargar" del
+        // menú lateral (AppDrawer), que mantiene los datos para uso offline.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           Get.off(() => const DashboardScreen());
@@ -439,8 +347,10 @@ class _LoginScreenState extends State<LoginScreen> {
           _showDeviceNotRegisteredDialog();
         } else if (errorCode == 'INVALID_TOKEN') {
           showErrorToast(context, 'Error de conexión, inténtelo más tarde');
-        } else if (errorCode == 'WRONG_PASSWORD' || errorCode == 'USER_NOT_FOUND') {
-          showErrorToast(context, 'Usuario o contraseña incorrectos.');
+        } else if (errorCode == 'USER_NOT_FOUND') {
+          showErrorToast(context, 'Usuario no encontrado. Verifique el código e intente de nuevo.');
+        } else if (errorCode == 'WRONG_PASSWORD') {
+          showErrorToast(context, 'Contraseña incorrecta.');
         } else if (errorCode == 'INVALID_JSON' || errorCode == 'EMPTY_RESPONSE') {
           showErrorToast(context, result['message']?.toString() ?? 'Error del servidor.');
         } else if (errorCode == 'FATAL_ERROR') {
@@ -497,6 +407,7 @@ class _LoginScreenState extends State<LoginScreen> {
           height: double.infinity,
           color: isDark ? AppColors.darkBackground : const Color(0xFFF7FBF2),
           child: SingleChildScrollView(
+            controller: _scrollController,
             child: Column(
               children: [
                 _buildHeader(),
@@ -591,6 +502,7 @@ class _LoginScreenState extends State<LoginScreen> {
               focusNode: _usuarioFocusNode,
               label: 'Usuario',
               icon: Icons.person_rounded,
+              textCapitalization: TextCapitalization.characters,
               error: _hasAttemptedValidation && _usuarioController.text.trim().isEmpty
                   ? 'Requerido'
                   : null,
@@ -657,10 +569,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 FocusScope.of(context).unfocus();
                 Get.to(() => const RegisterDeviceScreen());
               },
-              icon: const Icon(Icons.phone_android_rounded, color: AppColors.primary),
+              icon: const Icon(Icons.phone_android_rounded, color: AppColors.textSecondary),
               label: const Text(
                 'Registrar tu Dispositivo',
-                style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600),
+                style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -678,6 +590,7 @@ class _LoginScreenState extends State<LoginScreen> {
     String? error,
     bool obscure = false,
     Widget? suffix,
+    TextCapitalization textCapitalization = TextCapitalization.none,
     TextInputAction textInputAction = TextInputAction.next,
     VoidCallback? onSubmit,
   }) {
@@ -690,6 +603,7 @@ class _LoginScreenState extends State<LoginScreen> {
           controller: controller,
           focusNode: focusNode,
           obscureText: obscure,
+          textCapitalization: textCapitalization,
           style: TextStyle(color: isDark ? Colors.white : Colors.black87),
           textInputAction: textInputAction,
           onSubmitted: onSubmit != null ? (_) => onSubmit() : null,
@@ -702,6 +616,7 @@ class _LoginScreenState extends State<LoginScreen> {
               color: isDark ? Colors.white70 : Colors.grey.shade700,
             ),
             suffixIcon: suffix,
+            fillColor: isDark ? AppColors.darkBackground : Colors.white,
           ),
         ),
         if (error != null)

@@ -1,0 +1,519 @@
+/// Comidas del personal de despacho y códigos de la tabla `marc`.
+///
+/// Los tipos 1 a 3 los usa el reloj (entrada, salida y marcas intermedias).
+/// Estas seis marcas de comida ocupan 4 a 9.
+enum Comida { desayuno, almuerzo, cena }
+
+enum MomentoComida { inicio, fin }
+
+class TipoMarcacion {
+  static const int desayunoInicio = 4;
+  static const int desayunoFin = 5;
+  static const int almuerzoInicio = 6;
+  static const int almuerzoFin = 7;
+  static const int cenaInicio = 8;
+  static const int cenaFin = 9;
+
+  static const Set<int> validos = {
+    desayunoInicio,
+    desayunoFin,
+    almuerzoInicio,
+    almuerzoFin,
+    cenaInicio,
+    cenaFin,
+  };
+
+  static int codigo(Comida comida, MomentoComida momento) {
+    return switch (comida) {
+      Comida.desayuno =>
+        momento == MomentoComida.inicio ? desayunoInicio : desayunoFin,
+      Comida.almuerzo =>
+        momento == MomentoComida.inicio ? almuerzoInicio : almuerzoFin,
+      Comida.cena => momento == MomentoComida.inicio ? cenaInicio : cenaFin,
+    };
+  }
+
+  static Comida? comidaDe(int tipo) {
+    return switch (tipo) {
+      desayunoInicio || desayunoFin => Comida.desayuno,
+      almuerzoInicio || almuerzoFin => Comida.almuerzo,
+      cenaInicio || cenaFin => Comida.cena,
+      _ => null,
+    };
+  }
+
+  static MomentoComida? momentoDe(int tipo) {
+    return switch (tipo) {
+      desayunoInicio || almuerzoInicio || cenaInicio => MomentoComida.inicio,
+      desayunoFin || almuerzoFin || cenaFin => MomentoComida.fin,
+      _ => null,
+    };
+  }
+}
+
+class PersonalDespacho {
+  const PersonalDespacho({
+    required this.dni,
+    required this.codigo,
+    required this.nombre,
+    required this.cargo,
+    required this.grupo,
+    required this.nomGrupo,
+    required this.fecha,
+    this.horas = '',
+    this.estado = '',
+  });
+
+  final String dni;
+  final String codigo;
+  final String nombre;
+  final String cargo;
+  final String grupo;
+  final String nomGrupo;
+  final String fecha;
+  final String horas;
+  final String estado;
+
+  String get grupoVisible => nombreGrupoVisible(grupo, nomGrupo);
+
+  factory PersonalDespacho.fromJson(Map<dynamic, dynamic> json) {
+    String pick(List<String> keys) {
+      for (final k in keys) {
+        final v = json[k]?.toString().trim() ?? '';
+        if (v.isNotEmpty) return v;
+      }
+      return '';
+    }
+
+    return PersonalDespacho(
+      dni: pick(['dni', 'tdni', 'documento']).replaceAll(RegExp(r'\D'), ''),
+      codigo: pick(['codigo', 'cod_tra', 'cod_trabajador', 'codtra']),
+      nombre: pick(['nombre', 'nom_tra', 'nomtra', 'apellidos_nombres']),
+      cargo: pick(['cargo', 'nom_cargo', 'cargo_base']),
+      grupo: pick(['grupo', 'cod_grupo']),
+      nomGrupo: pick(['nom_grupo', 'nombre_grupo', 'nomGrupo']),
+      fecha: pick(['fecha']).length >= 10
+          ? pick(['fecha']).substring(0, 10)
+          : pick(['fecha']),
+      horas: pick(['horas']),
+      estado: pick(['estado']),
+    );
+  }
+}
+
+class HorarioComida {
+  const HorarioComida({
+    required this.sede,
+    required this.grupo,
+    required this.nomGrupo,
+    required this.desayuno,
+    required this.almuerzo,
+    required this.cena,
+  });
+
+  final String sede;
+  final String grupo;
+  final String nomGrupo;
+  final bool desayuno;
+  final bool almuerzo;
+  final bool cena;
+
+  bool permite(Comida comida) {
+    return switch (comida) {
+      Comida.desayuno => desayuno,
+      Comida.almuerzo => almuerzo,
+      Comida.cena => cena,
+    };
+  }
+
+  List<Comida> get comidas {
+    return [
+      if (desayuno) Comida.desayuno,
+      if (almuerzo) Comida.almuerzo,
+      if (cena) Comida.cena,
+    ];
+  }
+
+  factory HorarioComida.fromJson(Map<dynamic, dynamic> json) {
+    bool flag(dynamic v) {
+      if (v is bool) return v;
+      if (v is num) return v != 0;
+      final s = v?.toString().trim().toLowerCase() ?? '';
+      return s == '1' || s == 'true' || s == 'si' || s == 'sí';
+    }
+
+    return HorarioComida(
+      sede: normSede(json['sede']?.toString() ?? ''),
+      grupo: normGrupo(
+        json['grupo']?.toString() ?? '',
+        json['nom_grupo']?.toString() ?? json['nomGrupo']?.toString() ?? '',
+      ),
+      nomGrupo: (json['nom_grupo'] ?? json['nomGrupo'] ?? '').toString(),
+      desayuno: flag(json['desayuno']),
+      almuerzo: flag(json['almuerzo']),
+      cena: flag(json['cena']),
+    );
+  }
+}
+
+const String sedeJoya = 'joya';
+const String sedeMollendo = 'mollendo';
+
+String normSede(String raw) {
+  final s = raw.trim().toLowerCase();
+  if (s.contains('moll')) return sedeMollendo;
+  if (s.contains('joya') || s == 'j') return sedeJoya;
+  return s;
+}
+
+String etiquetaSede(String sede) {
+  return sede == sedeMollendo ? 'Mollendo' : 'Joya';
+}
+
+/// Código de grupo operativo G1–G6. El resto (descanso, vacaciones,
+/// administrativo) queda con su propio código y no tiene comidas.
+String normGrupo(String grupo, String nomGrupo) {
+  final texto = '${grupo.trim()} ${nomGrupo.trim()}'.toLowerCase();
+  final g = RegExp(r'g\s*0*(\d+)').firstMatch(grupo.trim().toLowerCase());
+  if (g != null) {
+    final n = int.tryParse(g.group(1)!);
+    if (n != null && n >= 1 && n <= 6) return 'G$n';
+    if (n != null) return 'G$n';
+  }
+  final solo = RegExp(r'^0*(\d+)$').firstMatch(grupo.trim());
+  if (solo != null) {
+    final n = int.tryParse(solo.group(1)!);
+    if (n != null && n >= 1 && n <= 6) return 'G$n';
+  }
+  if (texto.contains('autom')) return 'G1';
+  if (texto.contains('despob') || texto.contains('brasa')) return 'G2';
+  final carne = RegExp(r'carne\s*0*(\d)').firstMatch(texto);
+  if (carne != null) {
+    final n = int.tryParse(carne.group(1)!);
+    if (n != null && n >= 1 && n <= 4) return 'G${n + 2}';
+  }
+  return grupo.trim().toUpperCase();
+}
+
+/// Nombre de grupo para mostrar: sin clave (G1), sin prefijos numéricos
+/// ("1. ", "01 - ") y nunca un número suelto. La clave interna no cambia.
+String nombreGrupoVisible(String grupo, String nomGrupo) {
+  String limpiar(String s) {
+    var t = s.trim();
+    t = t.replaceFirst(
+      RegExp(r'^(g\s*\d+|\d+)\s*([.\-:)\u00b7|]+\s*|\s+)', caseSensitive: false),
+      '',
+    );
+    t = t.trim();
+    if (RegExp(r'^(g\s*)?\d+$', caseSensitive: false).hasMatch(t)) return '';
+    return t;
+  }
+
+  var nom = limpiar(nomGrupo);
+  if (nom.isEmpty) {
+    final clave = normGrupo(grupo, nomGrupo);
+    for (final h in horariosReferencia) {
+      if (h.grupo == clave && h.nomGrupo.trim().isNotEmpty) {
+        nom = limpiar(h.nomGrupo);
+        break;
+      }
+    }
+  }
+  // Identificador crudo de la BD: se muestra solo si tiene letras (G1).
+  final id = grupo.trim();
+  final conLetras = RegExp(r'[A-Za-z]').hasMatch(id) &&
+      id.toUpperCase() != 'SIN GRUPO';
+  if (nom.isEmpty) return conLetras ? id : 'Sin grupo';
+  if (!conLetras || nom.toLowerCase().contains(id.toLowerCase())) return nom;
+  return '$id \u00b7 $nom';
+}
+
+String etiquetaComida(Comida comida) {
+  return switch (comida) {
+    Comida.desayuno => 'Desayuno',
+    Comida.almuerzo => 'Almuerzo',
+    Comida.cena => 'Cena',
+  };
+}
+
+String etiquetaMomento(MomentoComida momento) {
+  return momento == MomentoComida.inicio ? 'Inicio' : 'Fin';
+}
+
+/// Matriz del horario de despacho (Joya y Mollendo).
+///
+/// No está en `dpollo_programacion_personal` ni en el maestro de grupos que
+/// documenta el módulo. Si el servidor encuentra una tabla con desayuno,
+/// almuerzo y cena, esa lista reemplaza a esta.
+const List<HorarioComida> horariosReferencia = [
+  HorarioComida(
+    sede: sedeJoya,
+    grupo: 'G1',
+    nomGrupo: 'Proc. Automático',
+    desayuno: true,
+    almuerzo: true,
+    cena: false,
+  ),
+  HorarioComida(
+    sede: sedeJoya,
+    grupo: 'G2',
+    nomGrupo: 'Proc. Despoblamiento/brasa',
+    desayuno: true,
+    almuerzo: true,
+    cena: false,
+  ),
+  HorarioComida(
+    sede: sedeJoya,
+    grupo: 'G3',
+    nomGrupo: 'Proc. Carne 01',
+    desayuno: false,
+    almuerzo: true,
+    cena: true,
+  ),
+  HorarioComida(
+    sede: sedeJoya,
+    grupo: 'G4',
+    nomGrupo: 'Proc. Carne 02',
+    desayuno: false,
+    almuerzo: true,
+    cena: true,
+  ),
+  HorarioComida(
+    sede: sedeJoya,
+    grupo: 'G5',
+    nomGrupo: 'Proc. Carne 03',
+    desayuno: false,
+    almuerzo: true,
+    cena: true,
+  ),
+  HorarioComida(
+    sede: sedeJoya,
+    grupo: 'G6',
+    nomGrupo: 'Proc. Carne 04',
+    desayuno: false,
+    almuerzo: true,
+    cena: true,
+  ),
+  HorarioComida(
+    sede: sedeMollendo,
+    grupo: 'G1',
+    nomGrupo: 'Proc. Automático',
+    desayuno: true,
+    almuerzo: true,
+    cena: false,
+  ),
+  HorarioComida(
+    sede: sedeMollendo,
+    grupo: 'G2',
+    nomGrupo: 'Proc. Despoblamiento/brasa',
+    desayuno: true,
+    almuerzo: true,
+    cena: false,
+  ),
+  HorarioComida(
+    sede: sedeMollendo,
+    grupo: 'G3',
+    nomGrupo: 'Proc. Carne 01',
+    desayuno: true,
+    almuerzo: true,
+    cena: true,
+  ),
+  HorarioComida(
+    sede: sedeMollendo,
+    grupo: 'G4',
+    nomGrupo: 'Proc. Carne 02',
+    desayuno: true,
+    almuerzo: true,
+    cena: true,
+  ),
+  HorarioComida(
+    sede: sedeMollendo,
+    grupo: 'G5',
+    nomGrupo: 'Proc. Carne 03',
+    desayuno: true,
+    almuerzo: true,
+    cena: true,
+  ),
+  HorarioComida(
+    sede: sedeMollendo,
+    grupo: 'G6',
+    nomGrupo: 'Proc. Carne 04',
+    desayuno: true,
+    almuerzo: true,
+    cena: true,
+  ),
+];
+
+const String horarioOrigenReferencia = 'referencia_horario_despacho';
+
+HorarioComida? horarioDe({
+  required String grupo,
+  required String nomGrupo,
+  List<HorarioComida> remotos = const [],
+  String origen = horarioOrigenReferencia,
+}) {
+  final key = normGrupo(grupo, nomGrupo);
+  final usarRemoto = remotos.isNotEmpty && origen != horarioOrigenReferencia;
+  final fuente = usarRemoto ? remotos : horariosReferencia;
+  final coinciden = fuente.where((h) => h.grupo == key).toList();
+  final lista = coinciden.isNotEmpty
+      ? coinciden
+      : (usarRemoto
+            ? horariosReferencia.where((h) => h.grupo == key).toList()
+            : const <HorarioComida>[]);
+  if (lista.isEmpty) return null;
+  return HorarioComida(
+    sede: '',
+    grupo: key,
+    nomGrupo: lista.first.nomGrupo,
+    desayuno: lista.any((h) => h.desayuno),
+    almuerzo: lista.any((h) => h.almuerzo),
+    cena: lista.any((h) => h.cena),
+  );
+}
+
+/// Comida más probable según la hora, para abrir el ingreso masivo
+/// en el turno que toca: desayuno hasta las 10, almuerzo hasta las 17
+/// y cena el resto del día.
+Comida comidaSugerida(DateTime ahora) {
+  final h = ahora.hour;
+  if (h < 10) return Comida.desayuno;
+  if (h < 17) return Comida.almuerzo;
+  return Comida.cena;
+}
+
+enum MarcaPersonaEstado { pendiente, marcada, sinInicio }
+
+/// En el fin hace falta el inicio de esa misma comida. Quien ya tiene
+/// la marca queda como [MarcaPersonaEstado.marcada] y se puede volver
+/// a elegir para corregir la hora.
+MarcaPersonaEstado estadoMarcacion({
+  required MomentoComida momento,
+  required bool tieneInicio,
+  required bool tieneEstaMarca,
+}) {
+  if (tieneEstaMarca) return MarcaPersonaEstado.marcada;
+  if (momento == MomentoComida.fin && !tieneInicio) {
+    return MarcaPersonaEstado.sinInicio;
+  }
+  return MarcaPersonaEstado.pendiente;
+}
+
+String notaMarcacion({
+  required MarcaPersonaEstado estado,
+  required MomentoComida momento,
+  String? horaMarca,
+  String? horaInicio,
+}) {
+  switch (estado) {
+    case MarcaPersonaEstado.marcada:
+      return (horaMarca ?? '').trim();
+    case MarcaPersonaEstado.sinInicio:
+      return '';
+    case MarcaPersonaEstado.pendiente:
+      final ini = (horaInicio ?? '').trim();
+      if (momento == MomentoComida.fin && ini.isNotEmpty) {
+        return 'Inicio $ini';
+      }
+      return '';
+  }
+}
+
+class GrupoMarcacion {
+  const GrupoMarcacion({
+    required this.clave,
+    required this.titulo,
+    required this.personas,
+    required this.comidas,
+    required this.permite,
+  });
+
+  final String clave;
+  final String titulo;
+  final List<PersonalDespacho> personas;
+  final List<Comida> comidas;
+
+  /// Falso cuando el grupo come, pero no esta [comida].
+  final bool permite;
+}
+
+/// Agrupa al personal por código operativo para el ingreso masivo.
+///
+/// Quien no tiene ninguna comida (descanso, vacaciones, administrativo)
+/// no entra. Los grupos que no toman [comida] quedan al final, con
+/// [GrupoMarcacion.permite] en falso, para verlos sin poder marcarlos.
+List<GrupoMarcacion> agruparMarcacion({
+  required List<PersonalDespacho> personas,
+  required Comida comida,
+  List<HorarioComida> remotos = const [],
+  String origen = horarioOrigenReferencia,
+}) {
+  final orden = <String>[];
+  final porClave = <String, List<PersonalDespacho>>{};
+  final titulo = <String, String>{};
+
+  for (final p in personas) {
+    final n = normGrupo(p.grupo, p.nomGrupo);
+    final clave = n.isEmpty ? 'SIN GRUPO' : n;
+    porClave
+        .putIfAbsent(clave, () {
+          orden.add(clave);
+          return <PersonalDespacho>[];
+        })
+        .add(p);
+    titulo.putIfAbsent(
+      clave,
+      () => p.grupoVisible.trim().isEmpty ? clave : p.grupoVisible.trim(),
+    );
+  }
+
+  final permite = {for (final c in orden) c: true};
+  final claves = [...orden]..sort((a, b) => _compararGrupo(a, b, permite));
+  return [
+    for (final c in claves)
+      GrupoMarcacion(
+        clave: c,
+        titulo: titulo[c]!,
+        personas: porClave[c]!,
+        comidas: Comida.values,
+        permite: true,
+      ),
+  ];
+}
+int _numeroGrupo(String clave) {
+  final m = RegExp(r'^G(\d+)$').firstMatch(clave);
+  if (m == null) return 1000;
+  return int.parse(m.group(1)!);
+}
+
+int _compararGrupo(String a, String b, Map<String, bool> permite) {
+  final pa = permite[a] == true ? 0 : 1;
+  final pb = permite[b] == true ? 0 : 1;
+  if (pa != pb) return pa - pb;
+  final na = _numeroGrupo(a);
+  final nb = _numeroGrupo(b);
+  if (na != nb) return na.compareTo(nb);
+  return a.compareTo(b);
+}
+
+/// Granja de 3 dígitos + campaña de 3 dígitos. Ejemplo: 621 y 192 → 621192.
+String tcencosDe(String granja, String campania) {
+  String tres(String raw) {
+    var d = raw.replaceAll(RegExp(r'\D'), '');
+    if (d.isEmpty) return '';
+    if (d.length > 3) d = d.substring(d.length - 3);
+    return d.padLeft(3, '0');
+  }
+
+  final g = tres(granja);
+  final c = tres(campania);
+  if (g.isEmpty || c.isEmpty) return '';
+  return '$g$c';
+}
+
+String hoyYmd([DateTime? ahora]) {
+  final d = ahora ?? DateTime.now();
+  final m = d.month.toString().padLeft(2, '0');
+  final day = d.day.toString().padLeft(2, '0');
+  return '${d.year}-$m-$day';
+}

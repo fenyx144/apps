@@ -1,0 +1,263 @@
+import '../services/ingreso_presencia_service.dart';
+import '../services/plan_visitas_service.dart';
+import '../services/storage_service.dart';
+import '../widgets/proveedor_dialog.dart';
+
+/// Metadatos del formulario de ingreso que puede rellenar la planificación.
+class PlanIngresoFormState {
+  PlanIngresoFormState({
+    this.planVisita,
+    this.visitaPlanId,
+    this.proveedor = ProveedorSeleccion.vacia,
+    this.proceso = '',
+    this.observacion = '',
+  });
+
+  PlanVisita? planVisita;
+  int? visitaPlanId;
+  ProveedorSeleccion proveedor;
+  String proceso;
+  String observacion;
+}
+
+/// Rellena proveedor, proceso y observación desde una visita planificada sin
+/// pisar lo que el operador ya escribió.
+/// Visitas planificadas ligadas a un DNI (una o varias granjas el mismo día).
+Set<int> planVisitaIdsEnFilaDni({
+  required bool planificado,
+  required int? visitaPlanId,
+  required Set<int> visitasPlanIdsSeleccionados,
+}) {
+  if (visitasPlanIdsSeleccionados.isNotEmpty) {
+    return Set<int>.from(visitasPlanIdsSeleccionados);
+  }
+  if (planificado && visitaPlanId != null && visitaPlanId != 0) {
+    return {visitaPlanId};
+  }
+  return const {};
+}
+
+void vincularVisitaPlanEnFormulario({
+  required PlanIngresoFormState form,
+  required PlanVisita visita,
+}) {
+  form.planVisita = visita;
+  form.visitaPlanId = visita.id;
+
+  if (form.proceso.trim().isEmpty) {
+    final plan = visita.proceso.trim().isNotEmpty
+        ? visita.proceso.trim()
+        : visita.areaProveedorValor.trim();
+    if (plan.isNotEmpty) form.proceso = plan;
+  }
+  if (form.proveedor.estaVacio) {
+    final nombre = visita.razonSocial.trim();
+    final ruc = visita.ruc;
+    if (nombre.isNotEmpty || ruc.isNotEmpty) {
+      form.proveedor = ProveedorSeleccion(ruc: ruc, nombre: nombre);
+    }
+  }
+  if (visita.observacion.trim().isNotEmpty &&
+      form.observacion.trim().isEmpty) {
+    form.observacion = visita.observacion.trim();
+  }
+}
+
+/// Ordena visitas candidatas:
+/// 1) granja del formulario, 2) «Mis granjas», 3) resto;
+/// dentro del mismo grupo, la visita donde [dniReferencia] aún no ingresó hoy;
+/// empate final por id (orden estable del portal).
+List<PlanVisita> priorizarVisitasCandidatas(
+  List<PlanVisita> visitas, {
+  required String granjaFormulario,
+  required List<String> granjasTrabajo,
+  String? dniReferencia,
+  String? fechaYmd,
+  StorageService? storage,
+}) {
+  final dni = (dniReferencia ?? '').replaceAll(RegExp(r'\D'), '');
+
+  int prioridadGranja(PlanVisita v) {
+    final ref = granjaFormulario.isNotEmpty
+        ? granjaFormulario
+        : (granjasTrabajo.isNotEmpty ? granjasTrabajo.first : '');
+    if (ref.isNotEmpty && v.granja == ref) return 0;
+    if (granjasTrabajo.contains(v.granja)) return 1;
+    return 2;
+  }
+
+  /// 0 = ese DNI todavía no tiene ingreso en esa planificación hoy.
+  int prioridadPendiente(PlanVisita v) {
+    if (dni.length != 8 ||
+        storage == null ||
+        (fechaYmd ?? '').trim().isEmpty) {
+      return 0;
+    }
+    final ya = IngresoPresenciaService.dnisIngresadosEnPlanVisita(
+      storage,
+      v.id.toString(),
+      fechaYmd: fechaYmd!,
+    );
+    return ya.contains(dni) ? 1 : 0;
+  }
+
+  final out = List<PlanVisita>.from(visitas);
+  out.sort((a, b) {
+    var c = prioridadGranja(a).compareTo(prioridadGranja(b));
+    if (c != 0) return c;
+    c = prioridadPendiente(a).compareTo(prioridadPendiente(b));
+    if (c != 0) return c;
+    return a.id.compareTo(b.id);
+  });
+  return out;
+}
+
+/// ¿Este DNI ya tiene un ingreso guardado hoy en esa visita planificada?
+bool planDniYaIngresoEnVisita(
+  StorageService storage,
+  PlanVisita visita,
+  String dni, {
+  required String fechaYmd,
+}) {
+  final d = dni.replaceAll(RegExp(r'\D'), '');
+  if (d.length != 8) return false;
+  return IngresoPresenciaService.dnisIngresadosEnPlanVisita(
+    storage,
+    visita.id.toString(),
+    fechaYmd: fechaYmd,
+  ).contains(d);
+}
+
+/// Quita visitas donde el DNI ya ingresó hoy (evita «Planificado» repetido).
+List<PlanVisita> visitasPlanPendientesParaDni(
+  StorageService? storage,
+  List<PlanVisita> visitas,
+  String dni, {
+  required String fechaYmd,
+}) {
+  if (storage == null) return visitas;
+  final d = dni.replaceAll(RegExp(r'\D'), '');
+  if (d.length != 8) return visitas;
+  return visitas
+      .where(
+        (v) => !planDniYaIngresoEnVisita(storage, v, d, fechaYmd: fechaYmd),
+      )
+      .toList();
+}
+
+PlanCoincidencia planCoincidenciaSinDniConsumido(
+  PlanCoincidencia c,
+  StorageService? storage,
+  String dni, {
+  required String fechaYmd,
+}) {
+  final v = c.visita;
+  if (v == null || storage == null) return c;
+  if (planDniYaIngresoEnVisita(storage, v, dni, fechaYmd: fechaYmd)) {
+    return PlanCoincidencia(visita: null, otraGranja: c.otraGranja);
+  }
+  return c;
+}
+
+/// Id de planificación ligado a un grupo de presencia (ingreso guardado).
+String? planVisitaIdDeGrupoPresencia(String grupoId, {String planVisitaId = ''}) {
+  final plan = planVisitaId.trim();
+  if (plan.isNotEmpty) return plan;
+  final gid = grupoId.trim();
+  if (gid.startsWith('plan:')) return gid.substring(5);
+  return null;
+}
+
+/// Cierra la visita planificada solo si nadie queda dentro y ya ingresaron
+/// todas las personas de la planificación ese día (quien se retrase aún puede
+/// entrar y salir como planificado).
+bool planVisitaListaParaCerrar({
+  required PlanVisita? visita,
+  required Set<String> dnisIngresadosHoy,
+  required bool quedaAlguienDentro,
+}) {
+  if (quedaAlguienDentro) return false;
+  if (visita == null || visita.personas.isEmpty) return true;
+  return !visita.personas.any((p) => !dnisIngresadosHoy.contains(p.dni));
+}
+
+/// Tras salida definitiva: marca la planificación como usada cuando corresponde.
+Future<void> cerrarPlanVisitaTrasSalidaDefinitiva(
+  StorageService storage, {
+  required String planVisitaId,
+  required String fechaYmd,
+}) async {
+  if (planVisitaId.isEmpty) return;
+  final abiertos = IngresoPresenciaService.gruposConPersonalDentro(storage);
+  final quedaDentro = abiertos.any((g) {
+    final id = planVisitaIdDeGrupoPresencia(
+      g.grupoId,
+      planVisitaId: g.planVisitaId,
+    );
+    return id == planVisitaId && g.hayDentro;
+  });
+  final idNum = int.tryParse(planVisitaId);
+  final visita =
+      idNum != null ? PlanVisitasService.local(storage).visitaPorId(idNum) : null;
+  final ingresados = IngresoPresenciaService.dnisIngresadosEnPlanVisita(
+    storage,
+    planVisitaId,
+    fechaYmd: fechaYmd,
+  );
+  if (!planVisitaListaParaCerrar(
+    visita: visita,
+    dnisIngresadosHoy: ingresados,
+    quedaAlguienDentro: quedaDentro,
+  )) {
+    return;
+  }
+  await storage.addPlanVisitaUsada(planVisitaId);
+}
+
+/// Granja/campaña para estatus sanitario de la granja del registro.
+///
+/// No infiere «Mis granjas» ni granja única del punto: solo formulario explícito
+/// o visita planificada ya resuelta en filas.
+({String granja, String campania}) granjaCampaniaParaEstatusSanitario({
+  required String granjaFormulario,
+  required String campaniaFormulario,
+  PlanVisita? visitaFormularioGlobal,
+  required Iterable<PlanVisita?> visitasResueltasEnFilas,
+}) {
+  var granja = granjaFormulario.trim();
+  var campania = campaniaFormulario.trim();
+  PlanVisita? visitaRef = visitaFormularioGlobal;
+
+  if (granja.isEmpty) {
+    for (final v in visitasResueltasEnFilas) {
+      if (v != null && v.granja.isNotEmpty) {
+        visitaRef = v;
+        break;
+      }
+    }
+  }
+
+  if (granja.isEmpty && visitaRef != null && visitaRef.granja.isNotEmpty) {
+    granja = visitaRef.granja;
+  }
+  if (campania.isEmpty && visitaRef != null) {
+    campania = visitaRef.campania.trim();
+  }
+  return (granja: granja, campania: campania);
+}
+
+void vincularVisitaDesdeCoincidencia({
+  required PlanIngresoFormState form,
+  required PlanCoincidencia coincidencia,
+  bool forzar = false,
+}) {
+  final visita = coincidencia.visita;
+  if (visita == null) return;
+  if (!forzar &&
+      form.visitaPlanId != null &&
+      form.visitaPlanId != visita.id &&
+      form.visitaPlanId != 0) {
+    return;
+  }
+  vincularVisitaPlanEnFormulario(form: form, visita: visita);
+}

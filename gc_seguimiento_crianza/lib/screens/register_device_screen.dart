@@ -2,7 +2,10 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/app_version_service.dart';
+import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../utils/theme_colors.dart';
 import '../utils/toast_helper.dart';
@@ -87,10 +90,25 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
         );
         Get.back();
       } else {
-        showErrorToast(
-          context,
-          result['message']?.toString() ?? 'No se pudo registrar',
-        );
+        final code = result['errorCode']?.toString() ?? '';
+        if (code == 'APP_VERSION_BLOCKED') {
+          final verPayload = AppVersionService.extractPayload(result['data']);
+          if (verPayload != null && context.mounted) {
+            final storage = context.read<StorageService>();
+            await AppVersionService.mergeServerPayload(storage, verPayload);
+            if (!context.mounted) return;
+            await AppVersionService.showStatusDialog(
+              context,
+              AppVersionService.fromStorage(storage),
+              barrierDismissible: false,
+            );
+          }
+        } else {
+          showErrorToast(
+            context,
+            result['message']?.toString() ?? 'No se pudo registrar',
+          );
+        }
       }
     } catch (e) {
       showErrorToast(context, 'Error: $e');
@@ -125,14 +143,15 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                     'Registrar Dispositivo',
                     style: TextStyle(
                       fontSize: 20,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
                       color: context.textThemePrimary,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -148,8 +167,10 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                             color: AppColors.primary.withValues(
                               alpha: context.isAppDark ? 0.2 : 0.1,
                             ),
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius:
+                                BorderRadius.circular(AppColors.radiusXl),
                             border: Border.all(color: context.borderSubtle),
+                            boxShadow: AppColors.lightShadow,
                           ),
                           child: const Icon(
                             Icons.phonelink_setup_rounded,

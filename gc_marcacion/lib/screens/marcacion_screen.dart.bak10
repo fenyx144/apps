@@ -1,0 +1,1481 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+
+import '../services/api_service.dart';
+import '../services/app_version_service.dart';
+import '../services/catalog_service.dart';
+import '../services/storage_service.dart';
+import '../services/ubicacion_service.dart';
+import '../utils/comida_horario.dart';
+import '../utils/constants.dart';
+import '../utils/record_id.dart';
+import '../utils/theme_colors.dart';
+import '../utils/toast_helper.dart';
+import '../widgets/app_card.dart';
+import '../widgets/app_drawer.dart';
+import '../widgets/granja_campania_fields.dart';
+import '../widgets/marcacion_masiva.dart';
+import '../widgets/section_app_bar.dart';
+import 'dni_scanner_screen.dart';
+
+class MarcacionScreen extends StatefulWidget {
+  const MarcacionScreen({super.key});
+
+  @override
+  State<MarcacionScreen> createState() => _MarcacionScreenState();
+}
+
+class _MarcacionScreenState extends State<MarcacionScreen>
+    with WidgetsBindingObserver {
+  final _buscar = TextEditingController();
+  final _focoBuscar = FocusNode();
+  final _ubicacion = UbicacionService();
+
+  String _granja = '';
+  String _granjaNombre = '';
+  String _campania = '';
+  List<String> _campanias = [];
+  String? _dniSel;
+  bool _guardando = false;
+  VistaMarcacion _vista = VistaMarcacion.una;
+  Comida _comida = comidaSugerida(DateTime.now());
+  bool _horaFijada = false;
+  String _horaMasiva = '';
+  String? _grupoFiltro;
+
+  /// Marcas elegidas en el ingreso masivo: DNI -> hora de cada marca.
+  final Map<String, String> _selInicio = {};
+  final Map<String, String> _selFin = {};
+
+  /// Horas elegidas y todavía no guardadas. La clave es el tipo 4–9.
+  final Map<int, String> _porGuardar = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) UbicacionService.sugerirGps(context);
+      UbicacionService.iniciar();
+    });
+    final storage = context.read<StorageService>();
+    final sel = granjaDeTrabajoSeleccion(storage, fechaYmd: hoyYmd());
+    if (sel != null) {
+      _granja = sel.granja;
+      _granjaNombre = sel.granjaNombre;
+      _campania = sel.campania;
+      _campanias = sel.campanias;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      UbicacionService.reanudar();
+    } else if (state == AppLifecycleState.paused) {
+      UbicacionService.pausar();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    UbicacionService.detener();
+    _buscar.dispose();
+    _focoBuscar.dispose();
+    super.dispose();
+  }
+
+  void _cerrarTeclado() {
+    _focoBuscar.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  void _elegirPersona(String dni) {
+    _cerrarTeclado();
+    setState(() {
+      if (dni != _dniSel) _porGuardar.clear();
+      _dniSel = dni;
+    });
+  }
+
+  List<PersonalDespacho> _filtrar(List<PersonalDespacho> todos) {
+    return _preparar(todos);
+  }
+
+  List<PersonalDespacho> _preparar(
+    List<PersonalDespacho> todos, {
+    bool buscar = true,
+  }) {
+    final q = buscar ? _buscar.text.trim().toLowerCase() : '';
+    final hoy = hoyYmd();
+    final gf = buscar ? _grupoFiltro : null;
+    final lista = todos.where((p) {
+      if (gf != null && _claveGrupo(p) != gf) return false;
+      if (q.isEmpty) return true;
+      return p.nombre.toLowerCase().contains(q) ||
+          p.dni.contains(q) ||
+          p.codigo.toLowerCase().contains(q) ||
+          p.grupo.toLowerCase().contains(q) ||
+          p.nomGrupo.toLowerCase().contains(q);
+    }).toList();
+    lista.sort((a, b) {
+      final ah = a.fecha == hoy ? 0 : 1;
+      final bh = b.fecha == hoy ? 0 : 1;
+      if (ah != bh) return ah.compareTo(bh);
+      final porFecha = b.fecha.compareTo(a.fecha);
+      if (porFecha != 0) return porFecha;
+      return a.nombre.compareTo(b.nombre);
+    });
+    final vistos = <String>{};
+    return [
+      for (final p in lista)
+        if (vistos.add(p.dni)) p,
+    ];
+  }
+
+  PersonalDespacho? _seleccionado(List<PersonalDespacho> todos) {
+    final dni = _dniSel;
+    if (dni == null) return null;
+    final hoy = hoyYmd();
+    PersonalDespacho? otro;
+    for (final p in todos) {
+      if (p.dni != dni) continue;
+      if (p.fecha == hoy) return p;
+      otro ??= p;
+    }
+    return otro;
+  }
+
+  String? _ultimaHora({
+    required String dni,
+    required int tipo,
+    required String tcencos,
+  }) {
+    final fecha = hoyYmd();
+    String? hora;
+    for (final r in context.read<StorageService>().getMyRecords()) {
+      if ((r['dni']?.toString() ?? '') != dni) continue;
+      if (int.tryParse('${r['tipo']}') != tipo) continue;
+      if (!(r['fecha']?.toString() ?? '').startsWith(fecha)) continue;
+      if (tcencos.isNotEmpty && (r['tcencos']?.toString() ?? '') != tcencos) {
+        continue;
+      }
+      hora = r['hora']?.toString();
+    }
+    if (hora != null && hora.length >= 5) return hora.substring(0, 5);
+    return hora;
+  }
+
+  Future<void> _marcar(
+    PersonalDespacho persona,
+    Comida comida,
+    MomentoComida momento,
+  ) async {
+    _cerrarTeclado();
+    final tcencos = tcencosDe(_granja, _campania);
+    if (tcencos.length != 6) {
+      showWarningToast(context, 'Elija granja y campaña');
+      return;
+    }
+    final tipo = TipoMarcacion.codigo(comida, momento);
+    if (momento == MomentoComida.fin) {
+      final tipoIni = TipoMarcacion.codigo(comida, MomentoComida.inicio);
+      final tieneIni = _porGuardar.containsKey(tipoIni) ||
+          _ultimaHora(dni: persona.dni, tipo: tipoIni, tcencos: tcencos) !=
+              null;
+      if (!tieneIni) {
+        showWarningToast(context, 'Falta inicio');
+        return;
+      }
+    }
+    final ahoraReloj = TimeOfDay.now();
+    final hora =
+        '${ahoraReloj.hour.toString().padLeft(2, '0')}:${ahoraReloj.minute.toString().padLeft(2, '0')}';
+    setState(() => _porGuardar[tipo] = hora);
+  }
+
+  Future<void> _guardar() async {
+    _cerrarTeclado();
+    final todos = context.read<CatalogService>().personal;
+    final persona = _seleccionado(todos);
+    if (persona == null) {
+      showWarningToast(context, 'Elija una persona');
+      return;
+    }
+    if (_porGuardar.isEmpty) {
+      showWarningToast(context, 'Elija una hora');
+      return;
+    }
+    final tcencos = tcencosDe(_granja, _campania);
+    if (tcencos.length != 6) {
+      showWarningToast(context, 'Elija granja y campaña');
+      return;
+    }
+    final status = AppVersionService.fromStorage(
+      context.read<StorageService>(),
+    );
+    if (status.mustUpdate) {
+      await AppVersionService.showStatusDialog(context, status);
+      return;
+    }
+    final lineas = _porGuardar.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    for (final l in lineas) {
+      if (TipoMarcacion.momentoDe(l.key) != MomentoComida.fin) continue;
+      final c = TipoMarcacion.comidaDe(l.key);
+      if (c == null) continue;
+      final tIni = TipoMarcacion.codigo(c, MomentoComida.inicio);
+      if (!_porGuardar.containsKey(tIni) &&
+          _ultimaHora(dni: persona.dni, tipo: tIni, tcencos: tcencos) == null) {
+        showWarningToast(context, 'Falta inicio de ${etiquetaComida(c)}');
+        return;
+      }
+    }
+    if (!mounted) return;
+    await _guardarLineas(
+      tcencos: tcencos,
+      mensaje: 'Guardado',
+      marcas: [(persona: persona, lineas: lineas)],
+    );
+    if (!mounted) return;
+    setState(() => _porGuardar.clear());
+  }
+
+  Future<void> _guardarMasivo() async {
+    _cerrarTeclado();
+    if (_guardando) return;
+    final tcencos = tcencosDe(_granja, _campania);
+    if (tcencos.length != 6) {
+      showWarningToast(context, 'Elija granja y campa\u00f1a');
+      return;
+    }
+    final catalog = context.read<CatalogService>();
+    final porDni = <String, PersonalDespacho>{
+      for (final p in _preparar(catalog.personal, buscar: false)) p.dni: p,
+    };
+    final tIni = TipoMarcacion.codigo(_comida, MomentoComida.inicio);
+    final tFin = TipoMarcacion.codigo(_comida, MomentoComida.fin);
+    final marcas =
+        <({PersonalDespacho persona, List<MapEntry<int, String>> lineas})>[];
+    var nIni = 0;
+    var nFin = 0;
+    final iniGuardado = _indiceHoras(tIni, tcencos);
+    final sinInicio = [
+      for (final d in _selFin.keys)
+        if (!_selInicio.containsKey(d) && !iniGuardado.containsKey(d)) d,
+    ];
+    if (sinInicio.isNotEmpty) {
+      showWarningToast(
+        context,
+        'Falta inicio: ${sinInicio.length} ${sinInicio.length == 1 ? 'persona' : 'personas'}',
+      );
+      return;
+    }
+    for (final dni in {..._selInicio.keys, ..._selFin.keys}) {
+      final p = porDni[dni];
+      if (p == null) continue;
+      final lineas = <MapEntry<int, String>>[];
+      final hi = _selInicio[dni];
+      if (hi != null) {
+        lineas.add(MapEntry(tIni, hi));
+        nIni++;
+      }
+      final hf = _selFin[dni];
+      if (hf != null) {
+        lineas.add(MapEntry(tFin, hf));
+        nFin++;
+      }
+      if (lineas.isNotEmpty) marcas.add((persona: p, lineas: lineas));
+    }
+    if (marcas.isEmpty) {
+      showWarningToast(context, 'Elija personas');
+      return;
+    }
+    final status = AppVersionService.fromStorage(
+      context.read<StorageService>(),
+    );
+    if (status.mustUpdate) {
+      await AppVersionService.showStatusDialog(context, status);
+      return;
+    }
+    if (!mounted) return;
+    await _guardarLineas(
+      tcencos: tcencos,
+      mensaje: 'Guardadas ${nIni + nFin} marcas',
+      marcas: marcas,
+    );
+    if (!mounted) return;
+    setState(() {
+      _selInicio.clear();
+      _selFin.clear();
+    });
+  }
+
+  Future<void> _guardarLineas({
+    required String tcencos,
+    required String mensaje,
+    required List<
+      ({PersonalDespacho persona, List<MapEntry<int, String>> lineas})
+    >
+    marcas,
+  }) async {
+    setState(() => _guardando = true);
+    final gps = await _ubicacion.actual();
+    if (!mounted) return;
+    final storage = context.read<StorageService>();
+    final ahora = DateTime.now();
+    final segundos = ahora.second.toString().padLeft(2, '0');
+    final usuario = storage.getUserCodeSync() ?? '';
+    final dispositivo = storage.getDeviceId() ?? '';
+    final guardados = <Map<String, dynamic>>[];
+    for (final marca in marcas) {
+      for (final linea in marca.lineas) {
+        final registro = _datosMarca(
+          persona: marca.persona,
+          tipo: linea.key,
+          hora: linea.value,
+          tcencos: tcencos,
+          gps: gps,
+          ahora: ahora,
+          segundos: segundos,
+          usuario: usuario,
+          dispositivo: dispositivo,
+        );
+        await storage.saveRecord(registro);
+        guardados.add(registro);
+      }
+    }
+    // Intenta enviar de inmediato al servidor
+    var enviados = 0;
+    try {
+      final result = await ApiService().uploadMarcaciones(guardados);
+      final data = result['data'];
+      final resultados = data is Map ? data['resultados'] : null;
+      if (resultados is List) {
+        final porId = <String, bool>{};
+        for (final item in resultados) {
+          if (item is! Map) continue;
+          final id = item['id']?.toString() ?? '';
+          if (id.isNotEmpty) porId[id] = item['ok'] == true;
+        }
+        for (final r in guardados) {
+          final id = EvidenciaRecordId.of(r);
+          if (porId[id] == true) {
+            await storage.markRecordAsSynced({
+              ...r,
+              'id': id,
+              'guardado_backend': true,
+            });
+            enviados++;
+          }
+        }
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _guardando = false);
+    if (guardados.isNotEmpty && enviados == guardados.length) {
+      showSuccessToast(context, 'Guardado y enviado con \u00e9xito');
+    } else {
+      showWarningToast(
+        context,
+        'Guardado en el dispositivo. Env\u00edelo desde el men\u00fa lateral.',
+      );
+    }
+  }
+
+  Map<String, dynamic> _datosMarca({
+    required PersonalDespacho persona,
+    required int tipo,
+    required String hora,
+    required String tcencos,
+    required UbicacionMarcacion gps,
+    required DateTime ahora,
+    required String segundos,
+    required String usuario,
+    required String dispositivo,
+  }) {
+    final comida = TipoMarcacion.comidaDe(tipo);
+    final momento = TipoMarcacion.momentoDe(tipo);
+    return {
+      'id': const Uuid().v4(),
+      'reporte': 'marcacion',
+      'fecha': hoyYmd(ahora),
+      'hora': '$hora:$segundos',
+      'dni': persona.dni,
+      'codigo': persona.codigo,
+      'nombre': persona.nombre,
+      'cargo': persona.cargo,
+      'grupo': persona.grupo,
+      'nomGrupo': persona.nomGrupo,
+      'granja': _granja,
+      'campania': _campania,
+      'granjaNombre': _granjaNombre,
+      'tcencos': tcencos,
+      'tipo': tipo,
+      'comida': comida?.name ?? '',
+      'momento': momento?.name ?? '',
+      'tidandroid': dispositivo,
+      'tlatitud': gps.latitud,
+      'tlongitud': gps.longitud,
+      'tdireccion': gps.direccion,
+      'usuario': usuario,
+      'synced': false,
+    };
+  }
+
+  // ignore: unused_element
+  String _textoGranja() {
+    final nombre = _granjaNombre.isEmpty ? '' : ' · $_granjaNombre';
+    return '$_granja$_campania$nombre';
+  }
+
+  String _horaEnUso() {
+    if (_horaFijada && _horaMasiva.length >= 4) return _horaMasiva;
+    final n = TimeOfDay.now();
+    return '${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')}';
+  }
+
+  Map<String, String> _indiceHoras(int tipo, String tcencos) {
+    final fecha = hoyYmd();
+    final out = <String, String>{};
+    for (final r in context.read<StorageService>().getMyRecords()) {
+      if (int.tryParse('${r['tipo']}') != tipo) continue;
+      if (!(r['fecha']?.toString() ?? '').startsWith(fecha)) continue;
+      if (tcencos.isNotEmpty && (r['tcencos']?.toString() ?? '') != tcencos) {
+        continue;
+      }
+      final dni = r['dni']?.toString() ?? '';
+      if (dni.isEmpty) continue;
+      final hora = r['hora']?.toString() ?? '';
+      out[dni] = hora.length >= 5 ? hora.substring(0, 5) : hora;
+    }
+    return out;
+  }
+
+
+  void _cambiarVista(VistaMarcacion vista) {
+    if (_guardando || vista == _vista) return;
+    _cerrarTeclado();
+    setState(() => _vista = vista);
+  }
+
+  void _cambiarComida(Comida comida) {
+    if (_guardando || comida == _comida) return;
+    _cerrarTeclado();
+    setState(() {
+      _comida = comida;
+      _selInicio.clear();
+      _selFin.clear();
+    });
+  }
+
+  Map<String, String> _selDe(MomentoComida m) =>
+      m == MomentoComida.inicio ? _selInicio : _selFin;
+
+  /// Marca o desmarca con la hora de este momento (o la fijada arriba).
+  void _toggleMarca(String dni, MomentoComida m) {
+    if (_guardando) return;
+    _cerrarTeclado();
+    final sel = _selDe(m);
+    if (m == MomentoComida.fin &&
+        !sel.containsKey(dni) &&
+        !_tieneInicioMasivo(dni)) {
+      showWarningToast(context, 'Falta inicio');
+      return;
+    }
+    setState(() {
+      if (sel.remove(dni) == null) {
+        sel[dni] = _horaEnUso();
+      } else if (m == MomentoComida.inicio && !_tieneInicioMasivo(dni)) {
+        _selFin.remove(dni);
+      }
+    });
+  }
+
+  /// Inicio de la comida actual: guardado hoy o elegido en esta pasada.
+  bool _tieneInicioMasivo(String dni) {
+    if (_selInicio.containsKey(dni)) return true;
+    final tcencos = tcencosDe(_granja, _campania);
+    return _indiceHoras(
+      TipoMarcacion.codigo(_comida, MomentoComida.inicio),
+      tcencos,
+    ).containsKey(dni);
+  }
+
+  void _marcarGrupo(List<String> dnis, MomentoComida m, bool marcar) {
+    if (_guardando) return;
+    _cerrarTeclado();
+    setState(() {
+      final sel = _selDe(m);
+      final hora = _horaEnUso();
+      for (final d in dnis) {
+        if (marcar) {
+          if (m == MomentoComida.fin && !_tieneInicioMasivo(d)) continue;
+          sel.putIfAbsent(d, () => hora);
+        } else {
+          sel.remove(d);
+          if (m == MomentoComida.inicio && !_tieneInicioMasivo(d)) {
+            _selFin.remove(d);
+          }
+        }
+      }
+    });
+  }
+
+  // ignore: unused_element
+  Future<bool?> _resumen(List<Widget> filas) {
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.92,
+          minChildSize: 0.5,
+          maxChildSize: 1,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: context.scaffoldMuted,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 8, 16),
+                    decoration: BoxDecoration(
+                      color: context.surfaceCard,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                      boxShadow: context.cardShadow(blur: 10, dy: -2),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: context.textThemeMuted.withValues(
+                              alpha: 0.3,
+                            ),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.15,
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.fact_check_outlined,
+                                color: AppColors.primary,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Resumen del registro',
+                                style: TextStyle(
+                                  color: context.textThemePrimary,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () =>
+                                  Navigator.pop(sheetContext, false),
+                              icon: Icon(
+                                Icons.close,
+                                color: context.textThemeSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: context.surfaceCard,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: Column(children: filas),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                    decoration: BoxDecoration(
+                      color: context.surfaceCard,
+                      boxShadow: context.cardShadow(blur: 10, dy: -2),
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(sheetContext, false),
+                            child: const Text('Cancelar'),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(sheetContext, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.registroAccent,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text('Confirmar y guardar'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final catalog = context.watch<CatalogService>();
+    final todos = catalog.personal;
+    final lista = _filtrar(todos);
+    final persona = _seleccionado(todos);
+    final tcencos = tcencosDe(_granja, _campania);
+    final masivo = _vista == VistaMarcacion.varias;
+    final grupos = masivo
+        ? agruparMarcacion(
+            personas: lista,
+            comida: _comida,
+            remotos: catalog.horarios,
+            origen: catalog.horarioOrigen,
+          )
+        : const <GrupoMarcacion>[];
+    final horasInicio = masivo
+        ? _indiceHoras(
+            TipoMarcacion.codigo(_comida, MomentoComida.inicio),
+            tcencos,
+          )
+        : const <String, String>{};
+    final horasFin = masivo
+        ? _indiceHoras(
+            TipoMarcacion.codigo(_comida, MomentoComida.fin),
+            tcencos,
+          )
+        : const <String, String>{};
+    final nMarcas = _selInicio.length + _selFin.length;
+    final nPersonas = {..._selInicio.keys, ..._selFin.keys}.length;
+
+    return Scaffold(
+      drawer: const AppDrawer(),
+      appBar: SectionAppBar(
+        title: AppStrings.menuMarcacion,
+        sectionIcon: Icons.restaurant_rounded,
+      ),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              Expanded(
+                child: CustomScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          children: [
+                            AppCard(
+                              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                              child: GranjaCampaniaFields(
+                                fechaYmd: hoyYmd(),
+                                granja: _granja,
+                                granjaNombre: _granjaNombre,
+                                campania: _campania,
+                                campanias: _campanias,
+                                onSeleccion: (sel) async {
+                                  setState(() {
+                                    _granja = sel.granja;
+                                    _granjaNombre = sel.granjaNombre;
+                                    _campania = sel.campania;
+                                    _campanias = sel.campanias;
+                                  });
+                                  if (sel.desdeGranja) {
+                                    await context
+                                        .read<StorageService>()
+                                        .saveGranjaTrabajo(sel.granja);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            MarcacionVistaSwitch(
+                              vista: _vista,
+                              onChanged: _cambiarVista,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    PinnedHeaderSliver(
+                      child: ColoredBox(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (masivo) ...[
+                                MarcacionContextoMasivo(
+                                  comida: _comida,
+                                  hora: _horaEnUso(),
+                                  onComida: _cambiarComida,
+                                ),
+                                const SizedBox(height: 6),
+                              ],
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _buscar,
+                                      focusNode: _focoBuscar,
+                                      keyboardType: TextInputType.text,
+                                      onChanged: (v) {
+                                        setState(() {});
+                                        _elegirSiDniCompleto(v, todos);
+                                      },
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                            ),
+                                        hintText: 'DNI o nombre',
+                                        prefixIcon: const Icon(
+                                          Icons.search_rounded,
+                                        ),
+                                        suffixIcon: _buscar.text.isEmpty
+                                            ? null
+                                            : IconButton(
+                                                onPressed: () {
+                                                  _buscar.clear();
+                                                  setState(() {});
+                                                },
+                                                icon: const Icon(
+                                                  Icons.close_rounded,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  IconButton.filled(
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: AppColors.registroAccent,
+                                      foregroundColor: Colors.white,
+                                      fixedSize: const Size(44, 44),
+                                    ),
+                                    onPressed: () => _escanear(todos),
+                                    icon: const Icon(
+                                      Icons.qr_code_scanner_rounded,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              _filtroGrupos(todos),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                      sliver: SliverList.list(
+                        children: [
+                    if (masivo)
+                      if (!catalog.hasPersonal)
+                        _vacio(
+                          context,
+                          'Descargue el personal',
+                          Icons.cloud_download_rounded,
+                        )
+                      else if (grupos.isEmpty)
+                        _vacio(
+                          context,
+                          _buscar.text.trim().isEmpty
+                              ? 'Sin personal'
+                              : 'Sin resultados',
+                          Icons.search_off_rounded,
+                        )
+                      else
+                        MarcacionListaMasiva(
+                          grupos: grupos,
+                          comida: _comida,
+                          horasInicio: horasInicio,
+                          horasFin: horasFin,
+                          selInicio: _selInicio,
+                          selFin: _selFin,
+                          onToggle: _toggleMarca,
+                          onGrupo: _marcarGrupo,
+                        )
+                    else if (persona != null) ...[
+                      _personaCabeza(persona),
+                      const SizedBox(height: 12),
+                      ..._comidasDe(persona, tcencos),
+                    ] else if (!catalog.hasPersonal)
+                      _vacio(
+                        context,
+                        'Descargue el personal',
+                        Icons.cloud_download_rounded,
+                      )
+                    else if (lista.isEmpty)
+                      _vacio(
+                        context,
+                        'Sin resultados',
+                        Icons.search_off_rounded,
+                      )
+                    else
+                      ..._listaPorGrupos(lista, tcencos),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (masivo)
+                MarcacionBarraGuardar(
+                  personas: nPersonas,
+                  detalle:
+                      '${etiquetaComida(_comida)} \u00b7 Inicio ${_selInicio.length} \u00b7 Fin ${_selFin.length}',
+                  color: colorDeComida(_comida),
+                  onGuardar: _guardando || nMarcas == 0
+                      ? null
+                      : _guardarMasivo,
+                ),
+            ],
+          ),
+          if (_guardando)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Color(0x33000000),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _elegirSiDniCompleto(String raw, List<PersonalDespacho> todos) {
+    final q = raw.replaceAll(RegExp(r'\D'), '');
+    if (q.length != 8) return;
+    final match = todos.where((p) => p.dni == q);
+    if (match.length != 1) return;
+    if (_vista == VistaMarcacion.varias) {
+      _sumarPorDni(match.first);
+      return;
+    }
+    _elegirPersona(match.first.dni);
+  }
+
+  void _sumarPorDni(PersonalDespacho persona) {
+    final tcencos = tcencosDe(_granja, _campania);
+    final ini = _indiceHoras(
+      TipoMarcacion.codigo(_comida, MomentoComida.inicio),
+      tcencos,
+    );
+    final m =
+        ini.containsKey(persona.dni) || _selInicio.containsKey(persona.dni)
+        ? MomentoComida.fin
+        : MomentoComida.inicio;
+    if (_selDe(m).containsKey(persona.dni)) {
+      showWarningToast(context, 'Ya marcada');
+      return;
+    }
+    _cerrarTeclado();
+    setState(() => _selDe(m)[persona.dni] = _horaEnUso());
+  }
+
+  Future<void> _escanear(List<PersonalDespacho> todos) async {
+    final dni = await DniScannerScreen.open(context);
+    if (!mounted || dni == null || dni.isEmpty) return;
+    _buscar.text = dni;
+    _elegirSiDniCompleto(dni, todos);
+    if (_dniSel != dni) {
+      _cerrarTeclado();
+      setState(() {});
+    }
+  }
+
+  Widget _personaCabeza(PersonalDespacho p) {
+    final color = colorDeGrupo(p.grupo, p.nomGrupo);
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: color.withValues(alpha: 0.15),
+            child: Text(
+              p.nombre.isEmpty ? '?' : p.nombre[0],
+              style: TextStyle(color: color, fontWeight: FontWeight.w800),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  p.nombre,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textThemePrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  '${p.dni} · ${p.grupoVisible}',
+                  style: TextStyle(
+                    color: context.textThemeMuted,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () {
+              _cerrarTeclado();
+              setState(() {
+                _dniSel = null;
+                _porGuardar.clear();
+              });
+            },
+            icon: const Icon(Icons.close_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _comidasDe(PersonalDespacho p, String tcencos) {
+    return [
+      for (var i = 0; i < Comida.values.length; i++) ...[
+        _comidaCard(p, Comida.values[i], tcencos, orden: i + 1),
+        const SizedBox(height: 10),
+      ],
+    ];
+  }
+
+  String? _horaVisible(String dni, int tipo, String tcencos) {
+    return _porGuardar[tipo] ??
+        _ultimaHora(dni: dni, tipo: tipo, tcencos: tcencos);
+  }
+
+  String _claveGrupo(PersonalDespacho p) {
+    final n = normGrupo(p.grupo, p.nomGrupo);
+    return n.isEmpty ? 'SIN GRUPO' : n;
+  }
+
+  Widget _filtroGrupos(List<PersonalDespacho> todos) {
+    final claves = {for (final p in todos) _claveGrupo(p)}.toList()
+      ..sort((a, b) {
+        int num(String c) {
+          final m = RegExp(r'^G(\d+)$').firstMatch(c);
+          return m == null ? 1000 : int.parse(m.group(1)!);
+        }
+
+        final d = num(a).compareTo(num(b));
+        return d != 0 ? d : a.compareTo(b);
+      });
+    if (claves.isEmpty) return const SizedBox.shrink();
+    String nombreChip(String c) {
+      if (RegExp(r'^G\d+$').hasMatch(c)) return c;
+      for (final p in todos) {
+        if (_claveGrupo(p) != c) continue;
+        final n = p.nomGrupo.trim();
+        if (n.isNotEmpty) return tituloGrupo(n, c);
+      }
+      return c;
+    }
+
+    Widget chip(String label, String? valor) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          label: Text(label),
+          selected: _grupoFiltro == valor,
+          onSelected: (_) {
+            _cerrarTeclado();
+            setState(() => _grupoFiltro = valor);
+          },
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          chip('Todos', null),
+          for (final c in claves) chip(nombreChip(c), c),
+        ],
+      ),
+    );
+  }
+
+  Widget _comidaCard(
+    PersonalDespacho p,
+    Comida comida,
+    String tcencos, {
+    required int orden,
+  }) {
+    final color = colorDeComida(comida);
+    final tipoIni = TipoMarcacion.codigo(comida, MomentoComida.inicio);
+    final tipoFin = TipoMarcacion.codigo(comida, MomentoComida.fin);
+    final ini = _horaVisible(p.dni, tipoIni, tcencos);
+    final fin = _horaVisible(p.dni, tipoFin, tcencos);
+    final hayPendiente =
+        _porGuardar.containsKey(tipoIni) || _porGuardar.containsKey(tipoFin);
+    return AppCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(iconoDeComida(comida), color: color, size: 24),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '$orden  ${etiquetaComida(comida)}',
+                style: TextStyle(
+                  color: context.textThemePrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _botonMomento(
+                  label: etiquetaMomento(MomentoComida.inicio),
+                  hora: ini,
+                  porGuardar: _porGuardar.containsKey(tipoIni),
+                  color: color,
+                  onTap: () => _marcar(p, comida, MomentoComida.inicio),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _botonMomento(
+                  label: etiquetaMomento(MomentoComida.fin),
+                  hora: fin,
+                  porGuardar: _porGuardar.containsKey(tipoFin),
+                  color: color,
+                  onTap: () => _marcar(p, comida, MomentoComida.fin),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 76,
+                height: 108,
+                child: ElevatedButton(
+                  onPressed: _guardando || !hayPendiente ? null : _guardar,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.guardado,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_rounded, size: 28),
+                      SizedBox(height: 4),
+                      Text(
+                        'Guardar',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  Widget _botonMomento({
+    required String label,
+    required String? hora,
+    required bool porGuardar,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    if (!porGuardar && hora != null) color = AppColors.guardado;
+    return Material(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: _guardando ? null : onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          height: 108,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color, width: 1.5),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                hora ?? '--:--',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (porGuardar)
+                Text(
+                  'Sin guardar',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              if (!porGuardar && hora != null) ...[
+                const SizedBox(height: 4),
+                _chipGuardado(color),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chipGuardado(Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.guardado,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_rounded, color: Colors.white, size: 14),
+          SizedBox(width: 4),
+          Text(
+            'Guardado',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  Widget _filaResumen(String etiqueta, String valor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 88,
+            child: Text(
+              etiqueta,
+              style: TextStyle(
+                color: context.textThemeMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              valor,
+              style: TextStyle(
+                color: context.textThemePrimary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Map<String, Map<Comida, Set<MomentoComida>>> _marcasDia(String tcencos) {
+    final out = <String, Map<Comida, Set<MomentoComida>>>{};
+    if (tcencos.length != 6) return out;
+    final fecha = hoyYmd();
+    for (final r in context.read<StorageService>().getMyRecords()) {
+      if (!(r['fecha']?.toString() ?? '').startsWith(fecha)) continue;
+      if ((r['tcencos']?.toString() ?? '') != tcencos) continue;
+      final dni = r['dni']?.toString() ?? '';
+      final tipo = int.tryParse('${r['tipo']}');
+      if (dni.isEmpty || tipo == null) continue;
+      final c = TipoMarcacion.comidaDe(tipo);
+      final m = TipoMarcacion.momentoDe(tipo);
+      if (c == null || m == null) continue;
+      out.putIfAbsent(dni, () => {}).putIfAbsent(c, () => {}).add(m);
+    }
+    return out;
+  }
+
+  List<Widget> _listaPorGrupos(List<PersonalDespacho> lista, String tcencos) {
+    final marcas = _marcasDia(tcencos);
+    final grupos = <String, List<PersonalDespacho>>{};
+    for (final p in lista) {
+      grupos.putIfAbsent(_claveGrupo(p), () => []).add(p);
+    }
+    int num(String c) {
+      final m = RegExp(r'^G(\d+)$').firstMatch(c);
+      return m == null ? 1000 : int.parse(m.group(1)!);
+    }
+
+    final claves = grupos.keys.toList()
+      ..sort((a, b) {
+        final d = num(a).compareTo(num(b));
+        return d != 0 ? d : a.compareTo(b);
+      });
+    final out = <Widget>[];
+    for (final c in claves) {
+      final ps = grupos[c]!;
+      final p0 = ps.first;
+      final nom = p0.nomGrupo.trim();
+      final titulo =
+          RegExp(r'^G\d+$').hasMatch(c) || nom.isEmpty ? c : tituloGrupo(nom, c);
+      final color = colorDeGrupo(p0.grupo, p0.nomGrupo);
+      out.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  titulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textThemePrimary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                '${ps.length} pers.',
+                style: TextStyle(color: context.textThemeMuted, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+      for (final p in ps) {
+        out.add(_personaTile(p, marcas[p.dni] ?? const {}));
+      }
+    }
+    return out;
+  }
+
+  Widget _personaTile(
+    PersonalDespacho p,
+    Map<Comida, Set<MomentoComida>> marcas,
+  ) {
+    final color = colorDeGrupo(p.grupo, p.nomGrupo);
+    final hoy = p.fecha == hoyYmd();
+    final guardadas = [
+      for (final c in Comida.values)
+        if ((marcas[c] ?? const {}).isNotEmpty) c,
+    ];
+    String badge(Comida c) {
+      final s = marcas[c] ?? const {};
+      final ini = s.contains(MomentoComida.inicio);
+      final fin = s.contains(MomentoComida.fin);
+      final l = etiquetaComida(c).substring(0, 1).toUpperCase();
+      return '$l ${ini && fin ? 'I\u00b7F' : ini ? 'I' : 'F'}';
+    }
+
+    final guardadoHora = guardadas.isEmpty ? null : '';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: guardadoHora != null ? AppColors.guardado.withValues(alpha: 0.08) : context.surfaceCard,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _elegirPersona(p.dni),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: color.withValues(alpha: 0.14),
+                  child: Text(
+                    p.nombre.isEmpty ? '?' : p.nombre[0],
+                    style: TextStyle(color: color, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p.nombre,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.textThemePrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        '${p.dni} · ${p.grupoVisible}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.textThemeMuted,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      if (guardadas.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: [
+                              for (final c in guardadas)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: colorDeComida(c).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        badge(c),
+                                        style: TextStyle(
+                                          color: colorDeComida(c),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (!hoy && p.fecha.isNotEmpty)
+                  Text(
+                    p.fecha.substring(8),
+                    style: TextStyle(
+                      color: context.textThemeMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _vacio(BuildContext context, String texto, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 36),
+      child: Column(
+        children: [
+          Icon(icon, size: 36, color: context.textThemeMuted),
+          const SizedBox(height: 8),
+          Text(texto, style: TextStyle(color: context.textThemeSecondary)),
+        ],
+      ),
+    );
+  }
+}

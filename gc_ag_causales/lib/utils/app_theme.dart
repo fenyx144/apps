@@ -66,9 +66,11 @@ class AppTheme {
     final textPrimary =
         isDark ? const Color(0xFFA5D6A7) : AppColors.textPrimary;
     final textSelected =
-        isDark ? const Color(0xFFC8E6C9) : AppColors.textSelectedValue;
+        isDark ? const Color(0xFFE8F5E9) : AppColors.textSelectedValue;
     final textMuted =
         isDark ? const Color(0xFF81C784) : AppColors.textMuted;
+    final textLabel =
+        isDark ? const Color(0xFF9E9E9E) : AppColors.textLabel;
     final borderColor =
         isDark ? const Color(0xFF424242) : Colors.grey.shade300;
 
@@ -141,9 +143,14 @@ class AppTheme {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         labelStyle: TextStyle(
-          fontSize: 13,
+          fontSize: AppColors.inputLabelFontSize,
           fontWeight: FontWeight.w600,
-          color: isDark ? AppColors.textSecondary : AppColors.textSecondary,
+          color: textLabel,
+        ),
+        floatingLabelStyle: TextStyle(
+          fontSize: AppColors.inputFloatingLabelFontSize,
+          fontWeight: FontWeight.w600,
+          color: AppColors.primary,
         ),
         hintStyle: TextStyle(fontSize: 14, color: textMuted),
         border: OutlineInputBorder(
@@ -185,6 +192,7 @@ class AppTheme {
         _AgFormColors(
           valueSelected: textSelected,
           valuePlaceholder: textMuted,
+          labelMuted: textLabel,
           iconAccent: AppColors.iconAccent,
         ),
       ],
@@ -196,22 +204,26 @@ class _AgFormColors extends ThemeExtension<_AgFormColors> {
   const _AgFormColors({
     required this.valueSelected,
     required this.valuePlaceholder,
+    required this.labelMuted,
     required this.iconAccent,
   });
 
   final Color valueSelected;
   final Color valuePlaceholder;
+  final Color labelMuted;
   final Color iconAccent;
 
   @override
   _AgFormColors copyWith({
     Color? valueSelected,
     Color? valuePlaceholder,
+    Color? labelMuted,
     Color? iconAccent,
   }) {
     return _AgFormColors(
       valueSelected: valueSelected ?? this.valueSelected,
       valuePlaceholder: valuePlaceholder ?? this.valuePlaceholder,
+      labelMuted: labelMuted ?? this.labelMuted,
       iconAccent: iconAccent ?? this.iconAccent,
     );
   }
@@ -223,6 +235,7 @@ class _AgFormColors extends ThemeExtension<_AgFormColors> {
       valueSelected: Color.lerp(valueSelected, other.valueSelected, t)!,
       valuePlaceholder:
           Color.lerp(valuePlaceholder, other.valuePlaceholder, t)!,
+      labelMuted: Color.lerp(labelMuted, other.labelMuted, t)!,
       iconAccent: Color.lerp(iconAccent, other.iconAccent, t)!,
     );
   }
@@ -234,6 +247,7 @@ extension AgFormColorsX on BuildContext {
       const _AgFormColors(
         valueSelected: AppColors.textSelectedValue,
         valuePlaceholder: AppColors.textMuted,
+        labelMuted: AppColors.textLabel,
         iconAccent: AppColors.iconAccent,
       );
 }

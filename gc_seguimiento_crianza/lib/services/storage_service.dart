@@ -7,7 +7,13 @@ import '../utils/record_id.dart';
 
 class StorageService with ChangeNotifier {
   final SharedPreferences _prefs;
-  StorageService(this._prefs);
+  String? _lastDownloadDateCache;
+  String? _lastSyncDateCache;
+
+  StorageService(this._prefs) {
+    _lastDownloadDateCache = _prefs.getString('last_download_date');
+    _lastSyncDateCache = _prefs.getString('last_sync_date');
+  }
 
   Future<bool> isLoggedIn() async =>
       _prefs.getBool(AppConstants.keyIsLoggedIn) ?? false;
@@ -42,6 +48,14 @@ class StorageService with ChangeNotifier {
 
   Future<void> clearAll() async {
     await _prefs.clear();
+    _lastDownloadDateCache = null;
+    _lastSyncDateCache = null;
+    notifyListeners();
+  }
+
+  /// Cierra sesión sin borrar catálogos, credenciales offline ni registros.
+  Future<void> clearSession() async {
+    await _prefs.setBool(AppConstants.keyIsLoggedIn, false);
     notifyListeners();
   }
 
@@ -83,12 +97,20 @@ class StorageService with ChangeNotifier {
     if (list == null) return [];
 
     var needsPersist = false;
+    final miUsuario = getUserCodeSync() ?? '';
     final records = list.map((e) {
       final raw = Map<String, dynamic>.from(jsonDecode(e) as Map);
       if (EvidenciaRecordId.hadLegacyFields(raw)) {
         needsPersist = true;
       }
-      return EvidenciaRecordId.normalize(raw);
+      final r = EvidenciaRecordId.normalize(raw);
+      // Un registro sin usuario es legado: se lo queda quien lo abre, una sola
+      // vez, para que deje de ser visible para todos los usuarios del equipo.
+      if (miUsuario.isNotEmpty && (r['usuario']?.toString() ?? '').isEmpty) {
+        r['usuario'] = miUsuario;
+        needsPersist = true;
+      }
+      return r;
     }).toList();
 
     if (needsPersist) {
@@ -104,6 +126,34 @@ class StorageService with ChangeNotifier {
   List<Map<String, dynamic>> getRecordsPendientes() {
     return getAllRecords()
         .where((r) => r['synced'] != true && r['synced'] != 'true')
+        .toList();
+  }
+
+  /// Registros visibles para el usuario actual (solo los suyos).
+  List<Map<String, dynamic>> getMyRecords() {
+    final miUsuario = getUserCodeSync() ?? '';
+    return getAllRecords().where((r) {
+      final u = r['usuario']?.toString() ?? '';
+      return u == miUsuario;
+    }).toList();
+  }
+
+  /// Pendientes visibles para el usuario actual.
+  List<Map<String, dynamic>> getMyRecordsPendientes() {
+    return getMyRecords()
+        .where((r) => r['synced'] != true && r['synced'] != 'true')
+        .toList();
+  }
+
+  /// Cantidad de pendientes visibles para el usuario actual.
+  int getMyPendingCount() => getMyRecordsPendientes().length;
+
+  /// Registros del usuario actual para una fecha específica.
+  List<Map<String, dynamic>> getMyRecordsByDate(DateTime date) {
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    return getMyRecords()
+        .where((r) => (r['fecha']?.toString() ?? '').startsWith(dateStr))
         .toList();
   }
 
@@ -140,26 +190,40 @@ class StorageService with ChangeNotifier {
     notifyListeners();
   }
 
+  static String _formatSyncTimestamp(DateTime now) =>
+      '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
+      '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
   Future<void> setLastSyncDate() async {
-    final now = DateTime.now();
-    final s =
-        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} ${now.hour}:${now.minute}';
-    await _prefs.setString('last_sync_date', s);
+    final s = _formatSyncTimestamp(DateTime.now());
+    _lastSyncDateCache = s;
     notifyListeners();
+    await _prefs.setString('last_sync_date', s);
   }
 
   Future<String?> getLastSyncDate() async => _prefs.getString('last_sync_date');
 
+  String get lastSyncDateDisplay {
+    final p = _prefs.getString('last_sync_date');
+    if (p != null && p.isNotEmpty) return p;
+    return _lastSyncDateCache ?? '--/--/--';
+  }
+
   Future<void> setLastDownloadDate() async {
-    final now = DateTime.now();
-    final s =
-        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} ${now.hour}:${now.minute}';
-    await _prefs.setString('last_download_date', s);
+    final s = _formatSyncTimestamp(DateTime.now());
+    _lastDownloadDateCache = s;
     notifyListeners();
+    await _prefs.setString('last_download_date', s);
   }
 
   Future<String?> getLastDownloadDate() async =>
       _prefs.getString('last_download_date');
+
+  String get lastDownloadDateDisplay {
+    final p = _prefs.getString('last_download_date');
+    if (p != null && p.isNotEmpty) return p;
+    return _lastDownloadDateCache ?? '--/--/--';
+  }
 
   Future<void> saveCencosGalpones(Map<String, dynamic> data) async {
     final indices = GalponesResolver.buildIndicesFromApiData(data);
@@ -191,6 +255,15 @@ class StorageService with ChangeNotifier {
       'granjas con galpones=${indices.galponesPorGranja.length}, '
       'total galpones=${indices.totalGalpones}',
     );
+    notifyListeners();
+  }
+
+  Future<void> clearCencosGalpones() async {
+    await _prefs.remove(AppConstants.keyCencosGalpones);
+    await _prefs.remove(AppConstants.keyCencosLista);
+    await _prefs.remove(AppConstants.keyGalponesPorCenco);
+    await _prefs.remove(AppConstants.keyGalponesPorGranja);
+    await _prefs.remove(AppConstants.keyProyeccion);
     notifyListeners();
   }
 
@@ -248,6 +321,91 @@ class StorageService with ChangeNotifier {
     );
   }
 
+  List<Map<String, dynamic>> getGalponesMetaPorCenco(
+    String norm6, {
+    List<Map<String, dynamic>> fallbackGalpones = const [],
+  }) {
+    if (norm6.length < 6) return fallbackGalpones;
+    for (final entry in getGalponesPorCencoLocal().entries) {
+      if (GalponesResolver.normalizarCodigoCenco(entry.key) != norm6) {
+        continue;
+      }
+      if (entry.value.isNotEmpty) {
+        return List<Map<String, dynamic>>.from(entry.value);
+      }
+    }
+    for (final c in getCencosListaLocal()) {
+      final cc = GalponesResolver.normalizarCodigoCenco(
+        (c['codigo'] ?? '').toString(),
+      );
+      if (cc != norm6) continue;
+      final gps = GalponesResolver.parseGalponesList(
+        c['galpones'],
+        codigoCenco: cc,
+      );
+      if (gps.isNotEmpty) return gps;
+    }
+    if (fallbackGalpones.isNotEmpty) {
+      return GalponesResolver.filterGalponesPorCenco(
+        fallbackGalpones,
+        norm6,
+      );
+    }
+    return GalponesResolver.filterGalponesPorCenco(
+      getGalponesForGranja(norm6.substring(0, 3)),
+      norm6,
+    );
+  }
+
+  ({int total, int conFecIng}) statsFecIngMin() {
+    var total = 0;
+    var conFecIng = 0;
+    getGalponesPorCencoLocal().forEach((_, list) {
+      for (final g in list) {
+        total++;
+        final fi = (g['fec_ing_min'] ?? '').toString().trim();
+        if (fi.isNotEmpty && fi != '0000-00-00') conFecIng++;
+      }
+    });
+    return (total: total, conFecIng: conFecIng);
+  }
+
+  Future<void> mergeCampaniaInfoFromApi({
+    required String granja3,
+    required String campania,
+    required Map<String, dynamic> data,
+  }) async {
+    final g3 = _normGranjaKey(granja3);
+    final camp = _padCampania(campania);
+    if (g3.isEmpty || camp.isEmpty) return;
+
+    final fi = (data['fecha_inicio'] ?? '').toString().trim();
+    final ff = (data['fecha_fin'] ?? '').toString().trim();
+    if (!_validYmd(fi) && !_validYmd(ff) && data['activa'] == null) return;
+
+    final prev = getProyeccion() ?? {};
+    final campMap = _campaniasMapFrom(prev['campanias_por_granja']);
+    final rows = List<Map<String, dynamic>>.from(
+      (campMap[g3] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map)) ??
+          [],
+    );
+
+    var idx = rows.indexWhere(
+      (r) => _padCampania((r['campania'] ?? '').toString()) == camp,
+    );
+    if (idx < 0) {
+      rows.add({'campania': camp, 'codigo': g3 + camp});
+      idx = rows.length - 1;
+    }
+    final row = Map<String, dynamic>.from(rows[idx]);
+    if (_validYmd(fi)) row['fecha_inicio'] = fi;
+    if (_validYmd(ff)) row['fecha_fin'] = ff;
+    rows[idx] = row;
+
+    await saveProyeccion({'campanias_por_granja': {g3: rows}});
+  }
+
   void _ensureGalponesIndicesMigrated() {
     final hasIndexed = _prefs.getString(AppConstants.keyGalponesPorGranja);
     if (hasIndexed != null && hasIndexed.isNotEmpty) return;
@@ -296,13 +454,289 @@ class StorageService with ChangeNotifier {
   }
 
   Future<void> saveProyeccion(Map<String, dynamic> data) async {
-    await _prefs.setString(AppConstants.keyProyeccion, jsonEncode(data));
+    final prev = getProyeccion();
+    final merged = _mergeProyeccionMaps(prev, data);
+    await _prefs.setString(AppConstants.keyProyeccion, jsonEncode(merged));
     notifyListeners();
+  }
+
+  /// Acumula campañas/cencos ccos en el dispositivo y poda fuera de retención.
+  static Map<String, dynamic> _mergeProyeccionMaps(
+    Map<String, dynamic>? prev,
+    Map<String, dynamic> next,
+  ) {
+    final hoy = _ymd(DateTime.now());
+    final desde = _ymd(
+      DateTime.now().subtract(
+        Duration(days: AppConstants.catalogHistoricoDias),
+      ),
+    );
+
+    final out = Map<String, dynamic>.from(next);
+    out['fecha'] = hoy;
+    out['catalogo_actualizado_en'] = DateTime.now().toIso8601String();
+    out['catalogo_retencion_desde'] = desde;
+    out['fuente_fechas'] = out['fuente_fechas'] ?? 'ccos';
+
+    final prevCamp = _campaniasMapFrom(prev?['campanias_por_granja']);
+    final nextCamp = _campaniasMapFrom(out['campanias_por_granja']);
+    final granjasKeys = {...prevCamp.keys, ...nextCamp.keys};
+    final mergedCamp = <String, dynamic>{};
+
+    for (final gk in granjasKeys) {
+      final g3 = _normGranjaKey(gk);
+      if (g3.isEmpty) continue;
+      final rows = _mergeCampaniasRows(
+        prevCamp[g3] ?? prevCamp[gk],
+        nextCamp[g3] ?? nextCamp[gk],
+      );
+      final podadas = rows
+          .where((row) => _campaniaDentroRetencion(row, desde, hoy))
+          .toList();
+      if (podadas.isNotEmpty) {
+        mergedCamp[g3] = podadas;
+      }
+    }
+    out['campanias_por_granja'] = mergedCamp;
+
+    out['cencos'] = _mergeCencosList(
+      prev?['cencos'],
+      out['cencos'],
+      desde,
+      hoy,
+    );
+    out['granjas'] = _mergeGranjasList(prev?['granjas'], out['granjas']);
+
+    final fechasIni = <String>[];
+    mergedCamp.forEach((_, raw) {
+      if (raw is! List) return;
+      for (final row in raw) {
+        if (row is! Map) continue;
+        final fi = _fechaInicioRow(Map<String, dynamic>.from(row));
+        if (fi.isNotEmpty) fechasIni.add(fi);
+      }
+    });
+    fechasIni.sort();
+    out['historico_desde'] = fechasIni.isEmpty ? desde : fechasIni.first;
+    out['historico_hasta'] = hoy;
+
+    return out;
+  }
+
+  static String _ymd(DateTime d) {
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
+
+  static String _normGranjaKey(String gk) {
+    var s = gk.trim();
+    while (s.length < 3) {
+      s = '0$s';
+    }
+    return s.length > 3 ? s.substring(0, 3) : s;
+  }
+
+  static bool _validYmd(String? raw) {
+    final s = (raw ?? '').trim();
+    return RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s) && s != '0000-00-00';
+  }
+
+  static Map<String, dynamic> _campaniasMapFrom(dynamic raw) {
+    if (raw is! Map) return {};
+    final out = <String, dynamic>{};
+    raw.forEach((key, value) {
+      final g3 = _normGranjaKey(key.toString());
+      if (g3.isEmpty || value is! List) return;
+      out[g3] = value
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    });
+    return out;
+  }
+
+  static String _padCampania(String camp) {
+    var d = camp.replaceAll(RegExp(r'\D'), '');
+    if (d.length >= 3) return d.substring(d.length - 3);
+    while (d.length < 3) {
+      d = '0$d';
+    }
+    return d.substring(d.length - 3);
+  }
+
+  static String _fechaInicioRow(Map<String, dynamic> row) {
+    for (final k in ['fecha_inicio', 'fec_inicio', 'fecini']) {
+      final v = (row[k] ?? '').toString().trim();
+      if (_validYmd(v)) return v;
+    }
+    return '';
+  }
+
+  static String _fechaFinRow(Map<String, dynamic> row) {
+    for (final k in ['fecha_fin', 'fec_fin', 'fecfin']) {
+      final v = (row[k] ?? '').toString().trim();
+      if (_validYmd(v)) return v;
+    }
+    return '';
+  }
+
+  static bool _campaniaDentroRetencion(
+    Map<String, dynamic> row,
+    String desdeYmd,
+    String hastaYmd,
+  ) {
+    final fi = _fechaInicioRow(row);
+    if (fi.isEmpty) return true;
+    if (fi.compareTo(hastaYmd) > 0) return false;
+    final ff = _fechaFinRow(row);
+    if (ff.isEmpty) return true;
+    return ff.compareTo(desdeYmd) >= 0;
+  }
+
+  static List<Map<String, dynamic>> _mergeCampaniasRows(
+    dynamic prevRaw,
+    dynamic nextRaw,
+  ) {
+    final byCamp = <String, Map<String, dynamic>>{};
+
+    void absorb(dynamic raw) {
+      if (raw is! List) return;
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final row = Map<String, dynamic>.from(item);
+        final camp = _padCampania((row['campania'] ?? '').toString());
+        if (camp.isEmpty) continue;
+        row['campania'] = camp;
+        final prev = byCamp[camp];
+        byCamp[camp] = prev == null ? row : _mergeCampaniaRow(prev, row);
+      }
+    }
+
+    absorb(prevRaw);
+    absorb(nextRaw);
+
+    final camps = byCamp.keys.toList()..sort();
+    return camps.map((c) => byCamp[c]!).toList();
+  }
+
+  static Map<String, dynamic> _mergeCampaniaRow(
+    Map<String, dynamic> a,
+    Map<String, dynamic> b,
+  ) {
+    final out = Map<String, dynamic>.from(b);
+    final fiA = _fechaInicioRow(a);
+    final fiB = _fechaInicioRow(b);
+    if (fiA.isNotEmpty && fiB.isNotEmpty) {
+      out['fecha_inicio'] = fiA.compareTo(fiB) <= 0 ? fiA : fiB;
+    } else if (fiA.isNotEmpty) {
+      out['fecha_inicio'] = fiA;
+    }
+
+    final ffA = _fechaFinRow(a);
+    final ffB = _fechaFinRow(b);
+    if (ffA.isEmpty || ffB.isEmpty) {
+      if (ffA.isEmpty && ffB.isEmpty) {
+        out.remove('fecha_fin');
+      } else {
+        out['fecha_fin'] = ffA.isEmpty ? ffB : ffA;
+      }
+    } else {
+      out['fecha_fin'] = ffA.compareTo(ffB) >= 0 ? ffA : ffB;
+    }
+
+    for (final k in ['nombre', 'swac', 'codigo']) {
+      final vb = (out[k] ?? '').toString().trim();
+      final va = (a[k] ?? '').toString().trim();
+      if (vb.isEmpty && va.isNotEmpty) out[k] = a[k];
+    }
+    return out;
+  }
+
+  static List<Map<String, dynamic>> _mergeCencosList(
+    dynamic prevRaw,
+    dynamic nextRaw,
+    String desdeYmd,
+    String hastaYmd,
+  ) {
+    final byCodigo = <String, Map<String, dynamic>>{};
+
+    void absorb(dynamic raw) {
+      if (raw is! List) return;
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final row = Map<String, dynamic>.from(item);
+        final codigo = (row['codigo'] ?? '').toString().trim();
+        if (codigo.length < 6) continue;
+        byCodigo[codigo] = row;
+      }
+    }
+
+    absorb(prevRaw);
+    absorb(nextRaw);
+
+    final out = <Map<String, dynamic>>[];
+    for (final row in byCodigo.values) {
+      final campRow = <String, dynamic>{
+        'campania': row['campania'],
+        'fecha_inicio': row['fecha_inicio'] ?? row['fecini'],
+        'fecha_fin': row['fecha_fin'] ?? row['fecfin'],
+      };
+      if (_campaniaDentroRetencion(campRow, desdeYmd, hastaYmd)) {
+        out.add(row);
+      }
+    }
+    out.sort((a, b) =>
+        (a['codigo'] ?? '').toString().compareTo((b['codigo'] ?? '').toString()));
+    return out;
+  }
+
+  static List<Map<String, dynamic>> _mergeGranjasList(
+    dynamic prevRaw,
+    dynamic nextRaw,
+  ) {
+    final byCodigo = <String, Map<String, dynamic>>{};
+
+    void absorb(dynamic raw) {
+      if (raw is! List) return;
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final row = Map<String, dynamic>.from(item);
+        final cod = _normGranjaKey(
+          (row['granja'] ?? row['codigo'] ?? '').toString(),
+        );
+        if (cod.isEmpty) continue;
+        byCodigo[cod] = row;
+      }
+    }
+
+    absorb(prevRaw);
+    absorb(nextRaw);
+
+    final out = byCodigo.values.toList();
+    out.sort((a, b) => _normGranjaKey((a['granja'] ?? a['codigo'] ?? '').toString())
+        .compareTo(_normGranjaKey((b['granja'] ?? b['codigo'] ?? '').toString())));
+    return out;
   }
 
   Map<String, dynamic>? getProyeccion() {
     final s = _prefs.getString(AppConstants.keyProyeccion);
     if (s == null) return null;
     return Map<String, dynamic>.from(jsonDecode(s) as Map);
+  }
+
+  Future<void> saveAppInfo(Map<String, dynamic> data) async {
+    await _prefs.setString(AppConstants.keyAppInfo, jsonEncode(data));
+    notifyListeners();
+  }
+
+  Map<String, dynamic>? getAppInfo() {
+    final s = _prefs.getString(AppConstants.keyAppInfo);
+    if (s == null) return null;
+    try {
+      return Map<String, dynamic>.from(jsonDecode(s) as Map);
+    } catch (_) {
+      return null;
+    }
   }
 }

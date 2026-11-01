@@ -87,7 +87,7 @@ class CatalogDownloadService {
                         'tcencos': g.tcencos,
                         'tcodint': g.tcodint,
                         'fec_ing_min': g.fecIngMin ?? '',
-                        'edad': g.edad,
+                        'edad': g.edadDias.toString(),
                       })
                   .toList(),
             ),

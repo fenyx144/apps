@@ -1,10 +1,13 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
+import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../utils/mortality_design.dart';
+import '../utils/text_utils.dart';
+import '../utils/theme_extensions.dart';
+import 'photo_thumb.dart';
 
 class AuditoriaGrupoResumen {
   const AuditoriaGrupoResumen({
@@ -56,29 +59,29 @@ class AuditoriaSummarySheet {
         maxChildSize: 0.98,
         builder: (context, scrollController) {
           final isDark = Theme.of(context).brightness == Brightness.dark;
-          final cardBg = isDark ? AppColors.darkCard : AppColors.cardBackground;
-          final headerBg = isDark ? AppColors.darkSurface : Colors.white;
+          final cardBg = context.cardColor;
           final fecha = DateFormat('dd/MM/yyyy').format(DateTime.now());
+
+          // Muestra el nombre del auditor en lugar del código cuando está
+          // disponible en la sesión.
+          final auditorNombre =
+              context.read<StorageService>().getUserName()?.trim() ?? '';
+          final auditorDisplay = auditorNombre.isNotEmpty
+              ? auditorNombre
+              : usuario;
 
           return Container(
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkBackground : Colors.white,
+              color: isDark ? AppColors.darkBackground : AppColors.background,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 12),
                   decoration: BoxDecoration(
-                    color: headerBg,
+                    color: cardBg,
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
                   ),
                   child: Column(
                     children: [
@@ -87,7 +90,9 @@ class AuditoriaSummarySheet {
                         height: 4,
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color: AppColors.textMuted.withValues(alpha: 0.35),
+                          color: isDark
+                              ? AppColors.darkBorder
+                              : AppColors.borderLight,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -96,13 +101,14 @@ class AuditoriaSummarySheet {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: AppColors.iconAccent.withValues(alpha: 0.15),
+                              color: AppColors.primary.withValues(
+                                  alpha: isDark ? 0.2 : 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(
                               Icons.fact_check_outlined,
                               size: 24,
-                              color: AppColors.iconAccent,
+                              color: AppColors.primary,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -110,7 +116,9 @@ class AuditoriaSummarySheet {
                             child: Text(
                               'Resumen de auditoría',
                               style: TextStyle(
-                                color: isDark ? Colors.white : AppColors.textPrimary,
+                                color: isDark
+                                    ? AppColors.darkTextPrimary
+                                    : AppColors.textPrimary,
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -119,7 +127,9 @@ class AuditoriaSummarySheet {
                           IconButton(
                             icon: Icon(
                               Icons.close_rounded,
-                              color: isDark ? Colors.white70 : AppColors.textSecondary,
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.textSecondary,
                             ),
                             onPressed: () => Navigator.pop(context, false),
                           ),
@@ -137,28 +147,52 @@ class AuditoriaSummarySheet {
                       children: [
                         _section(
                           isDark: isDark,
-                          cardBg: cardBg,
                           title: 'Información general',
                           leading: const Icon(
                             Icons.info_outline,
-                            color: AppColors.iconAccent,
+                            color: AppColors.textSecondary,
                             size: 20,
                           ),
                           children: [
-                            _item('Fecha', fecha),
-                            const SizedBox(height: 12),
-                            _item('Usuario auditor', usuario),
-                            
+                            // Fecha y usuario auditor en la misma fila.
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _item(
+                                    'Fecha',
+                                    fecha,
+                                    isDark: isDark,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _item(
+                                    'Usuario auditor',
+                                    auditorDisplay,
+                                    isDark: isDark,
+                                  ),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 12),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Expanded(
-                                  child: _item('Registros', '$totalRegistros'),
+                                  child: _item(
+                                    'Registros',
+                                    '$totalRegistros',
+                                    isDark: isDark,
+                                  ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: _item('Total aves', '$totalAves'),
+                                  child: _item(
+                                    'Total aves',
+                                    '$totalAves',
+                                    isDark: isDark,
+                                  ),
                                 ),
                               ],
                             ),
@@ -166,20 +200,17 @@ class AuditoriaSummarySheet {
                         ),
                         _section(
                           isDark: isDark,
-                          cardBg: cardBg,
                           title: 'Mortalidades',
                           leading: const Icon(
                             Icons.layers_outlined,
-                            color: AppColors.iconAccent,
+                            color: AppColors.textSecondary,
                             size: 20,
                           ),
                           children: [
-                            ...grupos.map(
-                              (g) => Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _grupoBlock(g, isDark),
-                              ),
-                            ),
+                            for (var i = 0; i < grupos.length; i++) ...[
+                              if (i > 0) const SizedBox(height: 10),
+                              _grupoCompacto(grupos[i], isDark),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -191,13 +222,6 @@ class AuditoriaSummarySheet {
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
                     color: cardBg,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
                   ),
                   child: SafeArea(
                     child: Row(
@@ -247,9 +271,9 @@ class AuditoriaSummarySheet {
     );
   }
 
-  static Widget _grupoBlock(AuditoriaGrupoResumen grupo, bool isDark) {
-    final partes = grupo.clave.split(':');
-    final type = MortalityTypeExt.fromId(partes.first);
+  /// Bloque compacto de mortalidad, sin bordes.
+  static Widget _grupoCompacto(AuditoriaGrupoResumen grupo, bool isDark) {
+    final type = MortalityTypeExt.fromId(grupo.clave.split(':').first);
 
     final granjaDisplay = [
       if (grupo.granjaNombre != null && grupo.granjaNombre!.trim().isNotEmpty)
@@ -262,209 +286,211 @@ class AuditoriaSummarySheet {
         'Galpón ${grupo.galpon!.trim()}',
     ].join(' - ');
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.background,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header: icon + type label
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (type != null)
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    gradient: type.iconGradient,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(type.icon, color: Colors.white, size: 18),
-                ),
-              if (type != null) const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  grupo.label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: isDark ? Colors.white : AppColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          // Granja / Campaña
-          if (granjaDisplay.isNotEmpty) ...[
-            _item('Granja / Campa\u00f1a', granjaDisplay),
-            const SizedBox(height: 8),
-          ],
-          // Cantidades M / H / Total
-          Row(
-            children: [
-              Expanded(child: _item('Machos', '${grupo.cantMachos ?? 0}')),
-              Expanded(child: _item('Hembras', '${grupo.cantHembras ?? 0}')),
-              Expanded(child: _item('Total', '${grupo.totalAves}')),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _item('Observaciones', _textOrEmpty(grupo.observaciones)),
-          if (grupo.fotos.isNotEmpty) const SizedBox(height: 8),
-          _photoThumbnails(grupo.fotos, isDark),
-        ],
-      ),
-    );
-  }
+    final obs = grupo.observaciones.trim();
 
-  static Widget _photoThumbnails(List<String> paths, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Fotos${paths.isEmpty ? '' : ' (${paths.length})'}:',
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (paths.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(left: 8),
-            child: Text(
-              'Sin fotos adjuntas',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.textMuted,
-                fontStyle: FontStyle.italic,
+        // Cabecera: tipo (icono + etiqueta) y total de registros.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (type != null)
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  gradient: type.iconGradient,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Icon(type.icon, color: Colors.white, size: 15),
+              ),
+            if (type != null) const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                grupo.totalRegistros > 1
+                    ? '${grupo.label} · ${grupo.totalRegistros} registros'
+                    : grupo.label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: isDark
+                      ? AppColors.darkTextPrimary
+                      : AppColors.textPrimary,
+                ),
               ),
             ),
-          )
-        else
-          SizedBox(
-            height: 80,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: paths.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 10),
-              itemBuilder: (context, index) {
-                final path = paths[index];
-                final file = File(path);
-                final image = file.existsSync()
-                    ? Image.file(file, width: 80, height: 80, fit: BoxFit.cover)
-                    : Container(
-                        width: 80,
-                        height: 80,
-                        color: isDark ? AppColors.darkSurface : Colors.grey.shade100,
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          color: Colors.grey.shade500,
-                          size: 28,
-                        ),
-                      );
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.25),
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: image,
-                  ),
-                );
-              },
+            const Icon(
+              Icons.check_circle_rounded,
+              size: 17,
+              color: AppColors.primary,
+            ),
+          ],
+        ),
+        if (granjaDisplay.isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            granjaDisplay,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: isDark
+                  ? AppColors.darkTextSecondary
+                  : AppColors.textSecondary,
             ),
           ),
+        ],
+        const SizedBox(height: 5),
+        // Cantidades en una sola línea compacta.
+        Wrap(
+          spacing: 10,
+          runSpacing: 4,
+          children: [
+            Text(
+              'M: ${grupo.cantMachos ?? 0}',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: isDark
+                    ? AppColors.maleAccentDark
+                    : AppColors.maleAccent,
+              ),
+            ),
+            Text(
+              'H: ${grupo.cantHembras ?? 0}',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: isDark
+                    ? AppColors.femaleAccentDark
+                    : AppColors.femaleAccent,
+              ),
+            ),
+            Text(
+              'Total ${grupo.totalAves}',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                color: isDark
+                    ? AppColors.darkTextPrimary
+                    : AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        // Fotos del registro auditado (evidencia), dentro de su bloque.
+        if (grupo.fotos.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Fotos (${grupo.fotos.length}):',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: isDark
+                  ? AppColors.darkTextSecondary
+                  : AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          PhotoStrip(
+            fotos: grupo.fotos,
+            size: 48,
+          ),
+        ],
+        if (obs.isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            obs,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+              color: isDark
+                  ? AppColors.darkTextSecondary
+                  : AppColors.textSecondary,
+            ),
+          ),
+        ],
+        Divider(
+          height: 18,
+          thickness: 1,
+          color: isDark ? AppColors.darkBorder : AppColors.borderLight,
+        ),
       ],
     );
   }
 
   static Widget _section({
     required bool isDark,
-    required Color cardBg,
     required String title,
     required Widget leading,
     required List<Widget> children,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: cardBg,
+        color: isDark ? AppColors.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.2),
+          color: isDark ? AppColors.darkBorder : AppColors.borderLight,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: isDark ? 0.15 : 0.1),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            child: Row(
-              children: [
-                leading,
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppColors.textPrimary,
-                  ),
+          Row(
+            children: [
+              leading,
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: isDark
+                      ? AppColors.darkTextPrimary
+                      : AppColors.textPrimary,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: children,
-            ),
-          ),
+          const SizedBox(height: 12),
+          ...children,
         ],
       ),
     );
   }
 
-  static Widget _item(String label, String value) {
-    final display = value.trim().isEmpty ? 'No especificado' : value;
+  static Widget _item(String label, String value, {bool isDark = false}) {
+    final display = value.trim().isEmpty ? kSinObservaciones : value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           '$label:',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w700,
+            color: isDark
+                ? AppColors.darkTextSecondary
+                : AppColors.textSecondary,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         Padding(
           padding: const EdgeInsets.only(left: 8),
           child: Text(
             display,
             style: TextStyle(
               fontSize: 13,
-              color: display == 'No especificado'
+              color: display == kSinObservaciones
                   ? AppColors.textMuted
-                  : AppColors.textPrimary,
-              fontWeight: FontWeight.w500,
-              fontStyle: display == 'No especificado'
+                  : (isDark
+                      ? AppColors.darkTextPrimary
+                      : AppColors.textPrimary),
+              fontWeight: FontWeight.w600,
+              fontStyle: display == kSinObservaciones
                   ? FontStyle.italic
                   : FontStyle.normal,
             ),
@@ -474,10 +500,5 @@ class AuditoriaSummarySheet {
         ),
       ],
     );
-  }
-
-  static String _textOrEmpty(String? v) {
-    final t = v?.trim() ?? '';
-    return t.isEmpty ? 'No especificado' : t;
   }
 }

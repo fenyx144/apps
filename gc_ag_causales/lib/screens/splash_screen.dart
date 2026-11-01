@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import '../services/catalog_service.dart';
-import '../services/catalog_sync_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../widgets/screen_status_bar.dart';
@@ -56,30 +55,9 @@ class _SplashScreenState extends State<SplashScreen>
     final catalog = context.read<CatalogService>();
     final logged = await storage.isLoggedIn();
 
-    final syncFuture = logged
-        ? CatalogSyncService().syncAll(
-            storage: storage,
-            catalog: catalog,
-            forzar: true,
-          )
-            .timeout(
-              const Duration(seconds: 25),
-              onTimeout: () => const CatalogSyncResult(
-                hadInternet: true,
-                downloadedAnything: false,
-              ),
-            )
-        : catalog.loadFromPrefs().then(
-            (_) => const CatalogSyncResult(
-              hadInternet: false,
-              downloadedAnything: false,
-            ),
-          );
+    await catalog.loadFromPrefs();
 
-    await Future.wait([
-      Future.delayed(const Duration(milliseconds: 2500)),
-      syncFuture,
-    ]);
+    await Future.delayed(const Duration(milliseconds: 2500));
 
     if (!mounted) return;
     if (logged) {

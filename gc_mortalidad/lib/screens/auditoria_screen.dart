@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import '../models/cenco.dart';
 import '../models/galpon.dart';
 import '../utils/dialog_helper.dart';
 import '../utils/constants.dart';
+import '../utils/text_utils.dart';
 import '../utils/theme_extensions.dart';
 import '../utils/toast_helper.dart';
 import '../widgets/app_bar.dart';
@@ -174,7 +176,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
       case 'transporte': return const Color(0xFF42A5F5);
       case 'produccion': return const Color(0xFF66BB6A);
       case 'despacho': return const Color(0xFFFF7043);
-      default: return AppColors.primary;
+      default: return AppColors.textSecondary;
     }
   }
 
@@ -191,11 +193,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
   // ─── Carga catalogos ───
   void _loadCencos() {
     final storage = context.read<StorageService>();
-    final raw = storage.getCencosLocal();
-    debugPrint('[CENCOS_LOAD] auditoria_screen: getCencosLocal().length=${raw.length}');
-    _cencos = raw
-        .map((e) => Cenco.fromJson(e))
-        .toList()
+    _cencos = storage.getCencosWithEdadActual()
       ..sort((a, b) => a.codigo.compareTo(b.codigo));
     debugPrint('[CENCOS_LOAD] auditoria_screen: _cencos.length=${_cencos.length}');
     // Auto-seleccionar granja por defecto si esta configurada
@@ -390,12 +388,12 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_camera_rounded, color: AppColors.primary),
+                leading: Icon(Icons.photo_camera_rounded, color: ctx.azulAccent),
                 title: const Text('Camara'),
                 onTap: () => Navigator.pop(ctx, ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+                leading: Icon(Icons.photo_library_rounded, color: ctx.azulAccent),
                 title: const Text('Galeria'),
                 onTap: () => Navigator.pop(ctx, ImageSource.gallery),
               ),
@@ -453,7 +451,10 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
 
     final registrosPayload = gruposMap.entries.map((e) {
       final items = e.value;
-      final allObs = items.map((r) => r.obsController.text.trim()).where((o) => o.isNotEmpty).join(' | ');
+      final allObs = items
+          .map((r) => capitalizeText(r.obsController.text))
+          .where((o) => o.isNotEmpty)
+          .join(' | ');
       final allFotos = items.expand((r) => r.fotos).toList();
       final allUuids = items.map((r) => r.cabUuid).toList();
       final sumMachos = items.fold<int>(0, (s, r) => s + r.cantMachos);
@@ -484,6 +485,36 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
     final hasInternet = await _checkInternet();
     if (!mounted) return;
 
+    // Detalle individual de cada registro auditado. Se guarda SOLO en el
+    // storage local para que "Mis Registros" muestre cada registro por
+    // separado (como hace la liquidación). El envío al backend sigue usando
+    // [registrosPayload] (agrupado por tipo), por lo que no se altera nada
+    // del lado del servidor.
+    final detalleRegistros = seleccionados.map((r) => {
+          'uuid': r.cabUuid,
+          'clave': r.clave,
+          'tipo_mortalidad': r.tipoMortalidad,
+          'label': _subtipoLabel(
+            r.tipoMortalidad,
+            r.subtipoTransporte ?? r.subtipoProduccion,
+          ),
+          'subtipo_transporte': r.subtipoTransporte ?? '',
+          'subtipo_produccion': r.subtipoProduccion ?? '',
+          'fecha_registro': r.fechaRegistro,
+          'granja': r.granja,
+          'granja_nombre': (r.granjaNombre != null &&
+                  r.granjaNombre!.trim().isNotEmpty)
+              ? r.granjaNombre
+              : _resolveGranjaFromCencos(r.granja),
+          'campania': r.campania ?? '',
+          'galpon': r.galpon,
+          'cant_machos': r.cantMachos,
+          'cant_hembras': r.cantHembras,
+          'total_aves': r.totalAves,
+          'observaciones': capitalizeText(r.obsController.text),
+          'fotos': List<String>.from(r.fotos),
+        }).toList();
+
     final confirmed = await AuditoriaSummarySheet.show(
       context: context,
       usuario: usuario,
@@ -492,12 +523,12 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
         label: r.tipoLabel,
         totalRegistros: 1,
         totalAves: r.totalAves,
-        observaciones: r.obsController.text,
+        observaciones: capitalizeText(r.obsController.text),
         fotos: List<String>.from(r.fotos),
         granja: r.granja,
-      granjaNombre: (r.granjaNombre != null && r.granjaNombre!.trim().isNotEmpty)
-          ? r.granjaNombre
-          : _resolveGranjaFromCencos(r.granja),
+        granjaNombre: (r.granjaNombre != null && r.granjaNombre!.trim().isNotEmpty)
+            ? r.granjaNombre
+            : _resolveGranjaFromCencos(r.granja),
         campania: r.campania,
         galpon: r.galpon,
         cantMachos: r.cantMachos,
@@ -513,6 +544,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
       usuario: usuario,
       seleccionados: seleccionados,
       registros: registrosPayload,
+      registrosDetalle: detalleRegistros,
       hasInternet: hasInternet,
     );
   }
@@ -522,22 +554,29 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
     required String usuario,
     required List<_RegistroAuditable> seleccionados,
     required List<Map<String, dynamic>> registros,
+    required List<Map<String, dynamic>> registrosDetalle,
     required bool hasInternet,
   }) async {
     setState(() => _saving = true);
     final close = showChickenLoadingDialog(context, 'Guardando auditoria...');
+    final audUuid = const Uuid().v4();
+    debugPrint('[AUDITORIA_GUARDAR] tuuid=$audUuid registros=${registros.length}');
 
     try {
       if (hasInternet) {
         final res = await _api.guardarAuditoriaMovil(
           usuario: usuario,
           registros: registros,
+          tuuid: audUuid,
         );
+        debugPrint('[AUDITORIA_GUARDAR_RES] tuuid=$audUuid ${jsonEncode(res)}');
         close();
         if (!mounted) return;
 
         if (res['success'] == true) {
-          await _guardarLocal(storage, usuario, registros, synced: true,
+          await _guardarLocal(storage, usuario, registros,
+            registrosDetalle: registrosDetalle,
+            synced: true, tuuid: audUuid,
             granja: seleccionados.first.granja,
             granjaNombre: seleccionados.first.granjaNombre,
             campania: seleccionados.first.campania,
@@ -550,7 +589,9 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
           _quitarGuardados(seleccionados);
           await _cargar();
         } else {
-          await _guardarLocal(storage, usuario, registros, synced: false,
+          await _guardarLocal(storage, usuario, registros,
+            registrosDetalle: registrosDetalle,
+            synced: false, tuuid: audUuid,
             granja: seleccionados.first.granja,
             granjaNombre: seleccionados.first.granjaNombre,
             campania: seleccionados.first.campania,
@@ -568,6 +609,8 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
         }
       } else {
         await _guardarLocal(storage, usuario, registros,
+          registrosDetalle: registrosDetalle,
+          tuuid: audUuid,
           granja: seleccionados.first.granja,
           granjaNombre: seleccionados.first.granjaNombre,
           campania: seleccionados.first.campania,
@@ -582,6 +625,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
       }
     } catch (e) {
       close();
+      debugPrint('[AUDITORIA_GUARDAR_EXCEPTION] $e');
       if (mounted) showErrorToast(context, 'Error inesperado. Intente de nuevo.');
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -593,16 +637,18 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
     String usuario,
     List<Map<String, dynamic>> registros, {
     bool synced = false,
+    String? tuuid,
     String? granja,
     String? granjaNombre,
     String? campania,
     String? fecha,
     int cantMachos = 0,
     int cantHembras = 0,
+    List<Map<String, dynamic>>? registrosDetalle,
   }) async {
     final now = DateTime.now();
     await storage.saveForm(AppStrings.formTypeAuditoria, {
-      'tuuid': const Uuid().v4(),
+      'tuuid': (tuuid ?? '').trim().isEmpty ? const Uuid().v4() : tuuid!.trim(),
       'synced': synced,
       'guardado_backend': synced,
       'tipo': 'auditoria',
@@ -617,6 +663,8 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
       'cant_machos': cantMachos,
       'cant_hembras': cantHembras,
       'registros': registros,
+      // Solo lectura local: cada registro auditado de forma individual.
+      'registros_detalle': registrosDetalle ?? [],
     });
     if (synced) {
       await storage.setLastSyncDate();
@@ -648,8 +696,8 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
               value: selCount > 0 ? '$selM' : '$totalM',
               label: 'Machos',
               sub: selCount > 0 ? 'de $totalM total' : null,
-              color: AppColors.maleDark,
-              bgColor: AppColors.maleTint,
+              color: context.maleColor,
+              bgColor: context.maleBgColor,
             ),
           ),
           const SizedBox(width: 8),
@@ -658,8 +706,8 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
               value: selCount > 0 ? '$selH' : '$totalH',
               label: 'Hembras',
               sub: selCount > 0 ? 'de $totalH total' : null,
-              color: AppColors.femaleDark,
-              bgColor: AppColors.femaleTint,
+              color: context.femaleColor,
+              bgColor: context.femaleBgColor,
             ),
           ),
           const SizedBox(width: 8),
@@ -668,8 +716,8 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
               value: selCount > 0 ? '${_selectedTotalAves}' : '${totalM + totalH}',
               label: 'Total aves',
               sub: selCount > 0 ? 'de ${totalM + totalH} total' : null,
-              color: AppColors.primary,
-              bgColor: AppColors.primary.withValues(alpha: 0.08),
+              color: context.azulAccent,
+              bgColor: context.azulAccent.withValues(alpha: 0.12),
             ),
           ),
           const SizedBox(width: 8),
@@ -732,9 +780,10 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
+        color: context.azulAccent.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+        border:
+            Border.all(color: context.azulAccent.withValues(alpha: 0.2)),
       ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -744,7 +793,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
                   style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: context.mutedTextColor,
+              color: context.azulTextoMuted,
             ),
           ),
           const SizedBox(height: 4),
@@ -755,10 +804,10 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
               final cant = item['cantidad'] ?? 0;
               return Text(
                 '$descri: $cant',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
+                  color: context.azulAccent,
                 ),
               );
             }).toList(),
@@ -851,7 +900,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
     return Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.08),
+          color: context.azulAccent.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(10),
         ),
       child: Row(
@@ -875,16 +924,16 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
           Expanded(flex: 1, child: Text('M', style: _headerTextStyle, textAlign: TextAlign.center)),
           Expanded(flex: 1, child: Text('H', style: _headerTextStyle, textAlign: TextAlign.center)),
           Expanded(flex: 1, child: Text('Tot', style: _headerTextStyle, textAlign: TextAlign.center)),
-          SizedBox(width: 56, child: Text('Opc.', style: _headerTextStyle, textAlign: TextAlign.center)),
+          SizedBox(width: 52, child: Text('Opc.', style: _headerTextStyle, textAlign: TextAlign.center)),
         ],
       ),
     );
   }
 
-  TextStyle get _headerTextStyle => const TextStyle(
+  TextStyle get _headerTextStyle => TextStyle(
     fontSize: 14,
     fontWeight: FontWeight.w700,
-    color: AppColors.primaryDark,
+    color: context.azulTexto,
   );
 
   TextStyle get _cellTextStyle => const TextStyle(fontSize: 13);
@@ -974,7 +1023,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
             ),
           ),
           SizedBox(
-            width: 56,
+            width: 52,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -984,7 +1033,8 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
                       : Icons.notes_rounded,
                   color: reg.obsController.text.isNotEmpty
                       ? tipoColor
-                      : context.mutedTextColor,
+                      : context.azulTextoMuted,
+                  badgeColor: context.azulAccent,
                   tooltip: 'Observaciones',
                   hasContent: reg.obsController.text.isNotEmpty,
                   onTap: () => _showObsDialog(reg),
@@ -996,7 +1046,8 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
                       : Icons.photo_camera_outlined,
                   color: reg.fotos.isNotEmpty
                       ? tipoColor
-                      : context.mutedTextColor,
+                      : context.azulTextoMuted,
+                  badgeColor: context.azulAccent,
                   tooltip: 'Fotos (${reg.fotos.length})',
                   hasContent: reg.fotos.isNotEmpty,
                   badgeCount: reg.fotos.length,
@@ -1015,10 +1066,10 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
       margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.06),
+        color: context.azulAccent.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
-        border: const Border(
-          left: BorderSide(color: AppColors.primary, width: 4),
+        border: Border(
+          left: BorderSide(color: context.azulAccent, width: 4),
         ),
       ),
       child: Row(
@@ -1028,14 +1079,14 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
             flex: 2,
             child: Text(
               'TOTALES',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: context.primaryTextColor),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: context.azulTexto),
             ),
           ),
           Expanded(flex: 2, child: Text('${_registros.length} reg.', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
           Expanded(flex: 1, child: Text('$_totalMachos', textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.maleDark))),
           Expanded(flex: 1, child: Text('$_totalHembras', textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.femaleDark))),
           Expanded(flex: 1, child: Text('${_totalMachos + _totalHembras}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800))),
-          const SizedBox(width: 56),
+          const SizedBox(width: 52),
         ],
       ),
     );
@@ -1051,6 +1102,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
           content: TextField(
             controller: controller,
             maxLines: 4,
+            textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
                 hintText: 'Observaciones del auditor...',
               border: OutlineInputBorder(),
@@ -1063,7 +1115,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
             ),
             FilledButton(
               onPressed: () {
-                setState(() => reg.obsController.text = controller.text);
+                setState(() => reg.obsController.text = capitalizeText(controller.text));
                 setDialogState(() {});
                 Navigator.pop(ctx);
               },
@@ -1080,7 +1132,18 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('Fotos (${reg.fotos.length}/$_maxPhotos)'),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text('Fotos (${reg.fotos.length}/$_maxPhotos)'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded),
+                tooltip: 'Cerrar',
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
           content: SizedBox(
             width: double.maxFinite,
             child: Column(
@@ -1135,7 +1198,10 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Aceptar'),
+            ),
           ],
         ),
       ),
@@ -1221,19 +1287,21 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
   // ─── Build principal ───
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: buildAppBar(
-        context,
-        AppStrings.auditoriaTitle,
-        appIcon: Icons.fact_check_outlined,
-        rightIcon: (!_loading && _registros.isNotEmpty && !_saving) ? Icons.save : null,
-        rightIconColor: AppColors.iconAccent,
-        rightIconLoading: _saving,
-        rightIconTooltip: 'Guardar auditoria',
-        onRightIconPressed: (!_loading && _registros.isNotEmpty && !_saving) ? _guardar : null,
-      ),
-      drawer: const AppDrawer(),
-      body: SafeArea(
+    return Theme(
+      data: azulReporteTheme(context),
+      child: Scaffold(
+        appBar: buildAppBar(
+          context,
+          AppStrings.auditoriaTitle,
+          appIcon: Icons.fact_check_outlined,
+          rightIcon: (!_loading && _registros.isNotEmpty && !_saving) ? Icons.save : null,
+          rightIconColor: AppColors.iconAccent,
+          rightIconLoading: _saving,
+          rightIconTooltip: 'Guardar auditoria',
+          onRightIconPressed: (!_loading && _registros.isNotEmpty && !_saving) ? _guardar : null,
+        ),
+        drawer: const AppDrawer(),
+        body: SafeArea(
         top: false,
         child: RefreshIndicator(
           onRefresh: _cargar,
@@ -1277,12 +1345,12 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
                           child: Center(
                           child: Column(
                             children: [
-                                Icon(Icons.verified_outlined, size: 64, color: AppColors.primary.withValues(alpha: 0.5)),
+                                Icon(Icons.verified_outlined, size: 64, color: context.azulAccent.withValues(alpha: 0.5)),
                               const SizedBox(height: 16),
                               Text(
                                   'No hay registros pendientes de auditoria',
                                 textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 16, color: context.mutedTextColor),
+                                  style: TextStyle(fontSize: 16, color: context.azulTextoMuted),
                               ),
                             ],
                             ),
@@ -1298,6 +1366,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
                   ],
                 ),
         ),
+      ),
       ),
     );
   }
@@ -1352,6 +1421,7 @@ Widget _iconWithBadge({
   required String tooltip,
   required bool hasContent,
   required VoidCallback onTap,
+  Color badgeColor = AppColors.textSecondary,
   int badgeCount = 0,
 }) {
   return Tooltip(
@@ -1372,8 +1442,8 @@ Widget _iconWithBadge({
                 child: Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
+                  decoration: BoxDecoration(
+                    color: badgeColor,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -1385,7 +1455,7 @@ Widget _iconWithBadge({
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
+                    color: badgeColor,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(

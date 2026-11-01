@@ -6,29 +6,48 @@ extension AppThemeContext on BuildContext {
   bool get isDarkTheme => Theme.of(this).brightness == Brightness.dark;
 
   Color get primaryTextColor =>
-      isDarkTheme ? Colors.white : AppColors.textPrimary;
+      isDarkTheme ? AppColors.darkTextPrimary : AppColors.textPrimary;
 
   Color get secondaryTextColor =>
-      isDarkTheme ? Colors.white70 : AppColors.textSecondary;
+      isDarkTheme ? AppColors.darkTextSecondary : AppColors.textSecondary;
 
   Color get mutedTextColor =>
-      isDarkTheme ? Colors.white54 : AppColors.textMuted;
+      isDarkTheme ? AppColors.darkTextMuted : AppColors.textMuted;
 
   Color get cardColor =>
       Theme.of(this).cardTheme.color ??
       (isDarkTheme ? AppColors.darkCard : AppColors.cardBackground);
 
   Color get surfaceColor =>
-      isDarkTheme ? AppColors.darkSurface : Colors.grey.shade50;
+      isDarkTheme ? AppColors.darkBackground : Colors.white;
 
-  Color get borderColor => isDarkTheme
-      ? Colors.white.withValues(alpha: 0.12)
-      : Colors.grey.shade300;
+  Color get borderColor =>
+      isDarkTheme ? AppColors.darkBorder : AppColors.borderLight;
+
+  /// Índigo suave para "Machos" (varía según tema).
+  Color get maleColor =>
+      isDarkTheme ? AppColors.maleAccentDark : AppColors.maleAccent;
+
+  /// Coral suave para "Hembras" (varía según tema).
+  Color get femaleColor =>
+      isDarkTheme ? AppColors.femaleAccentDark : AppColors.femaleAccent;
+
+  /// Fondo suave para bloques de "Machos" (varía según tema).
+  Color get maleBgColor =>
+      isDarkTheme
+          ? AppColors.maleAccentDark.withValues(alpha: 0.18)
+          : AppColors.maleTint;
+
+  /// Fondo suave para bloques de "Hembras" (varía según tema).
+  Color get femaleBgColor =>
+      isDarkTheme
+          ? AppColors.femaleAccentDark.withValues(alpha: 0.18)
+          : AppColors.femaleTint;
 }
 
 /// Bordes de inputs sin doble línea (contenedor + decoration).
 class AppInputStyles {
-  static const double radius = 14;
+  static const double radius = 12;
 
   static OutlineInputBorder borderNone([double r = radius]) => OutlineInputBorder(
         borderRadius: BorderRadius.circular(r),
@@ -91,7 +110,7 @@ class AppInputStyles {
       suffixIcon: suffixIcon,
       errorText: errorText,
       filled: filled,
-      fillColor: fillColor ?? (isDark ? AppColors.darkSurface : Colors.white),
+      fillColor: fillColor ?? (isDark ? AppColors.darkBackground : Colors.white),
       isDense: isDense,
       contentPadding: contentPadding,
       counterText: counterText,
@@ -129,7 +148,7 @@ class AppInputStyles {
       suffixIcon: suffixIcon,
       errorText: errorText,
       filled: filled,
-      fillColor: fillColor ?? (isDark ? AppColors.darkSurface : Colors.white),
+      fillColor: fillColor ?? (isDark ? AppColors.darkBackground : Colors.white),
       counterText: counterText,
       border: none,
       enabledBorder: none,
@@ -165,3 +184,39 @@ class AppFieldError extends StatelessWidget {
     );
   }
 }
+
+/// Acentos neutros de pizarra para reportes y auditoría.
+/// En el rediseño el color solo indica tipo de dato (Machos/Hembras o el tipo
+/// de mortalidad: Incubación, Transporte, Producción, Despacho), por lo que los
+/// acentos generales pasan a la escala pizarra (gris azulado) sin teñir cards.
+extension PaletaAzulReporte on BuildContext {
+  Color get azulAccent =>
+      isDarkTheme ? AppColors.darkTextSecondary : AppColors.textSecondary;
+
+  Color get azulTexto =>
+      isDarkTheme ? AppColors.darkTextPrimary : AppColors.textPrimary;
+
+  Color get azulTextoSuave =>
+      isDarkTheme ? AppColors.darkTextSecondary : AppColors.textSecondary;
+
+  Color get azulTextoMuted =>
+      isDarkTheme ? AppColors.darkTextMuted : AppColors.textMuted;
+}
+
+/// Tema derivado: acentos neutros sobre superficies del tema base.
+ThemeData azulReporteTheme(BuildContext context) {
+  final base = Theme.of(context);
+  final dark = base.brightness == Brightness.dark;
+  final cs = base.colorScheme.copyWith(
+    primary: AppColors.primary,
+    onPrimary: Colors.white,
+    onSurface: dark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+    onSurfaceVariant:
+        dark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+  );
+  return base.copyWith(
+    colorScheme: cs,
+    iconTheme: base.iconTheme.copyWith(color: cs.onSurfaceVariant),
+  );
+}
+

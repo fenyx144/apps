@@ -1,0 +1,30 @@
+2	Información de vacuna							
+								
+	Fecha:							
+								
+	Galpones:	que se pueda seleccionar mas de un galpón / que carguen las edades a un costado						
+								
+	Nombre de vacuna							
+	Lote de vacuna							
+	Fecha de expiración de vacuna							
+	Dosis de frasco							
+	Laboratorio de vacuna							
+	Foto			etiqueta de la vacuna				
+								
+3	Cadena de frio							
+								
+	Descripción				Hora	Temperatura		
+	Salida de Almacen				formato hora	entero		
+	Inicio de proceso							
+	Vacuna preparada (antes de la aplicación)							
+								
+4	Equipo de vacunación							
+								
+	Recursos para la vacunación operativos				si		no	x
+								
+	Probeta milimetrada inoperativa							
+	Vaso precipitado inoperativo							
+	Botella de vidrio milimetrada inoperativo							
+x	Termómetro inoperativo							
+	Coller inoperativo							
+	Otro							

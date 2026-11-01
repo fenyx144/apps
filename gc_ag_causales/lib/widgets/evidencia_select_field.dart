@@ -15,6 +15,8 @@ class EvidenciaSelectField extends StatelessWidget {
     required this.icon,
     this.onTap,
     this.enabled = true,
+    this.showIcon = true,
+    this.iconColor,
   });
 
   final String label;
@@ -23,22 +25,32 @@ class EvidenciaSelectField extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final bool enabled;
+  final bool showIcon;
+  final Color? iconColor;
 
   bool get _hasValue => value.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.formColors;
+    final inputTheme = Theme.of(context).inputDecorationTheme;
     return InkWell(
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(12),
       child: InputDecorator(
         decoration: InputDecoration(
           labelText: label,
-          suffixIcon: Icon(
-            icon,
-            color: enabled ? colors.iconAccent : colors.valuePlaceholder,
-          ),
+          labelStyle: inputTheme.labelStyle?.copyWith(color: colors.labelMuted),
+          floatingLabelStyle: inputTheme.floatingLabelStyle,
+          suffixIcon: showIcon
+              ? Icon(
+                  icon,
+                  color: iconColor ??
+                      (enabled
+                          ? colors.iconAccent
+                          : colors.valuePlaceholder),
+                )
+              : null,
         ),
         child: Text(
           _hasValue ? value : placeholder,
@@ -46,8 +58,9 @@ class EvidenciaSelectField extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 15,
-            fontWeight: _hasValue ? FontWeight.w600 : FontWeight.normal,
+            fontWeight: _hasValue ? FontWeight.w700 : FontWeight.w500,
             color: _hasValue ? colors.valueSelected : colors.valuePlaceholder,
+            height: 1.25,
           ),
         ),
       ),
@@ -90,11 +103,13 @@ class EvidenciaGalponField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.formColors;
     return EvidenciaSelectField(
       label: 'Galpón',
       value: value,
       placeholder: 'Seleccione',
       icon: Icons.home_work_outlined,
+      iconColor: colors.iconAccent,
       enabled: enabled,
       onTap: () => _openPicker(context),
     );

@@ -1,0 +1,686 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../services/storage_service.dart';
+import '../utils/comida_horario.dart';
+import '../utils/constants.dart';
+import '../utils/theme_colors.dart';
+import '../widgets/app_card.dart';
+import '../widgets/app_drawer.dart';
+import '../widgets/granja_campania_picker.dart';
+import '../widgets/marcacion_masiva.dart' show colorDeComida;
+import '../widgets/personas_marca.dart';
+import '../widgets/section_app_bar.dart';
+
+class ReportsScreen extends StatefulWidget {
+  const ReportsScreen({super.key});
+
+  @override
+  State<ReportsScreen> createState() => _ReportsScreenState();
+}
+
+class _ReportsScreenState extends State<ReportsScreen> {
+  late DateTime _desde;
+  late DateTime _hasta;
+  final Map<String, String> _nomCache = {};
+  String _fGrupo = ''; // '' = todos
+  String _fEstado = ''; // '' | 'env' | 'pen'
+
+  String _claveGrupoReg(Map<String, dynamic> r) {
+    final g = (r['grupo'] ?? '').toString();
+    final n = (r['nomGrupo'] ?? r['nom_grupo'] ?? '').toString();
+    if (g.trim().isEmpty && n.trim().isEmpty) return 'SIN GRUPO';
+    return normGrupo(g, n);
+  }
+
+  String _nombreGrupoReg(Map<String, dynamic> r) {
+    final g = (r['grupo'] ?? '').toString();
+    final n = (r['nomGrupo'] ?? r['nom_grupo'] ?? '').toString();
+    if (g.trim().isEmpty && n.trim().isEmpty) return 'Sin grupo';
+    final v = nombreGrupoVisible(g, n);
+    return v.isEmpty ? normGrupo(g, n) : v;
+  }
+
+  Widget _chip(String label, bool sel, VoidCallback onTap) => Padding(
+    padding: const EdgeInsets.only(right: 6),
+    child: ChoiceChip(
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      selected: sel,
+      onSelected: (_) => setState(onTap),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+    ),
+  );
+
+  /// Nombre de granja: del registro, del catalogo local (proyeccion/cencos) o ''.
+  String _nombreGranja(
+    StorageService storage,
+    String g3,
+    Map<String, dynamic> r,
+  ) {
+    final propio = GranjaCampaniaPicker.cleanNombreGranja(
+      (r['granjaNombre'] ?? '').toString(),
+    );
+    if (propio.isNotEmpty) return _nomCache[g3] = propio;
+    final c = _nomCache[g3];
+    if (c != null) return c;
+    var nom = GranjaCampaniaPicker.nombreDeGranja(storage.getProyeccion(), g3);
+    if (nom.isEmpty) {
+      for (final e in (storage.getCencosGalpones()?['cencos'] as List?) ?? []) {
+        if (e is! Map) continue;
+        final cod = (e['codigo'] ?? '').toString().trim();
+        if (cod.length < 3 || GranjaCampaniaPicker.normGranja(cod) != g3)
+          continue;
+        nom = GranjaCampaniaPicker.cleanNombreGranja(
+          (e['nombre'] ?? e['nombre_granja'] ?? '').toString(),
+        );
+        if (nom.isNotEmpty) break;
+      }
+    }
+    return _nomCache[g3] = nom;
+  }
+
+  /// "Granja 621 - NOMBRE - Campana 192" a partir de tcencos.
+  String _granjaLabel(BuildContext context, Map<String, dynamic> r) {
+    final tc = (r['tcencos'] ?? '').toString().trim();
+    if (tc.isEmpty) return '';
+    if (tc.length != 6 || int.tryParse(tc) == null) return tc;
+    final g3 = tc.substring(0, 3);
+    final camp = tc.substring(3);
+    final nom = _nombreGranja(context.read<StorageService>(), g3, r);
+    return [
+      'Granja $g3',
+      if (nom.isNotEmpty) nom,
+      'Campa\u00F1a $camp',
+    ].join(' \u00B7 ');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final hoy = DateTime.now();
+    _hasta = DateTime(hoy.year, hoy.month, hoy.day);
+    _desde = _hasta.subtract(const Duration(days: 6));
+  }
+
+  String _ymd(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  String _dmy(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  Future<void> _elegir(bool esDesde) async {
+    final inicial = esDesde ? _desde : _hasta;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: inicial,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (esDesde) {
+        _desde = DateTime(picked.year, picked.month, picked.day);
+        if (_desde.isAfter(_hasta)) _hasta = _desde;
+      } else {
+        _hasta = DateTime(picked.year, picked.month, picked.day);
+        if (_hasta.isBefore(_desde)) _desde = _hasta;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final storage = context.watch<StorageService>();
+    final desde = _ymd(_desde);
+    final hasta = _ymd(_hasta);
+    final registros =
+        storage.getMyRecords().where((r) {
+          final f = (r['fecha']?.toString() ?? '');
+          if (f.length < 10) return false;
+          final ymd = f.substring(0, 10);
+          return ymd.compareTo(desde) >= 0 && ymd.compareTo(hasta) <= 0;
+        }).toList()..sort((a, b) {
+          final fa = '${a['fecha']} ${a['hora']}';
+          final fb = '${b['fecha']} ${b['hora']}';
+          return fb.compareTo(fa);
+        });
+    final gruposOpc = <String, String>{};
+    for (final r in registros) {
+      gruposOpc.putIfAbsent(_claveGrupoReg(r), () => _nombreGrupoReg(r));
+    }
+    if (_fGrupo.isNotEmpty && !gruposOpc.containsKey(_fGrupo)) _fGrupo = '';
+    final filtrados = registros.where((r) {
+      if (_fGrupo.isNotEmpty && _claveGrupoReg(r) != _fGrupo) return false;
+      final env = r['synced'] == true;
+      if (_fEstado == 'env' && !env) return false;
+      if (_fEstado == 'pen' && env) return false;
+      return true;
+    }).toList();
+
+    return Scaffold(
+      drawer: const AppDrawer(),
+      appBar: const SectionAppBar(
+        title: AppStrings.reportesTitle,
+        sectionIcon: Icons.assessment_outlined,
+      ),
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 28 + MediaQuery.viewPaddingOf(context).bottom),
+        children: [
+          Row(
+            children: [
+              Expanded(child: _fechaBtn('Desde', _desde, () => _elegir(true))),
+              const SizedBox(width: 10),
+              Expanded(child: _fechaBtn('Hasta', _hasta, () => _elegir(false))),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _chip('Todos', _fEstado == '', () => _fEstado = ''),
+                _chip('Enviado', _fEstado == 'env', () => _fEstado = 'env'),
+                _chip('Pendiente', _fEstado == 'pen', () => _fEstado = 'pen'),
+                if (gruposOpc.length > 1) ...[
+                  Container(
+                    width: 1,
+                    height: 20,
+                    margin: const EdgeInsets.only(right: 6),
+                    color: context.textThemeMuted.withValues(alpha: 0.4),
+                  ),
+                  _chip('Todos los grupos', _fGrupo == '', () => _fGrupo = ''),
+                  for (final e in gruposOpc.entries)
+                    _chip(e.value, _fGrupo == e.key, () => _fGrupo = e.key),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (registros.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: Center(
+                child: Text(
+                  'Sin marcaciones',
+                  style: TextStyle(color: context.textThemeSecondary),
+                ),
+              ),
+            )
+          else if (filtrados.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: Center(
+                child: Text(
+                  'Nada coincide con el filtro',
+                  style: TextStyle(color: context.textThemeSecondary),
+                ),
+              ),
+            )
+          else
+            ..._agrupar(filtrados).map(
+              (g) =>
+                  g.length == 1 ? _tile(context, g.first) : _bloque(context, g),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Agrupa los registros hechos juntos: misma fecha, hora (minuto), tipo y centro.
+  List<List<Map<String, dynamic>>> _agrupar(List<Map<String, dynamic>> regs) {
+    final grupos = <String, List<Map<String, dynamic>>>{};
+    for (final r in regs) {
+      final hora = (r['hora']?.toString() ?? '');
+      final hh = hora.length >= 5 ? hora.substring(0, 5) : hora;
+      final k = '${r['fecha']}|$hh|${r['tipo']}|${r['tcencos']}';
+      grupos.putIfAbsent(k, () => []).add(r);
+    }
+    return grupos.values.toList();
+  }
+
+  /// Abre el panel arrastrable; una marca individual es un grupo de 1.
+  void _abrirDetalle(BuildContext context, List<Map<String, dynamic>> g) {
+    final r = g.first;
+    final tipo = int.tryParse('${r['tipo']}') ?? 0;
+    final comida = TipoMarcacion.comidaDe(tipo);
+    final momento = TipoMarcacion.momentoDe(tipo);
+    final color = comida == null ? AppColors.textMuted : colorDeComida(comida);
+    final hora = (r['hora']?.toString() ?? '');
+    final fecha = (r['fecha']?.toString() ?? '');
+    final todosSync = g.every((e) => e['synced'] == true);
+    final pend = g.where((e) => e['synced'] != true).length;
+    final titulo = [
+      if (comida != null) etiquetaComida(comida),
+      if (momento != null) etiquetaMomento(momento),
+    ].join(' \u00B7 ');
+    _verGrupo(
+      context,
+      titulo: titulo.isEmpty ? 'Marcaci\u00F3n' : titulo,
+      color: color,
+      icon: _iconoComida(comida),
+      fecha: fecha.length >= 10
+          ? '${fecha.substring(8, 10)}/${fecha.substring(5, 7)}/${fecha.substring(0, 4)}'
+          : fecha,
+      hora: hora.length >= 5 ? hora.substring(0, 5) : hora,
+      cencos: _granjaLabel(context, r),
+      estado: todosSync
+          ? 'Enviado'
+          : (pend == g.length ? 'Pendiente' : '$pend pendientes'),
+      enviado: todosSync,
+      personas: [
+        for (final e in g)
+          (
+            nombre: (e['nombre'] ?? e['dni'] ?? '').toString(),
+            dni: (e['dni'] ?? '').toString(),
+          ),
+      ],
+    );
+  }
+
+  IconData _iconoComida(Comida? c) => switch (c) {
+    Comida.desayuno => Icons.wb_twilight_rounded,
+    Comida.almuerzo => Icons.lunch_dining_rounded,
+    Comida.cena => Icons.nights_stay_rounded,
+    null => Icons.schedule,
+  };
+
+  Widget _bloque(BuildContext context, List<Map<String, dynamic>> g) {
+    final r = g.first;
+    final tipo = int.tryParse('${r['tipo']}') ?? 0;
+    final comida = TipoMarcacion.comidaDe(tipo);
+    final momento = TipoMarcacion.momentoDe(tipo);
+    final color = comida == null ? AppColors.textMuted : colorDeComida(comida);
+    final icon = switch (comida) {
+      Comida.desayuno => Icons.wb_twilight_rounded,
+      Comida.almuerzo => Icons.lunch_dining_rounded,
+      Comida.cena => Icons.nights_stay_rounded,
+      null => Icons.schedule,
+    };
+    final hora = (r['hora']?.toString() ?? '');
+    final hh = hora.length >= 5 ? hora.substring(0, 5) : hora;
+    final todosSync = g.every((e) => e['synced'] == true);
+    final pend = g.where((e) => e['synced'] != true).length;
+    final titulo = [
+      if (comida != null) etiquetaComida(comida),
+      if (momento != null) etiquetaMomento(momento),
+    ].join(' · ');
+    final tit = titulo.isEmpty ? 'Marcación' : titulo;
+    final cencos = _granjaLabel(context, r);
+    final estado = todosSync
+        ? 'Enviado'
+        : (pend == g.length ? 'Pendiente' : '$pend pendientes');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppColors.radiusLg),
+          onTap: () => _abrirDetalle(context, g),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: color, width: 4)),
+              borderRadius: BorderRadius.circular(AppColors.radiusLg),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(icon, color: color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tit,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.textThemePrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (cencos.isNotEmpty)
+                        Text(
+                          cencos,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: context.textThemeMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      Text(
+                        'Marcados juntos',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.textThemeMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.groups_rounded, size: 14, color: color),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${g.length} pers.',
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      hh,
+                      style: const TextStyle(
+                        color: AppColors.horaText,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      estado.toUpperCase(),
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: todosSync
+                            ? AppColors.mollendo
+                            : AppColors.desayuno,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _verGrupo(
+    BuildContext context, {
+    required String titulo,
+    required Color color,
+    required IconData icon,
+    required String fecha,
+    required String hora,
+    required String cencos,
+    required String estado,
+    required bool enviado,
+    required List<PersonaMarca> personas,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        minChildSize: 0.35,
+        maxChildSize: 0.92,
+        builder: (ctx, scroll) => ListView(
+          controller: scroll,
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.viewPaddingOf(context).bottom),
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: color.withValues(alpha: 0.16),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    titulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: ctx.textThemePrimary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _dato(ctx, Icons.event_rounded, fecha),
+                _dato(ctx, Icons.schedule_rounded, hora),
+                _dato(
+                  ctx,
+                  enviado ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                  estado,
+                  color: enviado ? AppColors.mollendo : AppColors.desayuno,
+                ),
+              ],
+            ),
+            if (cencos.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.home_work_rounded,
+                    size: 16,
+                    color: ctx.textThemeMuted,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      cencos,
+                      softWrap: true,
+                      style: TextStyle(
+                        color: ctx.textThemePrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            PersonasMarcaBloque(
+              titulo: personas.length == 1 ? 'Persona' : 'Personas registradas',
+              color: color,
+              personas: personas,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dato(BuildContext context, IconData i, String t, {Color? color}) {
+    final c = color ?? context.textThemeMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(i, size: 14, color: c),
+          const SizedBox(width: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Text(
+              t,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: c,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fechaBtn(String label, DateTime fecha, VoidCallback onTap) {
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(color: context.textThemeMuted, fontSize: 12),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _dmy(fecha),
+                style: TextStyle(
+                  color: context.textThemePrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tile(BuildContext context, Map<String, dynamic> r) {
+    final tipo = int.tryParse('${r['tipo']}') ?? 0;
+    final comida = TipoMarcacion.comidaDe(tipo);
+    final momento = TipoMarcacion.momentoDe(tipo);
+    final color = switch (comida) {
+      Comida.desayuno => AppColors.desayuno,
+      Comida.almuerzo => AppColors.almuerzo,
+      Comida.cena => AppColors.cena,
+      null => AppColors.textMuted,
+    };
+    final icon = switch (comida) {
+      Comida.desayuno => Icons.wb_twilight_rounded,
+      Comida.almuerzo => Icons.lunch_dining_rounded,
+      Comida.cena => Icons.nights_stay_rounded,
+      null => Icons.schedule,
+    };
+    final hora = (r['hora']?.toString() ?? '');
+    final hh = hora.length >= 5 ? hora.substring(0, 5) : hora;
+    final fecha = (r['fecha']?.toString() ?? '');
+    final f = fecha.length >= 10
+        ? '${fecha.substring(8, 10)}/${fecha.substring(5, 7)}'
+        : fecha;
+    final synced = r['synced'] == true;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppColors.radiusLg),
+          onTap: () => _abrirDetalle(context, [r]),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(icon, color: color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (r['nombre'] ?? r['dni'] ?? '').toString(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.textThemePrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        [
+                          if (comida != null) etiquetaComida(comida),
+                          if (momento != null) etiquetaMomento(momento),
+                          _granjaLabel(context, r),
+                        ].where((e) => e.isNotEmpty).join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.textThemeMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      hh,
+                      style: const TextStyle(
+                        color: AppColors.horaText,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      f,
+                      style: TextStyle(
+                        color: context.textThemeMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      synced ? 'ENVIADO' : 'PENDIENTE',
+                      style: TextStyle(
+                        color: synced ? AppColors.mollendo : AppColors.desayuno,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

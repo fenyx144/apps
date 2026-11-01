@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import '../services/catalog_service.dart';
-import '../services/catalog_sync_service.dart';
 import '../services/storage_service.dart';
 import '../services/vosk_service.dart';
 import '../utils/constants.dart';
@@ -58,29 +57,11 @@ class _SplashScreenState extends State<SplashScreen>
     final catalog = context.read<CatalogService>();
     final logged = await storage.isLoggedIn();
 
-    final syncFuture = logged
-        ? CatalogSyncService().syncAll(
-            storage: storage,
-            catalog: catalog,
-            forzar: true,
-          )
-            .timeout(
-              const Duration(seconds: 25),
-              onTimeout: () => const CatalogSyncResult(
-                hadInternet: true,
-                downloadedAnything: false,
-              ),
-            )
-        : catalog.loadFromPrefs().then(
-            (_) => const CatalogSyncResult(
-              hadInternet: false,
-              downloadedAnything: false,
-            ),
-          );
+    final loadFuture = catalog.loadFromPrefs();
 
     await Future.wait([
       Future.delayed(const Duration(milliseconds: 2500)),
-      syncFuture,
+      loadFuture,
     ]);
 
     if (!mounted) return;
@@ -180,60 +161,45 @@ class _SplashScreenState extends State<SplashScreen>
                         letterSpacing: 4,
                         shadows: [
                           Shadow(
-                            color: AppColors.primaryDark.withOpacity(0.5),
-                            blurRadius: 15,
-                            offset: const Offset(0, 3),
-                          ),
-                          Shadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 10,
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      AppConstants.appTitle,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 36,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 3,
-                        shadows: [
-                          Shadow(
-                            color: AppColors.primaryDark.withOpacity(0.5),
-                            blurRadius: 15,
-                            offset: const Offset(0, 3),
-                          ),
-                          Shadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: Text(
+                        AppConstants.appTitle,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.6,
+                          height: 1.25,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 5,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.center,
+                        softWrap: true,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
                     Container(
-                      width: 140,
-                      height: 4,
+                      width: 100,
+                      height: 3,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.white.withOpacity(0.8),
-                            Colors.white.withOpacity(0.4),
-                          ],
-                        ),
+                        color: Colors.white.withValues(alpha: 0.55),
                         borderRadius: BorderRadius.circular(2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.white.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
                       ),
                     ),
                   ],

@@ -1,12 +1,14 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../widgets/app_drawer.dart';
-import '../widgets/section_app_bar.dart';
 import '../widgets/evidencia_select_field.dart';
+import '../widgets/granja_campania_picker.dart';
+import '../widgets/section_app_bar.dart';
 import 'register_summary_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -19,6 +21,14 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   DateTime? _desde;
   DateTime? _hasta;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _desde = DateTime(now.year, now.month, 1);
+    _hasta = DateTime(now.year, now.month + 1, 0);
+  }
 
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> all) {
     return all.where((r) {
@@ -36,6 +46,41 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }).toList()
       ..sort((a, b) =>
           (b['fecha'] ?? '').toString().compareTo((a['fecha'] ?? '').toString()));
+  }
+
+  String _fmtDateDisplay(String iso) {
+    final f = DateTime.tryParse(iso);
+    if (f == null) return iso;
+    return DateFormat('dd/MM/yyyy').format(f);
+  }
+
+  Widget _infoLine(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted.withValues(alpha: 0.9),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSelectedValue,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _pickDate(bool isDesde) async {
@@ -62,8 +107,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget build(BuildContext context) {
     final storage = context.watch<StorageService>();
     final records = _filtered(storage.getAllRecords());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? null : AppColors.background,
       drawer: const AppDrawer(),
       appBar: const SectionAppBar(
         title: AppStrings.reportesTitle,
@@ -72,7 +119,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Row(
               children: [
                 Expanded(
@@ -103,83 +150,151 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
           Expanded(
             child: records.isEmpty
-                ? const Center(child: Text('Sin registros'))
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.inbox_outlined,
+                            size: 48,
+                            color: AppColors.textMuted.withValues(alpha: 0.7),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Sin registros',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Ajusta el rango de fechas o crea una nueva evidencia.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 48),
                     itemCount: records.length,
                     itemBuilder: (_, i) {
                       final r = records[i];
                       final synced = r['synced'] == true;
                       final imgs = (r['imagenes'] as List?) ?? [];
-                      final thumb = imgs.isNotEmpty ? imgs.first.toString() : null;
+                      final validImgs =
+                          imgs.map((p) => p.toString()).where((p) {
+                        final f = File(p);
+                        return p.isNotEmpty && f.existsSync();
+                      }).toList();
 
-                      return Card(
+                      final fecha = r['fecha']?.toString() ?? '';
+                      final fechaFmt =
+                          fecha.isNotEmpty ? _fmtDateDisplay(fecha) : '—';
+                      final granjaLabel = GranjaCampaniaPicker.formatGranjaLabel(
+                        r['granja']?.toString() ?? '',
+                        r['granjaNombre']?.toString() ?? '',
+                      );
+                      final camp = GranjaCampaniaPicker.padCampania(
+                        r['campania']?.toString() ?? '',
+                      );
+                      final galpon = r['galpon']?.toString() ?? '—';
+                      final proceso = r['procesoNombre']?.toString() ?? '—';
+
+                      return Container(
                         margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.black.withValues(alpha: 0.06),
+                          ),
+                          boxShadow: AppColors.lightShadow,
+                        ),
                         child: InkWell(
-                          onTap: () => Navigator.push(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => RegisterSummarySheet.show(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  RegisterSummaryScreen(record: r),
-                            ),
+                            record: r,
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: Row(
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (thumb != null && File(thumb).existsSync())
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.file(
-                                      File(thumb),
-                                      width: 72,
-                                      height: 72,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  )
-                                else
-                                  Container(
-                                    width: 72,
-                                    height: 72,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(Icons.image, color: Colors.grey),
-                                  ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        r['procesoNombre']?.toString() ?? '—',
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        fechaFmt,
                                         style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 15,
+                                          color: AppColors.textPrimary,
                                         ),
                                       ),
-                                      Text(
-                                        '${r['granjaNombre'] ?? r['granja']} — ${r['campania']}',
-                                        style: const TextStyle(fontSize: 13),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
                                       ),
-                                      Text(
-                                        'Galpón: ${r['galpon'] ?? '—'} · ${r['fecha']}',
-                                        style: const TextStyle(fontSize: 12),
+                                      decoration: BoxDecoration(
+                                        color: synced
+                                            ? AppColors.success
+                                                .withValues(alpha: 0.15)
+                                            : AppColors.warning
+                                                .withValues(alpha: 0.18),
+                                        borderRadius: BorderRadius.circular(20),
                                       ),
-                                    ],
-                                  ),
+                                      child: Text(
+                                        synced ? 'Subido' : 'Pendiente',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: synced
+                                              ? AppColors.primaryDark
+                                              : const Color(0xFFE65100),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                Chip(
-                                  label: Text(
-                                    synced ? 'Subido' : 'Pendiente',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  backgroundColor: synced
-                                      ? Colors.green.shade100
-                                      : Colors.orange.shade100,
-                                  padding: EdgeInsets.zero,
+                                const SizedBox(height: 6),
+                                _infoLine('Proceso', proceso),
+                                _infoLine(
+                                  'Granja',
+                                  granjaLabel.isEmpty ? '—' : granjaLabel,
                                 ),
+                                if (camp.isNotEmpty) _infoLine('Camp', camp),
+                                if (galpon.isNotEmpty && galpon != '—')
+                                  _infoLine('Galpón', galpon),
+                                if (validImgs.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: validImgs.map((p) {
+                                      return ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.file(
+                                          File(p),
+                                          width: 56,
+                                          height: 56,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

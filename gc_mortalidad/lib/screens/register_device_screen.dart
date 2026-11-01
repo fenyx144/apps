@@ -231,13 +231,14 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                           fontWeight: FontWeight.w500,
                           color: context.primaryTextColor,
                         ),
-                        decoration: AppInputStyles.decoration(
+                        decoration: AppInputStyles.decorationFlat(
                           context,
                           r: 12,
                           hintText: 'Descripción del dispositivo',
                           hintStyle: TextStyle(color: context.mutedTextColor),
                           prefixIcon: const Icon(Icons.description, color: AppColors.primary),
                           counterText: '',
+                          fillColor: isDark ? AppColors.darkBackground : Colors.white,
                         ),
                       ),
                       if (_hasAttemptedValidation && _descripcionController.text.trim().isEmpty)

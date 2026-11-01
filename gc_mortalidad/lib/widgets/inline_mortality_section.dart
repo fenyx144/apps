@@ -1,23 +1,23 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/motivo_mortalidad.dart';
 import '../models/mortality_detail.dart';
 import '../utils/constants.dart';
-import '../utils/theme_extensions.dart';
+import '../utils/text_utils.dart';
 import '../utils/toast_helper.dart';
-import 'dashed_photo_slot.dart';
 import 'searchable_select_dialog.dart';
-import 'styled_select_field.dart';
+import 'sexo_table.dart';
 import '../screens/image_editor_screen.dart';
 
 const int _maxPhotosPerSex = 3;
-const double _photoSize = 72;
 
+/// Captura directa en la pantalla de registro (Incubación, Transporte y
+/// Producción Necropsia/Laboratorio) en estilo tabla de 2 columnas
+/// (Machos | Hembras), sin pestañas ni botones +/−.
 class InlineMortalitySection extends StatefulWidget {
   final List<MortalityDetail> initialDetalles;
   final String? cantidadError;
@@ -26,6 +26,8 @@ class InlineMortalitySection extends StatefulWidget {
   final bool showCausa;
   final List<MotivoMortalidad> motivos;
   final Color tabAccentColor;
+  /// Si es true, las cantidades se bloquean (registro sin mortalidad).
+  final bool sinMortalidad;
 
   const InlineMortalitySection({
     super.key,
@@ -36,6 +38,7 @@ class InlineMortalitySection extends StatefulWidget {
     this.causaError,
     this.showCausa = false,
     this.motivos = const [],
+    this.sinMortalidad = false,
   });
 
   @override
@@ -56,12 +59,15 @@ class _SexInlineData {
   }
 
   int get cantidad => int.tryParse(cantidadController.text.trim()) ?? 0;
+
+  bool get hasContent =>
+      cantidad > 0 ||
+      observacionController.text.trim().isNotEmpty ||
+      fotos.isNotEmpty;
 }
 
-class _InlineMortalitySectionState extends State<InlineMortalitySection>
-    with SingleTickerProviderStateMixin {
+class _InlineMortalitySectionState extends State<InlineMortalitySection> {
   final _picker = ImagePicker();
-  late final TabController _tabController;
   late final _SexInlineData _macho;
   late final _SexInlineData _hembra;
 
@@ -72,52 +78,45 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection>
     _hembra = _SexInlineData();
     _loadInitial(widget.initialDetalles);
 
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(_onTabChanged);
-
-    _macho.cantidadController.addListener(_notifyParent);
-    _hembra.cantidadController.addListener(_notifyParent);
+    _macho.cantidadController.addListener(_onCantidadChanged);
+    _hembra.cantidadController.addListener(_onCantidadChanged);
     _macho.observacionController.addListener(_notifyParent);
     _hembra.observacionController.addListener(_notifyParent);
   }
 
-  void _onTabChanged() {
-    if (_tabController.indexIsChanging) {
-      _unfocus();
+  @override
+  void dispose() {
+    _macho.cantidadController.removeListener(_onCantidadChanged);
+    _hembra.cantidadController.removeListener(_onCantidadChanged);
+    _macho.observacionController.removeListener(_notifyParent);
+    _hembra.observacionController.removeListener(_notifyParent);
+    _macho.dispose();
+    _hembra.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(InlineMortalitySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.sinMortalidad && !oldWidget.sinMortalidad) {
+      _macho.cantidadController.removeListener(_onCantidadChanged);
+      _hembra.cantidadController.removeListener(_onCantidadChanged);
+      _macho.cantidadController.text = '';
+      _hembra.cantidadController.text = '';
+      _macho.cantidadController.addListener(_onCantidadChanged);
+      _hembra.cantidadController.addListener(_onCantidadChanged);
+      if (widget.showCausa) {
+        _macho.causaCodigo = null;
+        _macho.causaNombre = null;
+        _hembra.causaCodigo = null;
+        _hembra.causaNombre = null;
+      }
     }
-    setState(() {});
   }
 
-  Tab _buildSexTabLabel({
-    required int index,
-    required IconData icon,
-    required String label,
-    required bool isDark,
-  }) {
-    final selected = _tabController.index == index;
-    final color = selected
-        ? widget.tabAccentColor
-        : (isDark ? Colors.white54 : Colors.grey.shade600);
+  void _onCantidadChanged() => _notifyParent();
 
-    return Tab(
-      height: 40,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  void _notifyParent() => widget.onChanged(_buildDetalles());
 
   void _loadInitial(List<MortalityDetail> detalles) {
     for (final d in detalles) {
@@ -131,51 +130,40 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection>
       tab.causaCodigo = d.causaCodigo;
       tab.causaNombre = d.causaNombre;
       tab.fotos.addAll(d.fotos);
-      if (tab.observacionController.text.isEmpty && (d.observacion?.isNotEmpty ?? false)) {
+      if (tab.observacionController.text.isEmpty &&
+          (d.observacion?.isNotEmpty ?? false)) {
         tab.observacionController.text = d.observacion!;
       }
     }
   }
 
-  @override
-  void dispose() {
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
-    _macho.dispose();
-    _hembra.dispose();
-    super.dispose();
-  }
-
-  void _unfocus() => FocusManager.instance.primaryFocus?.unfocus();
-
   List<MortalityDetail> _buildDetalles() {
     final results = <MortalityDetail>[];
-    if (_macho.cantidad > 0) {
+    if (_macho.hasContent) {
       results.add(_detailFromTab('M', _macho));
     }
-    if (_hembra.cantidad > 0) {
+    if (_hembra.hasContent) {
       results.add(_detailFromTab('H', _hembra));
     }
     return results;
   }
 
   MortalityDetail _detailFromTab(String sexo, _SexInlineData tab) {
-    final obs = tab.observacionController.text.trim();
+    final obs = capitalizeText(tab.observacionController.text);
+    final sinMort = widget.sinMortalidad;
     return MortalityDetail(
       id: tab.detailId ?? const Uuid().v4(),
       sexo: sexo,
-      cantidad: tab.cantidad,
-      causaCodigo: widget.showCausa ? tab.causaCodigo : null,
-      causaNombre: widget.showCausa ? tab.causaNombre : null,
+      cantidad: sinMort ? 0 : tab.cantidad,
+      causaCodigo: sinMort || !widget.showCausa ? null : tab.causaCodigo,
+      causaNombre: sinMort || !widget.showCausa ? null : tab.causaNombre,
       observacion: obs.isEmpty ? null : obs,
       fotos: List.from(tab.fotos),
     );
   }
 
-  void _notifyParent() => widget.onChanged(_buildDetalles());
-
   Future<void> _openCausaDialog(_SexInlineData tab, String sexoLabel) async {
-    _unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
     if (widget.motivos.isEmpty) {
       showInfoToast(context, 'No hay causas disponibles. Descargue desde el menú.');
       return;
@@ -205,11 +193,11 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection>
         });
       },
     );
-    if (mounted) _unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   Future<void> _pickImage(_SexInlineData tab) async {
-    _unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
     if (tab.fotos.length >= _maxPhotosPerSex) {
       showWarningToast(context, 'Máximo $_maxPhotosPerSex fotos');
       return;
@@ -229,12 +217,12 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_camera_rounded, color: AppColors.primary),
+                leading: const Icon(Icons.photo_camera_rounded, color: AppColors.textSecondary),
                 title: const Text('Cámara'),
                 onTap: () => Navigator.pop(ctx, ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+                leading: const Icon(Icons.photo_library_rounded, color: AppColors.textSecondary),
                 title: const Text('Galería'),
                 onTap: () => Navigator.pop(ctx, ImageSource.gallery),
               ),
@@ -285,170 +273,90 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection>
     });
   }
 
-  Widget _buildSexTab({
-    required _SexInlineData tab,
-    required String sexoLabel,
-    required Color accent,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppColors.darkSurface : Colors.grey.shade50;
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 2),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: tab.cantidadController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onTapOutside: (_) => _unfocus(),
-              style: TextStyle(
-                color: isDark ? Colors.white : Colors.black87,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-              decoration: AppInputStyles.decoration(
-                context,
-                r: 12,
-                labelText: 'Cantidad',
-                hintText: 'Ej: 5',
-                accentBorder: widget.cantidadError == null,
-                errorText: widget.cantidadError,
-                prefixIcon: Icon(Icons.numbers_rounded, color: AppColors.primary),
-              ),
-            ),
-            if (widget.showCausa) ...[
-              const SizedBox(height: 12),
-              StyledSelectField(
-                label: 'Causa de mortalidad',
-                value: tab.causaNombre,
-                placeholder: 'Seleccionar causa...',
-                icon: Icons.medical_information_outlined,
-                errorText: widget.causaError,
-                flat: true,
-                onTap: () => _openCausaDialog(tab, sexoLabel),
-              ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: tab.observacionController,
-              maxLines: 2,
-              maxLength: 250,
-              onTapOutside: (_) => _unfocus(),
-              style: TextStyle(
-                color: isDark ? Colors.white : Colors.black87,
-                fontSize: 14,
-              ),
-              decoration: AppInputStyles.decoration(
-                context,
-                r: 12,
-                labelText: 'Observación',
-                hintText: 'Ingrese observaciones...',
-                accentBorder: true,
-                prefixIcon: Icon(Icons.notes_rounded, color: AppColors.primary),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.photo_camera_outlined, size: 18, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Text(
-                  'Fotos (${tab.fotos.length}/$_maxPhotosPerSex)',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: isDark ? Colors.white : AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: _photoSize + 4,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.zero,
-                children: [
-                  ...tab.fotos.asMap().entries.map(
-                        (e) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: DashedPhotoSlot(
-                            size: _photoSize,
-                            imagePath: e.value,
-                            onAdd: () => _pickImage(tab),
-                            onTapImage: () => _editPhoto(tab, e.key),
-                            onDeleteImage: () => _removePhoto(tab, e.key),
-                          ),
-                        ),
-                      ),
-                  if (tab.fotos.length < _maxPhotosPerSex)
-                    DashedPhotoSlot(
-                      size: _photoSize,
-                      onAdd: () => _pickImage(tab),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  List<String> get _errorLines {
+    final lines = <String>[];
+    final cant = widget.cantidadError;
+    if (cant != null && cant.trim().isNotEmpty) lines.add(cant);
+    final causa = widget.causaError;
+    if (widget.showCausa && causa != null && causa.trim().isNotEmpty) {
+      lines.add(causa);
+    }
+    return lines;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeTab = _tabController.index;
+    final accent = widget.tabAccentColor;
+    final enabled = !widget.sinMortalidad;
+
+    final rows = <Widget>[
+      SexoGridRow(
+        label: 'Cantidad',
+        cellM: SexoNumField(
+          controller: _macho.cantidadController,
+          accent: accent,
+          hasError: widget.cantidadError != null,
+          enabled: enabled,
+        ),
+        cellH: SexoNumField(
+          controller: _hembra.cantidadController,
+          accent: accent,
+          hasError: widget.cantidadError != null,
+          enabled: enabled,
+        ),
+      ),
+      if (widget.showCausa)
+        SexoGridRow(
+          label: 'Causa',
+          cellM: SexoSelectCell(
+            value: _macho.causaNombre,
+            accent: accent,
+            hasError: widget.causaError != null,
+            enabled: enabled,
+            onTap: () => _openCausaDialog(_macho, 'Machos'),
+          ),
+          cellH: SexoSelectCell(
+            value: _hembra.causaNombre,
+            accent: accent,
+            hasError: widget.causaError != null,
+            enabled: enabled,
+            onTap: () => _openCausaDialog(_hembra, 'Hembras'),
+          ),
+        ),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TabBar(
-          controller: _tabController,
-          onTap: (_) => _unfocus(),
-          tabAlignment: TabAlignment.fill,
-          padding: EdgeInsets.zero,
-          dividerHeight: 0,
-          indicatorColor: widget.tabAccentColor,
-          labelColor: widget.tabAccentColor,
-          unselectedLabelColor: isDark ? Colors.white54 : Colors.grey.shade600,
-          labelPadding: EdgeInsets.zero,
-          tabs: [
-            _buildSexTabLabel(
-              index: 0,
-              icon: Icons.male_rounded,
-              label: 'Machos',
-              isDark: isDark,
-            ),
-            _buildSexTabLabel(
-              index: 1,
-              icon: Icons.female_rounded,
-              label: 'Hembras',
-              isDark: isDark,
-            ),
-          ],
+        SexoGridTable(
+          accent: accent,
+          rows: rows,
+          errors: _errorLines,
         ),
-        if (activeTab == 0)
-          _buildSexTab(
-            tab: _macho,
-            sexoLabel: 'Machos',
-            accent: widget.tabAccentColor,
-          )
-        else
-          _buildSexTab(
-            tab: _hembra,
-            sexoLabel: 'Hembras',
-            accent: widget.tabAccentColor,
-          ),
+        const SizedBox(height: 10),
+        SexoObsFotoBlock(
+          sexoLabel: 'Machos',
+          icon: Icons.male_rounded,
+          accent: AppColors.maleDark,
+          obsController: _macho.observacionController,
+          fotos: _macho.fotos,
+          maxFotos: _maxPhotosPerSex,
+          onAddFoto: () => _pickImage(_macho),
+          onEditFoto: (i) => _editPhoto(_macho, i),
+          onRemoveFoto: (i) => _removePhoto(_macho, i),
+        ),
+        const SizedBox(height: 10),
+        SexoObsFotoBlock(
+          sexoLabel: 'Hembras',
+          icon: Icons.female_rounded,
+          accent: AppColors.femaleDark,
+          obsController: _hembra.observacionController,
+          fotos: _hembra.fotos,
+          maxFotos: _maxPhotosPerSex,
+          onAddFoto: () => _pickImage(_hembra),
+          onEditFoto: (i) => _editPhoto(_hembra, i),
+          onRemoveFoto: (i) => _removePhoto(_hembra, i),
+        ),
       ],
     );
   }

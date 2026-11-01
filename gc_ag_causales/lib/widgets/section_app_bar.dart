@@ -10,12 +10,14 @@ class SectionAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.sectionIcon,
     this.actions,
     this.preferredHeight = 70,
+    this.navigationBarColor,
   });
 
   final String title;
   final IconData sectionIcon;
   final List<Widget>? actions;
   final double preferredHeight;
+  final Color? navigationBarColor;
 
   @override
   Size get preferredSize => Size.fromHeight(preferredHeight);
@@ -25,6 +27,7 @@ class SectionAppBar extends StatelessWidget implements PreferredSizeWidget {
     return ScreenStatusBar(
       color: AppColors.primary,
       iconBrightness: Brightness.light,
+      navigationBarColor: navigationBarColor,
       child: Container(
         decoration: const BoxDecoration(
           gradient: AppColors.headerGradient,

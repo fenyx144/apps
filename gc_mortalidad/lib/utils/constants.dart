@@ -1,33 +1,54 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
+  // ── Marca verde: SOLO header superior, botones de acción y checks ──
   static const Color primary = Color(0xFF4CAF50);
   static const Color primaryLight = Color(0xFF81C784);
   static const Color primaryDark = Color(0xFF388E3C);
   static const Color primaryVibrant = Color(0xFF66BB6A);
 
-  static const Color accent = Color(0xFF66BB6A);
-  static const Color background = Color(0xFFF1F8E9);
-  static const Color cardBackground = Colors.white;
-  static const Color textPrimary = Color(0xFF2E7D32);
-  static const Color textSecondary = Color(0xFF66BB6A);
-  static const Color textMuted = Color(0xFF81C784);
-  static const Color textOnPrimary = Colors.white;
+  static const Color accent = Color(0xFF4CAF50);
 
-  static const Color darkBackground = Color(0xFF1A1A2E);
-  static const Color darkSurface = Color(0xFF232340);
-  static const Color darkCard = Color(0xFF2D2D4A);
+  // ── Superficies ─────────────────────────────────────────────────
+  // Claro: gris pizarra muy claro; Oscuro: azul marino profundo.
+  static const Color background = Color(0xFFF8FAFC);
+  static const Color cardBackground = Colors.white;
+  static const Color darkBackground = Color(0xFF0F172A);
+  // Azul pizarra para cards/superficies en modo oscuro.
+  static const Color darkSurface = Color(0xFF1E293B);
+  static const Color darkCard = Color(0xFF1E293B);
+
+  // ── Bordes ──────────────────────────────────────────────────────
+  static const Color borderLight = Color(0xFFE2E8F0);
+  static const Color darkBorder = Color(0xFF334155);
+
+  // ── Textos ──────────────────────────────────────────────────────
+  // Claro: texto principal pizarra oscuro, secundario gris medio.
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B);
+  static const Color textMuted = Color(0xFF94A3B8);
+  static const Color textOnPrimary = Colors.white;
+  // Oscuro: blanco humo y gris azulado.
+  static const Color darkTextPrimary = Color(0xFFF1F5F9);
+  static const Color darkTextSecondary = Color(0xFF94A3B8);
+  static const Color darkTextMuted = Color(0xFF64748B);
 
   static const Color error = Color(0xFFE57373);
   static const Color success = Color(0xFF4CAF50);
   static const Color warning = Color(0xFFFF9800);
   static const Color info = Color(0xFF2196F3);
-  static const Color iconAccent = Color(0xFF4FC3F7);
+  static const Color iconAccent = Color(0xFF4CAF50);
 
-  static const Color maleTint = Color(0xFFE1F5FE);
-  static const Color femaleTint = Color(0xFFFCE4EC);
-  static const Color maleDark = Color(0xFF4FC3F7);
-  static const Color femaleDark = Color(0xFFF48FB1);
+  // ── Sexos: Machos índigo suave, Hembras coral suave ────────────
+  static const Color maleAccent = Color(0xFF818CF8);
+  static const Color maleAccentDark = Color(0xFFA5B4FC);
+  static const Color maleTint = Color(0xFFEEF2FF);
+  static const Color femaleAccent = Color(0xFFFB7185);
+  static const Color femaleAccentDark = Color(0xFFFDA4AF);
+  static const Color femaleTint = Color(0xFFFFF1F2);
+  // Alias compatibles con el uso previo (se mantienen para textos/iconos).
+  static const Color maleDark = Color(0xFF818CF8);
+  static const Color femaleDark = Color(0xFFFB7185);
 
   static const LinearGradient headerGradient = LinearGradient(
     colors: [primary, primaryLight],
@@ -66,15 +87,17 @@ class AppIcons {
 }
 
 class AppConstants {
-  static const String baseUrl = 'http://localhost:8080/sanidad/flutter';
-                                //'http://10.75.114.131/sanidad/flutter'; 
+  static const String baseUrl = 'https://granjarinconadadelsur.com/produccionaves/app/public';
                                 //'https://granjarinconadadelsur.com/sanidad/flutter';
+                                //'http://192.168.15.38/produccionaves/app/public';
+                                //'http://10.252.29.5/sanidad/flutter';
+                                //'http://10.252.29.5/sanidad-backend-mobile/flutter';
   static const String apiToken = 'd9f7a6b3-4c8e-11ee-be56-0242ac120002';
   static const String appName = 'PROD_MORTALIDAD';
   static const String appDeveloper = 'JLSF Soft Soluciones EIRL.';
   static const String companyName = 'Granja Rinconada del Sur';
   static const String appTitle = 'MORTALIDAD';
-  static const String appVersion = '1.0.1';
+  static const String appVersion = '1.0.3';
 
   static const String keyIsLoggedIn = 'is_logged_in';
   static const String keyUserCode = 'user_code';
@@ -104,7 +127,7 @@ class AppStrings {
   static const String dashboardTitle = 'Dashboard';
   static const String reportesTitle = 'Mis Registros';
   static const String reporteLiquidacionTitle = 'Reporte Liquidación';
-  static const String auditoriaTitle = 'Auditoría';
+  static const String auditoriaTitle = 'Registro Auditoría';
   static const String menuDashboard = 'Mi Dashboard';
   static const String menuRegistro = 'Registro Mortalidad';
   static const String menuReportes = 'Mis Registros';

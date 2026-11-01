@@ -28,6 +28,18 @@ class StorageService with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> saveOfflineHash(String hash) async {
+    await _prefs.setString(AppConstants.keyOfflineHash, hash);
+  }
+
+  String? getOfflineHash() => _prefs.getString(AppConstants.keyOfflineHash);
+
+  Future<void> saveLoginEnom(String enom) async {
+    await _prefs.setString(AppConstants.keyLoginEnom, enom);
+  }
+
+  String? getLoginEnom() => _prefs.getString(AppConstants.keyLoginEnom);
+
   Future<void> clearAll() async {
     await _prefs.clear();
     notifyListeners();
@@ -138,6 +150,8 @@ class StorageService with ChangeNotifier {
 
   Future<String?> getLastSyncDate() async => _prefs.getString('last_sync_date');
 
+  String? get lastSyncDateSync => _prefs.getString('last_sync_date');
+
   Future<void> setLastDownloadDate() async {
     final now = DateTime.now();
     final s =
@@ -148,6 +162,41 @@ class StorageService with ChangeNotifier {
 
   Future<String?> getLastDownloadDate() async =>
       _prefs.getString('last_download_date');
+
+  String? get lastDownloadDateSync => _prefs.getString('last_download_date');
+
+  DateTime? get lastDownloadDateTime {
+    final s = lastDownloadDateSync;
+    if (s == null || s.isEmpty || s == '--/--/--') return null;
+    try {
+      final parts = s.split(' ');
+      final dateParts = parts.first.split('/');
+      if (dateParts.length != 3) return null;
+      final day = int.parse(dateParts[0]);
+      final month = int.parse(dateParts[1]);
+      final year = int.parse(dateParts[2]);
+      var hour = 0;
+      var minute = 0;
+      if (parts.length > 1) {
+        final timeParts = parts[1].split(':');
+        if (timeParts.length >= 2) {
+          hour = int.parse(timeParts[0]);
+          minute = int.parse(timeParts[1]);
+        }
+      }
+      return DateTime(year, month, day, hour, minute);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// true si nunca descargó o lleva [AppConstants.staleCatalogDays] días sin actualizar.
+  bool get needsCatalogUpdate {
+    final last = lastDownloadDateTime;
+    if (last == null) return true;
+    final days = DateTime.now().difference(last).inDays;
+    return days >= AppConstants.staleCatalogDays;
+  }
 
   Future<void> saveCencosGalpones(Map<String, dynamic> data) async {
     final indices = GalponesResolver.buildIndicesFromApiData(data);

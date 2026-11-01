@@ -71,7 +71,13 @@ class _AnimatedToastState extends State<_AnimatedToast>
 
   @override
   Widget build(BuildContext context) {
-    final bottomOffset = MediaQuery.of(context).padding.bottom + 40;
+    // Se usa el viewInsets del teclado para que la toast quede SIEMPRE
+    // visible: si el teclado está abierto, el toast aparece encima de él.
+    // Al leer MediaQuery en el build, la posición se recalcula cuando el
+    // teclado se abre/cierra mientras la toast está en pantalla.
+    final mediaQuery = MediaQuery.of(context);
+    final bottomOffset =
+        mediaQuery.padding.bottom + mediaQuery.viewInsets.bottom + 40;
     return Positioned(
       bottom: bottomOffset,
       left: 16,

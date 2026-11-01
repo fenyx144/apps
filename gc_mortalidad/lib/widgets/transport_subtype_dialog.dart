@@ -39,7 +39,7 @@ Future<String?> showTransportSubtypeDialog({
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.local_shipping_rounded, color: AppColors.primary, size: 22),
+                      const Icon(Icons.local_shipping_rounded, color: AppColors.textSecondary, size: 22),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(

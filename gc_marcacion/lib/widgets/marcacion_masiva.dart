@@ -1,0 +1,700 @@
+import 'package:flutter/material.dart';
+
+import '../utils/comida_horario.dart';
+import '../utils/constants.dart';
+import '../utils/theme_colors.dart';
+import 'app_card.dart';
+
+enum VistaMarcacion { una, varias }
+
+Color colorDeComida(Comida comida) {
+  return switch (comida) {
+    Comida.desayuno => AppColors.desayuno,
+    Comida.almuerzo => AppColors.almuerzo,
+    Comida.cena => AppColors.cena,
+  };
+}
+
+IconData iconoDeComida(Comida comida) {
+  return switch (comida) {
+    Comida.desayuno => Icons.wb_twilight_rounded,
+    Comida.almuerzo => Icons.lunch_dining_rounded,
+    Comida.cena => Icons.nights_stay_rounded,
+  };
+}
+
+Color colorDeGrupo(String grupo, String nom) {
+  return switch (normGrupo(grupo, nom)) {
+    'G1' => AppColors.desayuno,
+    'G2' => AppColors.mollendo,
+    'G3' => AppColors.almuerzo,
+    'G4' => AppColors.cena,
+    'G5' => const Color(0xFF9A3412),
+    'G6' => const Color(0xFF15803D),
+    _ => const Color(0xFF64748B),
+  };
+}
+
+String tituloGrupo(String titulo, String clave) =>
+    titulo.trim().isEmpty ? 'Sin grupo' : titulo.trim();
+
+class FilaMasiva {
+  const FilaMasiva({
+    required this.persona,
+    required this.estado,
+    required this.nota,
+    required this.seleccionada,
+  });
+
+  final PersonalDespacho persona;
+  final MarcaPersonaEstado estado;
+  final String nota;
+  final bool seleccionada;
+}
+
+class MarcacionVistaSwitch extends StatelessWidget {
+  const MarcacionVistaSwitch({
+    super.key,
+    required this.vista,
+    required this.onChanged,
+  });
+
+  final VistaMarcacion vista;
+  final ValueChanged<VistaMarcacion> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 38,
+      child: Row(
+        children: [
+          Expanded(
+            child: _boton(
+              context,
+              VistaMarcacion.una,
+              Icons.person_rounded,
+              'Una persona',
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _boton(
+              context,
+              VistaMarcacion.varias,
+              Icons.groups_rounded,
+              'Varias',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _boton(
+    BuildContext context,
+    VistaMarcacion valor,
+    IconData icono,
+    String texto,
+  ) {
+    final activa = vista == valor;
+    final fg = activa ? Colors.white : AppColors.registro;
+    return Material(
+      color: activa ? AppColors.registro : context.surfaceCard,
+      elevation: activa ? 3 : 0,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => onChanged(valor),
+        child: Container(
+          height: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.registro, width: 2),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icono, size: 20, color: fg),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  texto,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: fg,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class MarcacionContextoMasivo extends StatelessWidget {
+  const MarcacionContextoMasivo({
+    super.key,
+    required this.comida,
+    required this.hora,
+    required this.onComida,
+  });
+
+  final Comida comida;
+  final String? hora;
+  final ValueChanged<Comida> onComida;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = colorDeComida(comida);
+    return Row(
+      children: [
+        for (final c in Comida.values) ...[
+          if (c != Comida.desayuno) const SizedBox(width: 4),
+          Expanded(
+            child: _ChipComida(
+              comida: c,
+              activa: c == comida,
+              onTap: () => onComida(c),
+            ),
+          ),
+        ],
+        if (hora != null) ...[
+          const SizedBox(width: 6),
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              hora!,
+              maxLines: 1,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ChipComida extends StatelessWidget {
+  const _ChipComida({
+    required this.comida,
+    required this.activa,
+    required this.onTap,
+  });
+
+  final Comida comida;
+  final bool activa;
+  final VoidCallback onTap;
+
+  String _etiqueta(BuildContext context, double ancho) {
+    final full = etiquetaComida(comida);
+    final tp = TextPainter(
+      text: TextSpan(
+        text: full,
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+      ),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final cabe = tp.width <= ancho;
+    tp.dispose();
+    return cabe || full.length <= 3 ? full : full.substring(0, 3);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = colorDeComida(comida);
+    return Material(
+      color: activa ? color : context.surfaceCard,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          height: 38,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: activa ? color : context.borderSubtle),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                iconoDeComida(comida),
+                size: 18,
+                color: activa ? Colors.white : color,
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: LayoutBuilder(
+                  builder: (ctx, c) => Text(
+                    _etiqueta(ctx, c.maxWidth),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: activa ? Colors.white : context.textThemePrimary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ignore: unused_element
+class _ChipMomento extends StatelessWidget {
+  const _ChipMomento({
+    required this.texto,
+    required this.activo,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String texto;
+  final bool activo;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: activo ? color : context.surfaceCard,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: activo ? color : context.borderSubtle),
+          ),
+          child: Text(
+            texto,
+            style: TextStyle(
+              color: activo ? Colors.white : context.textThemePrimary,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class MarcacionListaMasiva extends StatelessWidget {
+  const MarcacionListaMasiva({
+    super.key,
+    required this.grupos,
+    required this.comida,
+    required this.horasInicio,
+    required this.horasFin,
+    required this.selInicio,
+    required this.selFin,
+    this.borrarInicio = const {},
+    this.borrarFin = const {},
+    required this.onToggle,
+    required this.onGrupo,
+  });
+
+  final List<GrupoMarcacion> grupos;
+  final Comida comida;
+  final Map<String, String> horasInicio;
+  final Map<String, String> horasFin;
+  final Map<String, String> selInicio;
+  final Map<String, String> selFin;
+  final Set<String> borrarInicio;
+  final Set<String> borrarFin;
+  final void Function(String dni, MomentoComida momento) onToggle;
+  final void Function(List<String> dnis, MomentoComida momento, bool marcar)
+  onGrupo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final g in grupos)
+          MarcacionGrupoTarjeta(
+            grupo: g,
+            comida: comida,
+            horasInicio: horasInicio,
+            horasFin: horasFin,
+            selInicio: selInicio,
+            selFin: selFin,
+            borrarInicio: borrarInicio,
+            borrarFin: borrarFin,
+            onToggle: onToggle,
+            onGrupo: onGrupo,
+          ),
+      ],
+    );
+  }
+}
+
+class MarcacionGrupoTarjeta extends StatelessWidget {
+  const MarcacionGrupoTarjeta({
+    super.key,
+    required this.grupo,
+    required this.comida,
+    required this.horasInicio,
+    required this.horasFin,
+    required this.selInicio,
+    required this.selFin,
+    this.borrarInicio = const {},
+    this.borrarFin = const {},
+    required this.onToggle,
+    required this.onGrupo,
+  });
+
+  static const double _col = 56;
+
+  final GrupoMarcacion grupo;
+  final Comida comida;
+  final Map<String, String> horasInicio;
+  final Map<String, String> horasFin;
+  final Map<String, String> selInicio;
+  final Map<String, String> selFin;
+  final Set<String> borrarInicio;
+  final Set<String> borrarFin;
+  final void Function(String dni, MomentoComida momento) onToggle;
+  final void Function(List<String> dnis, MomentoComida momento, bool marcar)
+  onGrupo;
+
+  Map<String, String> _guardadas(MomentoComida m) =>
+      m == MomentoComida.inicio ? horasInicio : horasFin;
+  Map<String, String> _sel(MomentoComida m) =>
+      m == MomentoComida.inicio ? selInicio : selFin;
+
+  bool _porBorrar(String dni, MomentoComida m) =>
+      (m == MomentoComida.inicio ? borrarInicio : borrarFin).contains(dni) ||
+      (m == MomentoComida.fin && borrarInicio.contains(dni));
+
+  bool _tieneInicio(String dni) =>
+      selInicio.containsKey(dni) ||
+      (horasInicio.containsKey(dni) && !borrarInicio.contains(dni));
+
+  @override
+  Widget build(BuildContext context) {
+    final color = colorDeGrupo(grupo.clave, grupo.titulo);
+    final comidaColor = colorDeComida(comida);
+    final total = grupo.personas.length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: AppCard(
+        padding: const EdgeInsets.fromLTRB(12, 10, 4, 8),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: color.withValues(alpha: 0.14),
+                  child: Icon(Icons.groups_rounded, size: 18, color: color),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tituloGrupo(grupo.titulo, grupo.clave),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.textThemePrimary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        '$total ${total == 1 ? 'persona' : 'personas'}',
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: context.textThemeMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _cabezaColumna(context, MomentoComida.inicio, comidaColor),
+                _cabezaColumna(context, MomentoComida.fin, comidaColor),
+              ],
+            ),
+            const SizedBox(height: 4),
+            for (final p in grupo.personas) _fila(context, p, comidaColor),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cabezaColumna(BuildContext context, MomentoComida m, Color color) {
+    final guardadas = _guardadas(m);
+    final sel = _sel(m);
+    final elegibles = [
+      for (final p in grupo.personas)
+        if (m == MomentoComida.inicio || _tieneInicio(p.dni)) p.dni,
+    ];
+    bool marcada(String d) =>
+        sel.containsKey(d) ||
+        (guardadas.containsKey(d) && !_porBorrar(d, m));
+    final faltan = [for (final d in elegibles) if (!marcada(d)) d];
+    final marcadas = [for (final d in elegibles) if (marcada(d)) d];
+    final valor = elegibles.isNotEmpty && faltan.isEmpty;
+    return SizedBox(
+      width: _col,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            m == MomentoComida.inicio ? 'Inicio' : 'Fin',
+            maxLines: 1,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+          Checkbox(
+            value: valor,
+            activeColor: color,
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            side: BorderSide(color: color, width: 1.5),
+            onChanged: elegibles.isEmpty
+                ? null
+                : (_) => valor
+                      ? onGrupo(marcadas, m, false)
+                      : onGrupo(faltan, m, true),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fila(BuildContext context, PersonalDespacho p, Color color) {
+    final sub = [
+      etiquetaDni(p.dni),
+      if (p.cargo.trim().isNotEmpty) p.cargo.trim(),
+    ].join(' \u00b7 ');
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    p.nombre,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.textThemePrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    sub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.textThemeMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _celda(context, p.dni, MomentoComida.inicio, color),
+          _celda(context, p.dni, MomentoComida.fin, color),
+        ],
+      ),
+    );
+  }
+
+  Widget _celda(
+    BuildContext context,
+    String dni,
+    MomentoComida m,
+    Color color,
+  ) {
+    final sel = _sel(m)[dni];
+    final guardada = _guardadas(m)[dni];
+    final borrar = sel == null && guardada != null && _porBorrar(dni, m);
+    final estado = estadoMarcacion(
+      momento: m,
+      tieneInicio: _tieneInicio(dni) || borrar,
+      tieneEstaMarca: sel != null || guardada != null,
+    );
+    final bloqueada = estado == MarcaPersonaEstado.sinInicio;
+    final activo = bloqueada
+        ? context.textThemeMuted
+        : borrar
+        ? Colors.red
+        : sel != null
+        ? color
+        : AppColors.guardado;
+    final hora = bloqueada ? '' : sel ?? guardada ?? '';
+    return SizedBox(
+      width: _col,
+      child: InkWell(
+        key: ValueKey('celda-$dni-${m.name}'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => onToggle(dni, m),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IgnorePointer(
+              child: Checkbox(
+                value: sel != null || (guardada != null && !borrar),
+                onChanged: (_) {},
+                activeColor: activo,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                side: BorderSide(
+                  color: bloqueada ? activo.withValues(alpha: 0.4) : color,
+                  width: 1.5,
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 14,
+              child: Text(
+                hora,
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                softWrap: false,
+                style: TextStyle(
+                  color: activo,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  decoration: borrar ? TextDecoration.lineThrough : null,
+                  decorationColor: Colors.red,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MarcacionBarraGuardar extends StatelessWidget {
+  const MarcacionBarraGuardar({
+    super.key,
+    required this.personas,
+    required this.detalle,
+    required this.color,
+    required this.onGuardar,
+  });
+
+  final int personas;
+  final String detalle;
+  final Color color;
+  final VoidCallback? onGuardar;
+
+  @override
+  Widget build(BuildContext context) {
+    final etiqueta = personas == 0
+        ? 'Elija personas'
+        : '$personas ${personas == 1 ? 'persona' : 'personas'}';
+    return Material(
+      color: context.surfaceCard,
+      elevation: 8,
+      shadowColor: Colors.black26,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      etiqueta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: personas == 0
+                            ? context.textThemeMuted
+                            : context.textThemePrimary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      detalle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: onGuardar,
+                style: FilledButton.styleFrom(
+                  backgroundColor: color,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: color.withValues(alpha: 0.35),
+                  disabledForegroundColor: Colors.white70,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Guardar',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

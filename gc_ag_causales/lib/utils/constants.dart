@@ -17,8 +17,11 @@ class AppColors {
   static const Color background = Color(0xFFF1F8E9);
   static const Color cardBackground = Colors.white;
   static const Color textPrimary = Color(0xFF2E7D32);
-  /// Valor seleccionado en inputs (verde más claro).
-  static const Color textSelectedValue = Color(0xFF66BB6A);
+  /// Etiquetas de inputs (gris, distinto al valor).
+  static const Color textLabel = Color(0xFF757575);
+  static const double inputLabelFontSize = 15;
+  static const double inputFloatingLabelFontSize = 14;
+  static const Color textSelectedValue = Color(0xFF388E3C);
   static const Color textSecondary = Color(0xFF66BB6A);
   static const Color textMuted = Color(0xFF81C784);
   /// Fondo de diálogos en modo claro.
@@ -102,20 +105,23 @@ class AppColors {
 }
 
 class AppConstants {
-  static const String baseUrl = 'http://10.146.95.131 /sanidad/flutter';
+  static const String baseUrl = 'https://granjarinconadadelsur.com/sanidad/flutter';
   static const String agCausalesPath = '/ag_causales';
   static const String apiToken = 'd9f7a6b3-4c8e-11ee-be56-0242ac120002';
   static const String appName = 'PROD_AG_CAUSALES';
   static const String appTitle = 'AG CAUSALES';
   static const String appDeveloper = 'JLSF Soft Soluciones EIRL.';
   static const String companyName = 'Granja Rinconada del Sur';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.1';
+  static const String offlineSalt = 'M0rt4l1d4d_S4lt_2026';
 
   static const String keyIsLoggedIn = 'is_logged_in';
   static const String keyUserCode = 'user_code';
   static const String keyUserName = 'user_name';
   static const String keyDeviceId = 'device_id';
   static const String keyDeviceAuthorized = 'device_authorized';
+  static const String keyOfflineHash = 'offline_hash';
+  static const String keyLoginEnom = 'login_enom';
 
   static const String loginEndpoint = '/login.php';
   static const String registerDeviceEndpoint = '/registrardispositivo.php';
@@ -127,6 +133,9 @@ class AppConstants {
   static const String keyCencosLista = 'agc_cencos_lista';
   static const String keyProyeccion = 'agc_proyeccion';
   static const String keyArbolProcesos = 'agc_arbol_procesos';
+
+  /// Días sin descargar catálogos antes de mostrar aviso en el drawer.
+  static const int staleCatalogDays = 3;
 }
 
 class AppStrings {
@@ -144,6 +153,7 @@ class AppStrings {
   static const String hasta = 'Hasta';
   static const String guardarRegistro = 'Guardar Registro';
   static const String descargaExitosa = 'Información descargada con éxito';
+  static const String actualiceCatalogos = 'Actualice sus catálogos';
   static const String subidaExitosa = 'Registros subidos correctamente';
   static const String sinConexion = 'No hay conexión a internet.';
   static const String pendientes = 'Pendientes';

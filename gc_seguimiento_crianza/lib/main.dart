@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -8,6 +9,7 @@ import 'screens/splash_screen.dart';
 import 'services/catalog_service.dart';
 import 'services/storage_service.dart';
 import 'utils/app_theme.dart';
+import 'utils/constants.dart';
 import 'utils/route_observer.dart';
 
 void main() async {
@@ -19,6 +21,10 @@ void main() async {
   );
   AppTheme.applySystemChrome();
   final prefs = await SharedPreferences.getInstance();
+  // Diseño: la sesión no persiste entre arranques. Cada arranque del proceso
+  // (incluido hot restart) comienza con sesión cerrada; el usuario debe
+  // iniciar sesión de nuevo. Los catálogos y registros guardados se conservan.
+  await prefs.setBool(AppConstants.keyIsLoggedIn, false);
   runApp(
     MultiProvider(
       providers: [
@@ -46,7 +52,7 @@ class SeguimientoCrianzaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Seguimiento de crianza',
+      title: 'Seguimiento Productivo',
       locale: const Locale('es', 'ES'),
       navigatorObservers: [routeObserver],
       localizationsDelegates: const [
@@ -63,9 +69,45 @@ class SeguimientoCrianzaApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       builder: (context, child) {
         AppTheme.applySystemChrome(Theme.of(context).brightness);
-        return child ?? const SizedBox.shrink();
+        return _AppLifecycleObserver(child: child ?? const SizedBox.shrink());
       },
       home: const SplashScreen(),
     );
   }
+}
+
+/// Cierra la sesión cuando la app se cierra por completo (design: la sesión
+/// no debe persistir entre arranques). No borra catálogos ni registros.
+class _AppLifecycleObserver extends StatefulWidget {
+  const _AppLifecycleObserver({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AppLifecycleObserver> createState() => _AppLifecycleObserverState();
+}
+
+class _AppLifecycleObserverState extends State<_AppLifecycleObserver>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      unawaited(context.read<StorageService>().clearSession());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

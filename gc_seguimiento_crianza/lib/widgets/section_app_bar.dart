@@ -28,7 +28,7 @@ class SectionAppBar extends StatelessWidget implements PreferredSizeWidget {
       child: Container(
         decoration: const BoxDecoration(
           gradient: AppColors.headerGradient,
-          boxShadow: AppColors.strongShadow,
+          boxShadow: AppColors.mediumShadow,
         ),
         child: AppBar(
           backgroundColor: Colors.transparent,
@@ -58,18 +58,7 @@ class SectionAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
           title: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    width: 1,
-                  ),
-                ),
-                child: Icon(sectionIcon, color: Colors.white, size: 24),
-              ),
+              Icon(sectionIcon, color: Colors.white, size: 24),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(

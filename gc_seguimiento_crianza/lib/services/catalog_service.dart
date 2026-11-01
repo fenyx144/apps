@@ -14,13 +14,22 @@ class CatalogService with ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final data = prefs.getString('catalogos');
-      if (data != null) {
+      if (data != null && data.isNotEmpty) {
         _catalogos = Map<String, dynamic>.from(jsonDecode(data) as Map);
-        notifyListeners();
+      } else {
+        _catalogos = {};
       }
+      notifyListeners();
     } catch (e) {
       debugPrint('Error loading catalogs: $e');
+      _catalogos = {};
+      notifyListeners();
     }
+  }
+
+  void clearMemory() {
+    _catalogos = {};
+    notifyListeners();
   }
 
   Future<bool> downloadCatalogos({List<String>? tablas}) async {
@@ -35,18 +44,40 @@ class CatalogService with ChangeNotifier {
       if (result['success'] == true) {
         final raw = result['data'];
         if (raw is Map<String, dynamic>) {
-          _catalogos.addAll(raw);
+          if (tablas != null && tablas.isNotEmpty) {
+            for (final t in tablas) {
+              if (raw.containsKey(t)) {
+                _catalogos[t] = raw[t];
+              }
+            }
+          } else {
+            _catalogos.addAll(raw);
+          }
         }
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('catalogos', jsonEncode(_catalogos));
         notifyListeners();
-        return true;
+        return _hasTablasDescargadas(tablas);
       }
+      debugPrint(
+        'downloadCatalogos falló: ${result['message'] ?? 'sin mensaje'}',
+      );
     } catch (e) {
       debugPrint('Error downloading catalogs: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+    return false;
+  }
+
+  bool _hasTablasDescargadas(List<String>? tablas) {
+    if (tablas == null || tablas.isEmpty) {
+      return _catalogos.isNotEmpty;
+    }
+    for (final t in tablas) {
+      final data = _catalogos[t];
+      if (data is List && data.isNotEmpty) return true;
     }
     return false;
   }

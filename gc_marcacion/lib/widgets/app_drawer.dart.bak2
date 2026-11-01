@@ -1,0 +1,944 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:provider/provider.dart';
+
+import '../screens/dashboard_screen.dart';
+import '../screens/marcacion_screen.dart';
+import '../screens/mi_granja_screen.dart';
+import '../screens/reports_screen.dart';
+import '../screens/splash_screen.dart';
+import '../services/api_service.dart';
+import '../services/app_version_service.dart';
+import '../services/catalog_service.dart';
+import '../services/catalog_sync_service.dart';
+import '../services/storage_service.dart';
+import '../utils/constants.dart';
+import '../utils/dialog_helper.dart';
+import '../utils/dialog_utils.dart';
+import '../utils/record_id.dart';
+import '../utils/theme_colors.dart';
+import '../utils/toast_helper.dart';
+
+class AppDrawer extends StatefulWidget {
+  const AppDrawer({super.key});
+
+  @override
+  State<AppDrawer> createState() => _AppDrawerState();
+}
+
+class _AppDrawerState extends State<AppDrawer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animationController;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(-0.08, 0),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  BuildContext _screenContext(BuildContext drawerContext) =>
+      Scaffold.of(drawerContext).context;
+
+  Future<bool> _hasInternet() async {
+    try {
+      final r = await InternetAddress.lookup('google.com');
+      return r.isNotEmpty;
+    } on SocketException {
+      return false;
+    }
+  }
+
+  Future<void> _downloadCatalogs(BuildContext hostContext) async {
+    final close =
+        showChickenLoadingDialog(hostContext, 'Descargando Información...');
+    try {
+      final storage = hostContext.read<StorageService>();
+      final catalog = hostContext.read<CatalogService>();
+        final result = await CatalogSyncService().syncAll(
+        storage: storage,
+        catalog: catalog,
+      );
+      close();
+      if (!hostContext.mounted) return;
+      if (!result.hadInternet) {
+        showErrorToast(
+          hostContext,
+          '${AppStrings.sinConexion} Se usarán los datos guardados.',
+        );
+        return;
+      }
+      final faltan = <String>[
+        if (!result.cencosOk) 'granjas',
+        if (!result.catalogosOk) 'usuarios',
+        if (!result.personalOk) 'personal',
+      ];
+      if (faltan.isEmpty) {
+        final extra = result.avisoPersonal.trim();
+        showSuccessToast(
+          hostContext,
+          extra.isEmpty
+              ? AppStrings.descargaExitosa
+              : '${AppStrings.descargaExitosa}. $extra',
+        );
+      } else if (result.cencosOk || result.catalogosOk || result.personalOk) {
+        showWarningToast(
+          hostContext,
+          'No se actualizaron: ${faltan.join(', ')}.',
+        );
+      } else {
+        showErrorToast(
+          hostContext,
+          result.errorMessage?.isNotEmpty == true
+              ? 'No se pudo descargar: ${result.errorMessage}'
+              : 'No se pudo descargar.',
+        );
+      }
+    } catch (e) {
+      close();
+      if (hostContext.mounted) showErrorToast(hostContext, 'Error: $e');
+    }
+  }
+
+  Future<void> _upload(BuildContext hostContext) async {
+    final storage = hostContext.read<StorageService>();
+    final counts = <String, ({int pend, int sub})>{};
+    for (final r in storage.getMyRecords()) {
+      final fecha = r['fecha']?.toString() ?? '';
+      if (fecha.length < 10) continue;
+      final key = fecha.substring(0, 10);
+      final e = counts[key];
+      final subido = r['synced'] == true;
+      counts[key] = e == null
+          ? (subido ? (pend: 0, sub: 1) : (pend: 1, sub: 0))
+          : (subido
+              ? (pend: e.pend, sub: e.sub + 1)
+              : (pend: e.pend + 1, sub: e.sub));
+    }
+    if (counts.isEmpty) {
+      showInfoToast(hostContext, 'No hay marcaciones.');
+      return;
+    }
+    final fechas = counts.keys.toList()..sort((a, b) => b.compareTo(a));
+    if (!hostContext.mounted) return;
+    final fecha = await showAppDialog<String>(
+      context: hostContext,
+      builder: (ctx) => SimpleDialog(
+        title: Text('Subir', style: TextStyle(color: ctx.textThemePrimary)),
+        children: [
+          for (final f in fechas)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, f),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _fechaCorta(f),
+                      style: TextStyle(
+                        color: ctx.textThemePrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (counts[f]!.pend > 0)
+                    _badge('${counts[f]!.pend}', const Color(0xFFF07D4A)),
+                  if (counts[f]!.sub > 0) ...[
+                    const SizedBox(width: 6),
+                    _badge('${counts[f]!.sub}', const Color(0xFF15803D)),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    if (fecha == null || !hostContext.mounted) return;
+    if (!await _hasInternet()) {
+      if (hostContext.mounted) {
+        showErrorToast(hostContext, AppStrings.sinConexion);
+      }
+      return;
+    }
+    final records = storage.getMyRecordsByDate(DateTime.parse(fecha));
+    if (records.isEmpty) {
+      showInfoToast(hostContext, 'No hay marcaciones en esa fecha.');
+      return;
+    }
+    final close = showChickenLoadingDialog(hostContext, 'Subiendo registros...');
+    final api = ApiService();
+    var ok = 0;
+    var fail = 0;
+    try {
+      final result = await api.uploadMarcaciones(records);
+      final data = result['data'];
+      final resultados = data is Map ? data['resultados'] : null;
+      if (resultados is List) {
+        final porId = <String, bool>{};
+        for (final item in resultados) {
+          if (item is! Map) continue;
+          final id = item['id']?.toString() ?? '';
+          if (id.isEmpty) continue;
+          porId[id] = item['ok'] == true;
+        }
+        for (final record in records) {
+          final id = EvidenciaRecordId.of(record);
+          if (porId[id] == true) {
+            await storage.markRecordAsSynced({
+              ...record,
+              'id': id,
+              'guardado_backend': true,
+            });
+            ok++;
+          } else {
+            fail++;
+          }
+        }
+      } else if (result['success'] == true) {
+        for (final record in records) {
+          await storage.markRecordAsSynced({
+            ...record,
+            'id': EvidenciaRecordId.of(record),
+            'guardado_backend': true,
+          });
+          ok++;
+        }
+      } else {
+        fail = records.length;
+      }
+      if (ok > 0) await storage.setLastSyncDate();
+      close();
+      if (!hostContext.mounted) return;
+      if (fail == 0 && ok > 0) {
+        showSuccessToast(hostContext, AppStrings.subidaExitosa);
+      } else if (ok > 0) {
+        showWarningToast(hostContext, 'Subidos: $ok, fallidos: $fail');
+      } else {
+        showErrorToast(
+          hostContext,
+          result['message']?.toString().isNotEmpty == true
+              ? result['message'].toString()
+              : 'No se pudo subir.',
+        );
+      }
+    } catch (e) {
+      close();
+      if (hostContext.mounted) showErrorToast(hostContext, 'Error: $e');
+    }
+  }
+
+  String _fechaCorta(String ymd) {
+    final p = ymd.split('-');
+    if (p.length != 3) return ymd;
+    return '${p[2]}/${p[1]}/${p[0]}';
+  }
+
+  Widget _badge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _logout(BuildContext hostContext) async {
+    final confirm = await showAppDialog<bool>(
+      context: hostContext,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Cerrar sesión',
+          style: TextStyle(color: ctx.textThemePrimary),
+        ),
+        content: Text(
+          '¿Está seguro que desea cerrar sesión?',
+          style: TextStyle(color: ctx.textThemeMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sí'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !hostContext.mounted) return;
+    await hostContext.read<StorageService>().clearSession();
+    Get.offAll(() => const SplashScreen());
+  }
+
+  Future<void> _acercaDe(BuildContext hostContext) async {
+    final storage = hostContext.read<StorageService>();
+    final sync = CatalogSyncService();
+    if (await sync.hasInternet()) {
+      await sync.syncAppInfo(storage: storage);
+    }
+    if (!hostContext.mounted) return;
+    final appInfo = storage.getAppInfo();
+    final mejoras = AppVersionService.parseMejorasUsuario(appInfo);
+    final versionServidor =
+        (appInfo?['required_version'] ?? '').toString().trim();
+    final context = hostContext;
+    showAppDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        elevation: 12,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.info_rounded,
+                color: AppColors.primaryDark,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Acerca de',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 19,
+                color: ctx.textThemePrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: ctx.isAppDark
+                    ? const Color(0xFF1E1E1E)
+                    : AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: ctx.borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AppConstants.appTitle,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      color: AppColors.primaryDark,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'v${AppConstants.appVersion}',
+                          style: const TextStyle(
+                            color: AppColors.primaryDark,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      if (versionServidor.isNotEmpty &&
+                          versionServidor != AppConstants.appVersion) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          '· disponible v$versionServidor',
+                          style: TextStyle(
+                            color: ctx.textThemeMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.code_rounded,
+                        size: 18,
+                        color: ctx.textThemeSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Desarrollado por ${AppConstants.appDeveloper}',
+                          style: TextStyle(
+                            color: ctx.textThemeSecondary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (mejoras.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Novedades',
+                      style: TextStyle(
+                        color: ctx.textThemePrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...mejoras.map(
+                      (texto) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.check_circle_outline,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                texto,
+                                style: TextStyle(
+                                  color: ctx.textThemeSecondary,
+                                  fontSize: 13,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Center(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  elevation: 0,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Cerrar',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _activa(String route) => Get.currentRoute == route;
+
+  void _ir(BuildContext drawerContext, String route, Widget Function() page) {
+    Navigator.pop(drawerContext);
+    if (_activa(route)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (route == '/dashboard') {
+        Get.offAll(page, routeName: route);
+      } else {
+        Get.to(page, routeName: route);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isAppDark;
+    final storage = context.watch<StorageService>();
+    final pending = storage.getMyPendingCount();
+    final userName = storage.getUserName() ?? 'USUARIO';
+
+    return Drawer(
+      elevation: 0,
+      backgroundColor: context.scaffoldMuted,
+      child: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: AppColors.headerGradient,
+                  boxShadow: AppColors.strongShadow,
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.22),
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                  width: 2,
+                                ),
+                              ),
+                              child: Image.asset(
+                                'assets/images/logo_grs.png',
+                                width: 46,
+                                height: 46,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.restaurant_rounded,
+                                  size: 40,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    userName.toUpperCase(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.3,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      AppConstants.companyName,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _SyncCloud(
+                                icon: Icons.cloud_download_rounded,
+                                label: 'Descargar',
+                                lastDate: storage.lastDownloadDateDisplay,
+                                aviso: storage.needsCatalogUpdate,
+                                onTap: () async {
+                                  final host = _screenContext(context);
+                                  Navigator.pop(context);
+                                  await _downloadCatalogs(host);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _SyncCloud(
+                                icon: Icons.cloud_upload_rounded,
+                                label: 'Subir',
+                                lastDate: storage.lastSyncDateDisplay,
+                                pendingCount: pending,
+                                onTap: () async {
+                                  final host = _screenContext(context);
+                                  Navigator.pop(context);
+                                  await _upload(host);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: isDark
+                          ? const [Color(0xFF1A1A1A), Color(0xFF121212)]
+                          : [
+                              AppColors.background.withValues(alpha: 0.3),
+                              Colors.white,
+                            ],
+                    ),
+                  ),
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    children: [
+                      _item(
+                        icon: Icons.dashboard_rounded,
+                        title: AppStrings.menuDashboard,
+                        gradient: AppColors.primaryGradient,
+                        activo: _activa('/dashboard') || Get.currentRoute == '/',
+                        onTap: () => _ir(
+                          context,
+                          '/dashboard',
+                          () => const DashboardScreen(),
+                        ),
+                      ),
+                      _item(
+                        icon: Icons.restaurant_rounded,
+                        title: AppStrings.menuMarcacion,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE76F51), Color(0xFFF4A261)],
+                        ),
+                        activo: _activa('/marcacion'),
+                        onTap: () => _ir(
+                          context,
+                          '/marcacion',
+                          () => const MarcacionScreen(),
+                        ),
+                      ),
+                      _item(
+                        icon: Icons.assessment_outlined,
+                        title: AppStrings.menuReportes,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF164072), Color(0xFF1A7FA8)],
+                        ),
+                        activo: _activa('/reportes'),
+                        onTap: () => _ir(
+                          context,
+                          '/reportes',
+                          () => const ReportsScreen(),
+                        ),
+                      ),
+                      _item(
+                        icon: Icons.home_work_rounded,
+                        title: AppStrings.menuMiGranja,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1A7FA8), Color(0xFF56BFE4)],
+                        ),
+                        activo: _activa('/mi-granja'),
+                        onTap: () => _ir(
+                          context,
+                          '/mi-granja',
+                          () => const MiGranjaScreen(),
+                        ),
+                      ),
+                      _item(
+                        icon: Icons.info_rounded,
+                        title: 'Acerca de',
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF5FB8DE), Color(0xFF35A7D4)],
+                        ),
+                        onTap: () {
+                          final host = _screenContext(context);
+                          Navigator.pop(context);
+                          _acercaDe(host);
+                        },
+                      ),
+                      _item(
+                        icon: Icons.logout_rounded,
+                        title: AppStrings.menuCerrarSesion,
+                        gradient: const LinearGradient(colors: [AppColors.error, AppColors.errorDark]),
+                        onTap: () {
+                          final host = _screenContext(context);
+                          Navigator.pop(context);
+                          _logout(host);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _item({
+    required IconData icon,
+    required String title,
+    required LinearGradient gradient,
+    required VoidCallback onTap,
+    bool activo = false,
+  }) {
+    final isDark = context.isAppDark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: activo
+                  ? AppColors.primary.withValues(alpha: isDark ? 0.18 : 0.08)
+                  : context.surfaceCard,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: activo
+                    ? AppColors.primary.withValues(alpha: 0.6)
+                    : (isDark
+                        ? context.borderSubtle
+                        : AppColors.primary.withValues(alpha: 0.2)),
+                width: 1.5,
+              ),
+              boxShadow: context.cardShadow(blur: 8, dy: 2),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(11),
+                  decoration: BoxDecoration(
+                    gradient: gradient,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: gradient.colors[0].withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: activo ? FontWeight.w700 : FontWeight.w600,
+                      color: activo
+                          ? AppColors.primaryDark
+                          : context.textThemePrimary,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary
+                        .withValues(alpha: isDark ? 0.2 : 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 12,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+class _SyncCloud extends StatelessWidget {
+  const _SyncCloud({
+    required this.icon,
+    required this.label,
+    required this.lastDate,
+    required this.onTap,
+    this.pendingCount,
+    this.aviso = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String lastDate;
+  final VoidCallback onTap;
+  final int? pendingCount;
+  final bool aviso;
+
+  @override
+  Widget build(BuildContext context) {
+    final tiene = lastDate.isNotEmpty && lastDate != '--/--/--';
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(icon, color: Colors.white, size: 30),
+                if (aviso)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFDE68A),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: const Icon(
+                        Icons.priority_high_rounded,
+                        color: Color(0xFFE36B45),
+                        size: 12,
+                      ),
+                    ),
+                  ),
+                if (pendingCount != null && pendingCount! > 0)
+                  Positioned(
+                    right: -8,
+                    top: -6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3730A3),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: Text(
+                        pendingCount! > 99 ? '99+' : '$pendingCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              tiene ? lastDate : (label == 'Descargar' ? 'Sin descargar' : '--/--/--'),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (aviso)
+              const Text(
+                AppStrings.actualiceCatalogos,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFFFDE68A),
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

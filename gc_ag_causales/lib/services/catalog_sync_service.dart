@@ -106,7 +106,7 @@ class CatalogSyncService {
         downloaded = true;
       }
 
-      if (await catalog.downloadCatalogos(tablas: ['usuarios'])) {
+      if (await catalog.downloadCatalogos(tablas: ['usuarios', 'conempre'])) {
         downloaded = true;
       }
 

@@ -1,0 +1,205 @@
+import 'package:flutter/material.dart';
+
+class AppColors {
+  static const Color primary = Color(0xFFF07D4A);
+  static const Color primaryLight = Color(0xFFFFC9A8);
+  static const Color primaryDark = Color(0xFFE36B45);
+  static const Color primaryVibrant = Color(0xFFFF9A6B);
+
+  static const Color accent = Color(0xFFFFB088);
+  static const Color accentLight = Color(0xFFFFF1E8);
+  static const Color accentDark = Color(0xFFE36B45);
+  static const Color accentBright = Color(0xFFFFD0B5);
+
+  static const Color desayuno = Color(0xFFF5B82E);
+  static const Color almuerzo = Color(0xFF22B8A7);
+  static const Color cena = Color(0xFF7C6CF2);
+  static const Color mollendo = Color(0xFF3BA9E8);
+
+  static const Color guardado = Color(0xFF16A34A);
+  static const Color registro = Color(0xFF3B82C4);
+  static const Color registroAccent = Color(0xFF22B8A7);
+
+  static const Color tableHeader = Color(0xFFF07D4A);
+  static const Color tableHeaderText = Colors.white;
+  static const Color tableRowAlt = Color(0xFFFFF3EB);
+  static const Color tableBorder = Color(0xFFFFD4BE);
+  static const Color tableAccent = Color(0xFFE36B45);
+  static const Color horaText = Color(0xFF15803D);
+
+  static const Color background = Color(0xFFFFF8F3);
+  static const Color cardBackground = Colors.white;
+  static const Color darkBackground = Color(0xFF0F172A);
+  static const Color darkSurface = Color(0xFF1E293B);
+  static const Color darkCard = Color(0xFF1E293B);
+
+  static const Color borderLight = Color(0xFFF1E4D8);
+  static const Color darkBorder = Color(0xFF334155);
+
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B);
+  static const Color textMuted = Color(0xFF94A3B8);
+  static const Color textSelectedValue = Color(0xFF1E293B);
+  static const Color darkTextPrimary = Color(0xFFF1F5F9);
+  static const Color darkTextSecondary = Color(0xFF94A3B8);
+  static const Color darkTextMuted = Color(0xFF64748B);
+  static const Color dialogBackground = Colors.white;
+  static const Color textOnPrimary = Colors.white;
+
+  static const Color surface = Color(0xFFFFF8F3);
+
+  static const Color error = Color(0xFFE57373);
+  static const Color errorLight = Color(0xFFEF9A9A);
+  static const Color errorDark = Color(0xFFD32F2F);
+  static const Color success = Color(0xFF15803D);
+  static const Color warning = Color(0xFFF0A04A);
+  static const Color info = Color(0xFF2A9D8F);
+
+  static const Color iconAccent = Color(0xFFE36B45);
+
+  static const double radiusSm = 10;
+  static const double radiusMd = 12;
+  static const double radiusLg = 16;
+  static const double radiusXl = 20;
+
+  static const LinearGradient headerGradient = LinearGradient(
+    colors: [primaryDark, primary],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [primary, primaryDark],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
+  static const LinearGradient iconGradient = LinearGradient(
+    colors: [primaryDark, primary, primaryLight],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient softGradient = LinearGradient(
+    colors: [primaryLight, accentLight],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
+  static const LinearGradient vibrantGradient = LinearGradient(
+    colors: [primary, primaryVibrant],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const List<BoxShadow> strongShadow = [
+    BoxShadow(
+      color: Color(0x18000000),
+      blurRadius: 18,
+      offset: Offset(0, 8),
+    ),
+  ];
+
+  static const List<BoxShadow> mediumShadow = [
+    BoxShadow(
+      color: Color(0x12000000),
+      blurRadius: 12,
+      offset: Offset(0, 5),
+    ),
+  ];
+
+  static const List<BoxShadow> lightShadow = [
+    BoxShadow(
+      color: Color(0x0A000000),
+      blurRadius: 8,
+      offset: Offset(0, 2),
+    ),
+  ];
+
+  static List<BoxShadow> get primaryShadow => [
+        BoxShadow(
+          color: primary.withValues(alpha: 0.28),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ];
+}
+
+class AppConstants {
+  static const String baseUrl = 'https://granjarinconadadelsur.com/sanidad/flutter';
+  // Pruebas locales: 'http://10.107.23.5/sanidad/flutter'
+  static const String seguimientoPath = '/marcacion';
+  static const String catalogosPath = '/seguimiento_crianza';
+
+  static const String apiToken = 'd9f7a6b3-4c8e-11ee-be56-0242ac120002';
+  static const String appName = 'PROD_MARCACION';
+  static const String appTitle = 'Control de alimentaci\u00f3n';
+  static const String appDeveloper = 'JLSF Soft Soluciones EIRL.';
+  static const String companyName = 'Granja Rinconada del Sur';
+  static const String appVersion = '1.0.0';
+  static const String offlineSalt = 'M0rt4l1d4d_S4lt_2026';
+
+  static const String keyIsLoggedIn = 'is_logged_in';
+  static const String keyUserCode = 'user_code';
+  static const String keyUserName = 'user_name';
+  static const String keyDeviceId = 'device_id';
+  static const String keyDeviceAuthorized = 'device_authorized';
+  static const String keyOfflineHash = 'offline_hash';
+  static const String keyLoginEnom = 'login_enom';
+
+  static const String loginEndpoint = '/login.php';
+  static const String registerDeviceEndpoint = '/registrardispositivo.php';
+  static const String downloadEndpoint = '/download.php';
+  static const String catalogosMarcacionEndpoint =
+      '/get_catalogos_marcacion_movil.php';
+  static const String guardarMarcacionEndpoint =
+      '/guardar_marcacion_movil.php';
+  static const String borrarMarcacionEndpoint =
+      '/borrar_marcacion_movil.php';
+
+  static const String keyCencosGalpones = 'marc_cencos_galpones';
+  static const String keyGalponesPorCenco = 'marc_galpones_por_cenco';
+  static const String keyGalponesPorGranja = 'marc_galpones_por_granja';
+  static const String keyCencosLista = 'marc_cencos_lista';
+  static const String keyProyeccion = 'marc_proyeccion';
+  static const String keyAppInfo = 'marc_g_app_info';
+  static const String keyPlanVisitas = 'marc_plan_visitas';
+  static const String keyPlanVisitasFecha = 'marc_plan_visitas_fecha';
+  static const String keyProveedoresVacunaCatalog = 'marc_proveedores_unused';
+  static const String keyPersonal = 'marc_personal';
+  static const String keyHorarios = 'marc_horarios';
+  static const String keyHorarioOrigen = 'marc_horario_origen';
+  static const String keySedeTrabajo = 'marc_sede_trabajo';
+
+  static const String keyLastDownloadDate = 'marc_last_download_date';
+  static const String keyLastSyncDate = 'marc_last_sync_date';
+
+  static const String keyGranjaTrabajo = 'marc_granja_trabajo';
+
+  static const int catalogHistoricoDias = 365;
+  static const int appVersionGraceDays = 4;
+  static const int staleCatalogDays = 3;
+}
+
+class AppStrings {
+  static const String recordsTable = 'marcacion_records';
+  static const String loginTitle = 'Iniciar Sesión';
+  static const String registerTitle = 'Registro de Dispositivo';
+  static const String dashboardTitle = 'Dashboard';
+  static const String menuDashboard = 'Mi Dashboard';
+  static const String menuMarcacion = 'Marcación';
+  static const String menuReportes = 'Reportes';
+  static const String menuCerrarSesion = 'Cerrar sesión';
+  static const String menuMiGranja = 'Mi granja';
+  static const String miGranjaTitle = 'Mi granja';
+  static const String reportesTitle = 'Reportes';
+  static const String guardarRegistro = 'Guardar';
+  static const String descargaExitosa = 'Información descargada con éxito';
+  static const String actualiceCatalogos = 'Actualice sus catálogos';
+  static const String subidaExitosa = 'Registros subidos correctamente';
+  static const String sinConexion = 'No hay conexión a internet.';
+  static const String sinCatalogosLocales =
+      'No hay catálogos guardados. Descargue desde el menú (Descargar).';
+  static const String pendientes = 'Pendientes';
+  static const String subidos = 'Subidos';
+}

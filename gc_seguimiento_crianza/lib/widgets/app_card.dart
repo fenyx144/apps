@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../utils/theme_colors.dart';
 
 /// Contenedor tipo card con soporte de modo oscuro.
@@ -7,7 +8,7 @@ class AppCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding,
-    this.borderRadius = 20,
+    this.borderRadius = AppColors.radiusLg,
     this.elevated = false,
   });
 
@@ -23,8 +24,11 @@ class AppCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: elevated ? context.surfaceElevated : context.surfaceCard,
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: context.borderSubtle, width: 1),
-        boxShadow: context.cardShadow(),
+        border: Border.all(
+          color: context.borderSubtle.withValues(alpha: 0.85),
+          width: 1,
+        ),
+        boxShadow: elevated ? AppColors.mediumShadow : AppColors.lightShadow,
       ),
       child: child,
     );
