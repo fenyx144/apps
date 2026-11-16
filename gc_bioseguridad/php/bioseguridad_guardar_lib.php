@@ -106,10 +106,9 @@ function bio_procesar_guardado(mysqli $conn, array $data, bool $esActualizacion)
             $numfiltro = 1;
         }
         $accion = trim((string) ($registro['accion'] ?? ''));
-        $efecto = trim((string) ($registro['efecto'] ?? ''));
         $descripcion = trim((string) ($registro['descripcion'] ?? ''));
         if ($descripcion === '' && $accion !== '') {
-            $descripcion = $efecto !== '' ? ($efecto . ' | ' . $accion) : $accion;
+            $descripcion = $accion;
         }
         $agentecausal = trim((string) ($registro['agentecausal'] ?? ''));
         if ($descripcion === '' && $agentecausal === '') {

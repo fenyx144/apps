@@ -167,10 +167,7 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
         .toList();
 
     final accion = _accionController.text.trim();
-    final ctx = AnomaliaContexto.punto(
-      instalacion: _instalacion,
-      bioseguridad: _bioseguridad,
-    );
+    final ctx = AnomaliaContexto.punto(instalacion: _instalacion);
     return {
       'id': const Uuid().v4(),
       'reporte': 'garita',
@@ -190,12 +187,8 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
         'hora': _hora24(),
         'anomalia': ctx.anomalia,
         'agentecausal': ctx.agenteCausal,
-        'efecto': ctx.efecto,
         'accion': accion,
-        'descripcion': componerDetalleGarita(
-          efecto: ctx.efecto,
-          accion: accion,
-        ),
+        'descripcion': accion,
       },
       'imagenes': imagenes,
       'synced': false,

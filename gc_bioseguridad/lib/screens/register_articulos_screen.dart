@@ -42,11 +42,9 @@ class _LineaArticulo {
   String notaCatalogo = '';
   String anomaliaPerm = '';
   String agentePerm = '';
-  String efectoPerm = '';
   final accionPermCtrl = TextEditingController();
   String anomaliaDes = '';
   String agenteDes = '';
-  String efectoDes = '';
   final accionDesCtrl = TextEditingController();
   final List<String?> fotos = [null, null, null];
 
@@ -66,7 +64,6 @@ class _LineaArticulo {
     final ctx = AnomaliaContexto.articuloNoPermitido(nombre, nota: notaCatalogo);
     anomaliaPerm = ctx.anomalia;
     agentePerm = ctx.agenteCausal;
-    efectoPerm = ctx.efecto;
     if (accionPermCtrl.text.trim().isEmpty) {
       accionPermCtrl.text = ctx.accion;
     }
@@ -76,7 +73,6 @@ class _LineaArticulo {
     final ctx = AnomaliaContexto.articuloSinDesinfeccion(nombre);
     anomaliaDes = ctx.anomalia;
     agenteDes = ctx.agenteCausal;
-    efectoDes = ctx.efecto;
     if (accionDesCtrl.text.trim().isEmpty) {
       accionDesCtrl.text = ctx.accion;
     }
@@ -295,7 +291,6 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
         if (!l.permitido) ...{
           'anomalia_permitido': l.anomaliaPerm,
           'agente_causal_permitido': l.agentePerm,
-          'efecto_permitido': l.efectoPerm,
           'accion_permitido': l.accionPermCtrl.text.trim(),
         },
         if (l.permitido) ...{
@@ -305,7 +300,6 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
           if (!l.desinfectado) ...{
             'anomalia_desinfeccion': l.anomaliaDes,
             'agente_causal_desinfeccion': l.agenteDes,
-            'efecto_desinfeccion': l.efectoDes,
             'accion_desinfeccion': l.accionDesCtrl.text.trim(),
           },
         },
@@ -398,7 +392,6 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
                 accion: l.accionPermCtrl.text.trim(),
                 anomalia: l.anomaliaPerm,
                 agenteCausal: l.agentePerm,
-                efecto: l.efectoPerm,
                 fotoPath: fotoPath,
                 usuario: usuario,
               );
@@ -418,7 +411,6 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
                 accion: l.accionDesCtrl.text.trim(),
                 anomalia: l.anomaliaDes,
                 agenteCausal: l.agenteDes,
-                efecto: l.efectoDes,
                 fotoPath: fotoPath,
                 usuario: usuario,
               );

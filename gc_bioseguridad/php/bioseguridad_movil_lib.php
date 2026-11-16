@@ -1759,17 +1759,9 @@ function bio_insertar_filas(mysqli $conn, string $reporte, array $ctx, string $i
                 $desinfectado = bio_ingresa_flag($a['desinfectado'] ?? true);
                 $desinfectante = bio_cut((string) ($a['desinfectante'] ?? ''), 80);
                 $anomaliaPerm = (string) ($a['anomalia_permitido'] ?? '');
-                $efectoPerm = trim((string) ($a['efecto_permitido'] ?? ''));
-                if ($efectoPerm !== '') {
-                    $anomaliaPerm = trim($anomaliaPerm . ($anomaliaPerm !== '' ? "\n" : '') . 'Efecto: ' . $efectoPerm);
-                }
                 $agentePerm = bio_cut((string) ($a['agente_causal_permitido'] ?? ''), 255);
                 $accionPerm = bio_cut((string) ($a['accion_permitido'] ?? ''), 255);
                 $anomaliaDes = (string) ($a['anomalia_desinfeccion'] ?? '');
-                $efectoDes = trim((string) ($a['efecto_desinfeccion'] ?? ''));
-                if ($efectoDes !== '') {
-                    $anomaliaDes = trim($anomaliaDes . ($anomaliaDes !== '' ? "\n" : '') . 'Efecto: ' . $efectoDes);
-                }
                 $agenteDes = bio_cut((string) ($a['agente_causal_desinfeccion'] ?? ''), 255);
                 $accionDes = bio_cut((string) ($a['accion_desinfeccion'] ?? ''), 255);
                 $imgsLinea = '';

@@ -2261,7 +2261,6 @@ class _RegisterControlIngresoScreenState
           'umbral_g_l': umbral,
           'agente_causal': f.agenteCausal,
           'anomalia': f.anomalia,
-          'efecto': f.efecto,
           'accion': f.accion,
         });
       } catch (_) {}
@@ -2285,7 +2284,6 @@ class _RegisterControlIngresoScreenState
         'grado_g_l': f.gradoGl,
         'agente_causal': f.agenteCausal,
         'anomalia': f.anomalia,
-        'efecto': f.efecto,
         'accion': f.accion,
         'imagenes': fotos,
       });

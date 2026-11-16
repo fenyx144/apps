@@ -1,30 +1,21 @@
-/// Anomalía, agente causal y efecto según el punto donde se registra.
+/// Anomalía y agente causal según el punto donde se registra.
 /// El operador no los edita: solo confirma la acción.
 class AnomaliaContexto {
   const AnomaliaContexto({
     required this.anomalia,
     required this.agenteCausal,
-    required this.efecto,
     required this.accion,
   });
 
   final String anomalia;
   final String agenteCausal;
-  final String efecto;
   final String accion;
 
-  static AnomaliaContexto punto({
-    required String instalacion,
-    required String bioseguridad,
-  }) {
+  static AnomaliaContexto punto({required String instalacion}) {
     final punto = instalacion.trim().isEmpty ? 'Garita' : instalacion.trim();
-    final tipo = bioseguridad.trim().isEmpty
-        ? 'Bioseguridad fisica'
-        : bioseguridad.trim();
     return AnomaliaContexto(
       anomalia: _corta('Anomalía $punto', 30),
       agenteCausal: _corta('Control $punto', 200),
-      efecto: _corta('Hallazgo en $punto · $tipo', 200),
       accion: '',
     );
   }
@@ -39,7 +30,6 @@ class AnomaliaContexto {
       agenteCausal: nota.trim().isNotEmpty
           ? nota.trim()
           : 'Artículo no autorizado según política de ingreso ($n).',
-      efecto: 'Ingreso rechazado de $n.',
       accion: 'Retener o rechazar el artículo.',
     );
   }
@@ -49,7 +39,6 @@ class AnomaliaContexto {
     return AnomaliaContexto(
       anomalia: 'Artículo sin desinfección al ingreso: $n.',
       agenteCausal: 'Falta de desinfección de material en control de ingreso.',
-      efecto: 'Material sin desinfección: $n.',
       accion: 'Aplicar desinfección o restringir el ingreso.',
     );
   }
@@ -70,7 +59,6 @@ class AnomaliaContexto {
     return AnomaliaContexto(
       anomalia: '$g g/L supera umbral $u g/L · $quien',
       agenteCausal: agenteDef.trim(),
-      efecto: 'Alcoholemia $g g/L (umbral $u) · $quien',
       accion: accionDef.trim(),
     );
   }
@@ -80,21 +68,4 @@ String _corta(String s, int n) {
   final t = s.trim();
   if (t.length <= n) return t;
   return t.substring(0, n);
-}
-
-/// Texto de `rgarita.descripcion` (máx. 200): efecto y acción juntos.
-String componerDetalleGarita({
-  required String efecto,
-  required String accion,
-}) {
-  final a = accion.trim();
-  final e = efecto.trim();
-  if (e.isEmpty) return _corta(a, 200);
-  if (a.isEmpty) return _corta(e, 200);
-  final full = '$e | $a';
-  if (full.length <= 200) return full;
-  const sep = ' | ';
-  final room = 200 - sep.length - a.length;
-  if (room < 12) return _corta(a, 200);
-  return '${e.substring(0, room)}$sep$a';
 }

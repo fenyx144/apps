@@ -15,7 +15,6 @@ class AlcoholemiaPruebaFila {
   String gradoGl = '';
   String agenteCausal = '';
   String anomalia = '';
-  String efecto = '';
   String accion = '';
   final List<String?> fotos = [null, null, null];
 }
@@ -238,14 +237,12 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
       );
       widget.fila.agenteCausal = ctx.agenteCausal;
       widget.fila.anomalia = ctx.anomalia;
-      widget.fila.efecto = ctx.efecto;
       if (widget.fila.accion.trim().isEmpty) {
         widget.fila.accion = ctx.accion;
         if (_accion.text != ctx.accion) _accion.text = ctx.accion;
       }
     } else if (g != null) {
       widget.fila.anomalia = '';
-      widget.fila.efecto = '';
       widget.fila.agenteCausal = '';
     }
   }
