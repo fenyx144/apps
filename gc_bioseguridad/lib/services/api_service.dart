@@ -914,10 +914,9 @@ class ApiService {
     }
   }
 
-  /// El servidor compara la foto capturada con la registrada de ese DNI.
-  /// Respuesta: `data.verificado`, `data.motivo` (`ok`, `sin_foto`, `no_coincide`).
+  /// El servidor identifica la foto entre el personal (1:N).
+  /// Respuesta: `data.verificado`, `dni`, `nombre`, `empresa`, `similitud`.
   Future<Map<String, dynamic>> verificarRostro({
-    required String dni,
     required List<int> jpeg,
   }) async {
     try {
@@ -925,18 +924,13 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.verificarRostroEndpoint}',
       );
-      final usuario = await _getUsuarioSesion();
       final response = await _http
           .post(
             url,
             headers: _headers,
-            body: jsonEncode({
-              'dni': dni,
-              'foto': base64Encode(jpeg),
-              if (usuario.isNotEmpty) 'usuario': usuario,
-            }),
+            body: jsonEncode({'foto': base64Encode(jpeg)}),
           )
-          .timeout(const Duration(seconds: 25));
+          .timeout(const Duration(seconds: 90));
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) {
         return {'success': false, 'message': 'Respuesta inválida'};

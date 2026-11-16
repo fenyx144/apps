@@ -184,6 +184,7 @@ class _DniFila {
   /// `ok` si el servidor validó el rostro; `sin_verificacion_facial` si se
   /// siguió solo con el documento.
   String verificacionFacial = '';
+  String empresaFacial = '';
 
   Timer? debounce;
 
@@ -2133,6 +2134,9 @@ class _RegisterControlIngresoScreenState
     setState(() {
       fila.verificacionFacial =
           r.verificado ? 'ok' : 'sin_verificacion_facial';
+      if (r.empresa.trim().isNotEmpty) {
+        fila.empresaFacial = r.empresa.trim();
+      }
       if (fila.nombre.trim().isEmpty && r.nombre.trim().isNotEmpty) {
         fila.nombre = r.nombre.trim();
         fila.estado = _DniEstado.ok;
@@ -2318,6 +2322,7 @@ class _RegisterControlIngresoScreenState
         'nombre': d.nombreEfectivo,
         if (d.verificacionFacial.isNotEmpty)
           'verificacion_facial': d.verificacionFacial,
+        if (d.empresaFacial.isNotEmpty) 'empresa': d.empresaFacial,
       });
     }
     final g3 = visita != null && visita.granja.isNotEmpty
@@ -2535,6 +2540,7 @@ class _RegisterControlIngresoScreenState
         'nombre': nombre,
         if (d.verificacionFacial.isNotEmpty)
           'verificacion_facial': d.verificacionFacial,
+        if (d.empresaFacial.isNotEmpty) 'empresa': d.empresaFacial,
       });
     }
     for (final v in _vehiculosRegreso) {
