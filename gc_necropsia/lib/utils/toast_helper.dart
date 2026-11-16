@@ -93,8 +93,8 @@ class _AnimatedToastState extends State<_AnimatedToast>
     final systemNavBarHeight = MediaQuery.of(context).padding.bottom;
 
     // Ajusta posición: considerar teclado y barra de navegación del sistema
-    final bottomOffset = keyboardHeight > 0 
-        ? keyboardHeight + 40 
+    final bottomOffset = keyboardHeight > 0
+        ? keyboardHeight + 40
         : 40.0 + systemNavBarHeight;
 
     return Positioned(

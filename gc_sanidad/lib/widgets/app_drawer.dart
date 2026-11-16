@@ -149,7 +149,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
             result['detalle']['envios_muestras']['codigosGenerados'] as List;
 
         if (generados.isNotEmpty) {
-          // Crear un mapa: id_local → codigoEnvio_real
+          // Crear un mapa: id_local codigoEnvio_real
           final Map<String, String> codigoPorId = {};
           for (var item in generados) {
             final id = item['id'] as String?;
@@ -820,7 +820,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
             scale: _scaleAnimation,
             child: Column(
               children: [
-                // ✨ CABECERA CON GRADIENTE (original)
+                // CABECERA CON GRADIENTE (original)
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
@@ -947,10 +947,10 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                                       ),
                                     ],
                                   ),
-                                 
+
                                   if (_userRol != 'TRANSPORTE') ...[
                                      const SizedBox(height: 28),
-                                    // ☁️ BOTONES DE SINCRONIZACIÓN
+                                    // BOTONES DE SINCRONIZACIÓN
                                     Consumer<StorageService>(
                                       builder: (context, storage, _) {
                                         return FutureBuilder(
@@ -1103,8 +1103,8 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                       ),
                     ),
                     child: (_userRol == 'TRANSPORTE')
-                        ? _buildTransporteMenu() // ← Widget cuando es TRANSPORTE
-                        : _buildMenuCompleto(), // ← Widget cuando es otro rol
+                        ? _buildTransporteMenu() // Widget cuando es TRANSPORTE
+                        : _buildMenuCompleto(), // Widget cuando es otro rol
                   ),
                 ),
               ],
@@ -1127,7 +1127,7 @@ class _SyncButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.lastDate,
-    this.pendienteCount, // ← opcional
+    this.pendienteCount, // opcional
     required this.onTap,
   });
 
@@ -1194,7 +1194,7 @@ class _SyncButton extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
-              // 👇 NUEVO: mensaje de registros pendientes
+              // NUEVO: mensaje de registros pendientes
               if (pendienteCount != null && pendienteCount! > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),

@@ -43,6 +43,13 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Enlace de otras apps: gcbioseguridad://abrir?modulo=fomites&... -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="gcbioseguridad" android:host="abrir"/>
+            </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"
@@ -60,6 +67,12 @@
     </application>
     <!-- Visibilidad de paquetes (Android 11+): cámara externa, galería y escáner. -->
     <queries>
+        <!-- Retorno a la app de rondas (grsrutero://bioseguridad?...). -->
+        <package android:name="pe.grs.grs_rutero" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="grsrutero" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

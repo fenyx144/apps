@@ -57,7 +57,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
     String sHora,sMinutos,sql,sObservacion,sValidaReg,sDepredador,sTipo,sCantidad,sEstado,sId,sFecha,sCencos,sTurno;
     String miDate,miTime,sReferencia,sProceso,sColaborador;
 
-
     /*<!-- TODO: VARIABLES G PARA MOSTRAR -->*/
 
     /*<!-- TODO: TABLA -->*/
@@ -100,13 +99,11 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
     ArrayList<eRegEliminar>regEliminarList;
 
     public FomitesFragment() {
-        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_fomites, container, false);
     }
 
@@ -128,8 +125,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
 
         /*<!-- TODO: ASIGNAR VARIABLES -->*/
         bg.tvFecha.setText(sFechaActual);
-
-
 
         buscarCencos();
         buscarReferencia();
@@ -310,8 +305,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
         adaptert.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         bg.spnTurno.setAdapter(adaptert);
 
-
-
         /*<!-- TODO: CAPTURA DE POSICION EXCLUYENDO LA PRIMERA -->*/
         bg.spnTurno.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -362,7 +355,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
 
-
             }
         });
         bg.spnPerro.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -389,7 +381,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
-
 
             }
         });
@@ -418,7 +409,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
 
-
             }
         });
         bg.spnLechuza.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -445,7 +435,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
-
 
             }
         });
@@ -474,7 +463,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
 
-
             }
         });
         bg.spnConejo.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -501,7 +489,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
-
 
             }
         });
@@ -530,10 +517,8 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
 
-
             }
         });
-
 
         /*<!-- TODO: CREAR CABECERA TABLA CONSUMO ALIMENTO: -->*/
         try {
@@ -576,8 +561,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
         bg.swtConejo.setEnabled(false);
         bg.swtPaloma.setEnabled(false);
 
-
-
         /*<!-- TODO: AL INGRESAR UN DATO -->*/
         bg.spnTurno.addTextChangedListener(new TextWatcher() {
             @Override
@@ -606,8 +589,7 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
             public void onClick(View view) {
                 bg.btnEliminar.setEnabled(false);
 
-
-                androidx.appcompat.app.AlertDialog.Builder dialogo1 = new AlertDialog.Builder(view.getContext());//this
+                androidx.appcompat.app.AlertDialog.Builder dialogo1 = new AlertDialog.Builder(view.getContext()); // this
                 dialogo1.setTitle("Eliminar");
                 dialogo1.setMessage("¿ Desea Eliminar dicho registro ?");
                 dialogo1.setCancelable(false);
@@ -618,7 +600,7 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
                             toast = Toast.makeText(getActivity().getApplicationContext(), "Item Seleccionado No valido", Toast.LENGTH_SHORT);
                             toast.show();
                         } else {
-                            //Eliminar Registro
+                            // Eliminar Registro
                             String slFecha=bg.tvFecha.getText().toString();
                             String slCencos=bg.etCencos.getText().toString().substring(0,6);
                             String slId=regEliminarList.get(iPosEli).get_id();
@@ -627,19 +609,16 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
                             toast = Toast.makeText(getActivity().getApplicationContext(), rMensaje, Toast.LENGTH_SHORT);
                             toast.show();
 
-
                             sFecha = bg.tvFecha.getText().toString();
                             sCencos = bg.etCencos.getText().toString().substring(0, 6);
                             mostrarTotales(sFecha, sCencos);
                             listaItems(sFecha, sCencos);
-
 
                         }
                     }
                 });
                 dialogo1.setNegativeButton("Cancelar", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialogo1, int id) {
-                        //cancelar();
                     }
                 });
                 dialogo1.show();
@@ -668,7 +647,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
         ArrayAdapter<CharSequence> co = new ArrayAdapter(getContext(), R.layout.items_list, listC);
         ArrayAdapter<CharSequence> pal = new ArrayAdapter(getContext(), R.layout.items_list, listPa);
 
-
         bg.spnTurno.setSelection(0);
         bg.spnTurno.setEnabled(true);
 
@@ -677,7 +655,6 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
 
         bg.spnProceso.setAdapter(p);
         bg.spnProceso.setEnabled(true);
-
 
         for (int i = 1; i <= 7; i++) {
             switch (i) {
@@ -1157,10 +1134,10 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
     }
 
     private void guardarDatos(){
-        sColaborador =  hP.getNombreUsuario();//bg.tvNombreUsuario.getText().toString();
+        sColaborador =  hP.getNombreUsuario(); // bg.tvNombreUsuario.getText().toString();
         db = conn.getWritableDatabase();
 
-        //Todo:MAXIMO REGISTRO
+        // TODO:MAXIMO REGISTRO
         try{
             sql = "SELECT MAX(ABS(" + dbE.c_rfId + "))  FROM " + dbE.t_RFomites + " WHERE " + dbE.c_rfFecha + "='" + bg.tvFecha.getText().toString() + "';";
             Cursor cursor1 = db.rawQuery(sql,null);
@@ -1175,14 +1152,14 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
                 }
             }
 
-            //Todo:Validamos campo vacio de Observacion:
+            // TODO:Validamos campo vacio de Observacion:
             sObservacion = bg.etObservacion.getText().toString();
             if (sObservacion.equals("")){
                 sValidaReg = "Sin Dato";
             }else{
                 sValidaReg = "Dato";
             }
-            //Todo:Agregamos campos generales a la Tabla
+            // TODO:Agregamos campos generales a la Tabla
 
             sFecha = bg.tvFecha.getText().toString();
             sCencos = bg.etCencos.getText().toString().substring(0,6);
@@ -1318,7 +1295,7 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
             if (child instanceof TableRow) ((ViewGroup) child).removeAllViews();
         }
         db=conn.getReadableDatabase();
-        //PARA FILTRAR TABLA
+        // PARA FILTRAR TABLA
         sTurno = bg.spnTurno.getText().toString();
         sFecha = bg.tvFecha.getText().toString();
         try{
@@ -1373,7 +1350,7 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
     private void listaItems(String xFecha,String xCencos){
 
         db = conn.getReadableDatabase();
-        //PARA FILTRAR TABLA
+        // PARA FILTRAR TABLA
         sTurno = bg.spnTurno.getText().toString();
         sFecha = bg.tvFecha.getText().toString();
 
@@ -1541,8 +1518,5 @@ public class FomitesFragment extends Fragment implements View.OnClickListener {
                 }
         }
     }
-
-
-
 
 }

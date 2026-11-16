@@ -291,7 +291,7 @@ class PlacaOcrParser {
     return RegExp(r'^[0-9ILOTGSZBZGA]{3}$').hasMatch(norm.substring(3));
   }
 
-  /// Moto / mixta (A1B234): corrige por posición; variantes 3↔5 en la cola numérica.
+  /// Moto / mixta (A1B234): corrige por posición; variantes 35 en la cola numérica.
   static String _corregirMixto6(String norm) {
     if (_pareceMotoOcr(norm)) {
       final base = _corregirMotoLdl(norm);

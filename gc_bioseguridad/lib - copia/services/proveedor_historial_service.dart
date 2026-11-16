@@ -5,7 +5,6 @@ import 'package:bioseguridad/services/storage_service.dart';
 import 'package:bioseguridad/widgets/proveedor_dialog.dart';
 
 /// Proveedores aprendidos en el dispositivo (planificación e ingresos).
-///
 /// No reemplaza `ccte`: complementa cuando no hay red. Sin RUC pueden repetirse
 /// nombres mal escritos; la clave de deduplicación es el RUC cuando existe.
 class ProveedorHistorialService {

@@ -5,7 +5,6 @@ import '../utils/constants.dart';
 import '../utils/theme_colors.dart';
 
 /// Opción de catálogo elegida en [showOpcionCatalogoDialog].
-///
 /// Son tres datos y no uno: el texto que se guarda ([valor]), el código del
 /// catálogo del que salió ([codigo], vacío si se escribió a mano) y el
 /// complemento de las opciones que lo piden ([detalle], ver «A la altura del
@@ -43,17 +42,14 @@ class OpcionCatalogo {
 }
 
 /// Pide una opción del catálogo y, cuando hace falta, el texto que la completa.
-///
 /// Cubre dos casos que el selector simple ([showBioOptionsSheet]) dejaba
 /// afuera:
-///
-///  - **«Otros»**: la fila del catálogo (o una que se agrega acá cuando el
-///    servidor todavía no la trae) que obliga a escribir el valor, porque no
-///    está en la lista. Al elegirla se pide el texto en un campo.
-///  - **Opciones con complemento**: las que [pideDetalle] marque (p. ej. «A la
-///    altura del galpón») piden un segundo dato, que viaja en
-///    [OpcionCatalogo.detalle].
-///
+/// - **«Otros»**: la fila del catálogo (o una que se agrega acá cuando el
+/// servidor todavía no la trae) que obliga a escribir el valor, porque no
+/// está en la lista. Al elegirla se pide el texto en un campo.
+/// - **Opciones con complemento**: las que [pideDetalle] marque (p. ej. «A la
+/// altura del galpón») piden un segundo dato, que viaja en
+/// [OpcionCatalogo.detalle].
 /// Devuelve `null` si se cancela.
 Future<OpcionCatalogo?> showOpcionCatalogoDialog({
   required BuildContext context,

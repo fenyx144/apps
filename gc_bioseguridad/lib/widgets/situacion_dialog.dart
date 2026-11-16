@@ -12,7 +12,6 @@ Color colorSituacion(EstatusDni e) =>
     : AppColors.warning;
 
 /// Detalle de la situación especial de un DNI, en diálogo.
-///
 /// Al tocar el icono o el mensaje de coronavirus se abre esto en vez de un
 /// aviso pasajero: se lee de qué granja viene la persona, cuándo ingresó y en
 /// qué estado está. Solo informa; el ingreso se registra igual.

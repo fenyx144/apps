@@ -25,10 +25,10 @@ if (empty($numreg) || empty($granja) || empty($galpon) || empty($fectra)) {
     die('Parámetros incompletos');
 }
 
-$sql = "SELECT * 
-FROM t_regnecropsia 
+$sql = "SELECT *
+FROM t_regnecropsia
 WHERE tnumreg = ? AND tgranja = ? AND tgalpon = ? AND tfectra = ?
-ORDER BY 
+ORDER BY
     tdate DESC,
     tnumreg DESC,
     tgranja ASC,
@@ -58,7 +58,7 @@ if (empty($registros)) {
 
 $cabecera = $registros[0];
 
-    require_once __DIR__ . '/../../vendor/autoload.php'; 
+    require_once __DIR__ . '/../../vendor/autoload.php';
 
 use Mpdf\Mpdf;
 
@@ -85,21 +85,18 @@ try {
             'tempDir' => __DIR__ . '/../../pdf_tmp',
         ]);
 
-        // Paginación: se define dentro del HTML con <htmlpagefooter> y @page { footer: html_... }
-
-
     $html = '';
-    
+
     if ($tipo == '1') {
         $html = _generarReporte1($cabecera, $registros);
     } else {
-        
+
         $html = _generarReportePDF($cabecera, $registros);
     }
 
     $mpdf->WriteHTML($html);
     $mpdf->Output('reporte_necropsia_' . $numreg . '_' . $tipo . '.pdf', 'I');
-    
+
 } catch (Exception $e) {
     die('Error generando PDF: ' . $e->getMessage());
 }
@@ -116,7 +113,7 @@ function _generarReporte1($cabecera, $registros) {
             $logoBase64 = 'data:image/png;base64,' . base64_encode($logoData);
             $logo = '<img src="' . htmlspecialchars($logoBase64) . '" style="height: 20px; vertical-align: top;">';
         }
-        
+
         // HTML
     $html = '<html><head><meta charset="UTF-8"><style>
          @page {
@@ -193,7 +190,7 @@ body {
                 padding: 5px;
                 border: 1px solid #cbd5e1;
                 vertical-align: middle;
-                width: 15%; /* ← ¡Ancho reducido! */
+                width: 15%; /*  ¡Ancho reducido! */
             }
             .param-cell {
                 width: 40%;
@@ -211,7 +208,7 @@ body {
                 Página {PAGENO} de {nbpg}
             </div>
         </htmlpagefooter>';
-    
+
         // Fecha de elaboración del reporte (fuera de la tabla, arriba a la derecha)
         $fechaElaboracion = date('d/m/Y H:i');
         $html .= '<div style="text-align: right; font-size: 8pt; font-style: italic; margin-top: 6px; margin-bottom: 4px;">';
@@ -239,7 +236,7 @@ body {
         $html .= '</td>';
         $html .= '</tr>';
         $html .= '</table>';
-    
+
         // === Tabla de información ===
         // Formatear fecha tdate a dd/mm/yyyy
         $tdate = $cabecera['tdate'] ?? '';
@@ -253,7 +250,7 @@ body {
                 $tdateFormatted = $tdate;
             }
         }
-        
+
         $html .= '<table class="info-table">';
         $html .= '<tr>
             <th>Fecha</th>
@@ -269,7 +266,7 @@ body {
             <td>' . htmlspecialchars($cabecera['tgalpon'] ?? '') . '</td>
             <td>' . htmlspecialchars($cabecera['tedad'] ?? '') . ' días</td>
         </tr>';
-        
+
         // Fila de Inicio y Fin de Registro (ambos en la misma fila)
         $tfecreghorainicio = $cabecera['tfecreghorainicio'] ?? '';
         $tfecreghorainicioFormatted = '--/--/-- --:--:--';
@@ -288,7 +285,7 @@ body {
                 $tfecreghorainicioFormatted = $tfecreghorainicio;
             }
         }
-        
+
         $tfecreghorafin = $cabecera['tfecreghorafin'] ?? '';
         $tfecreghorafinFormatted = '--/--/-- --:--:--';
         if (!empty($tfecreghorafin)) {
@@ -300,7 +297,7 @@ body {
                 $tfecreghorafinFormatted = $tfecreghorafin;
             }
         }
-        
+
         $html .= '<tr>
             <td style="padding: 5px; text-align: center; border: 1px solid #cbd5e1; page-break-inside: avoid; background-color: #e6f2ff; font-weight: bold;">Inicio de Registro</td>
             <td style="padding: 5px; text-align: center; border: 1px solid #cbd5e1; page-break-inside: avoid;">' . htmlspecialchars($tfecreghorainicioFormatted) . '</td>
@@ -309,7 +306,7 @@ body {
             <td style="padding: 5px; text-align: center; border: 1px solid #cbd5e1; page-break-inside: avoid;"></td>
         </tr>';
         $html .= '</table>';
-    
+
     // Agrupar por sistema
     $porSistema = [];
     foreach ($registros as $reg) {
@@ -319,14 +316,14 @@ body {
         }
         $porSistema[$sistema][] = $reg;
     }
-    
+
     foreach ($porSistema as $sistema => $regs) {
             if (empty(trim($sistema))) continue;
-    
+
             $html .= '<table class="data-table">';
             // Encabezado del sistema
             $html .= '<tr><th colspan="4" style="background-color: #e6f2ff; font-weight: bold; text-align: left; padding: 5px 8px;">' . htmlspecialchars(strtoupper($sistema)) . '</th></tr>';
-            
+
             // Cabeceras
             $html .= '<tr>
                 <th>Nivel</th>
@@ -334,7 +331,7 @@ body {
                 <th>%</th>
                 <th>Observaciones</th>
             </tr>';
-    
+
             // Agrupar por nivel
             $porNivel = [];
             foreach ($regs as $r) {
@@ -344,20 +341,20 @@ body {
                 }
                 $porNivel[$nivel][] = $r;
             }
-    
+
             foreach ($porNivel as $nivel => $items) {
                 $rowspan = count($items);
-                
+
                 // Obtener la observación del nivel (usamos la primera)
                 $observacionNivel = '';
                 if (!empty($items)) {
                     $observacionNivel = $items[0]['tobservacion'] ?? '';
                 }
-            
+
                 for ($i = 0; $i < $rowspan; $i++) {
                     $item = $items[$i];
             $html .= '<tr>';
-            
+
                     if ($i === 0) {
                         // Primera fila: Nivel + Parámetro + % + Observaciones (con rowspan)
                         $html .= '<td class="nivel-cell" rowspan="' . $rowspan . '">' . htmlspecialchars(strtoupper($nivel)) . '</td>';
@@ -368,19 +365,19 @@ body {
                         // Filas siguientes: solo Parámetro + %
                         $html .= '<td class="param-cell">' . htmlspecialchars($item['tparametro'] ?? '') . '</td>';
                         $html .= '<td class="porc-cell">' . htmlspecialchars($item['tporcentajetotal'] ?? '0') . '%</td>';
-                       
+
                     }
-            
+
             $html .= '</tr>';
                 }
             }
-    
+
             $html .= '</table>';
         }
-    
+
         // Sección de Diagnóstico Presuntivo al final
         $diagnosticoPresuntivo = $cabecera['tdiagpresuntivo'] ?? $cabecera['diagnostico_presuntivo'] ?? '';
-        
+
         $html .= '<table class="diagnostico-section" style="width: 100%; border-collapse: collapse; margin-top: 20px; page-break-inside: avoid;">';
         $html .= '<tr>';
         $html .= '<td class="diagnostico-title" style="background-color: #e6f2ff; font-weight: bold; text-align: center; padding: 5px; border: 1px solid #cbd5e1; page-break-inside: avoid;">';
@@ -397,7 +394,7 @@ body {
         $html .= '</td>';
         $html .= '</tr>';
         $html .= '</table>';
-    
+
     $html .= '</body></html>';
     return $html;
 }
@@ -410,7 +407,7 @@ body {
             $logoData = file_get_contents($logoPath);
             $logoBase64 = 'data:image/png;base64,' . base64_encode($logoData);
         }
-        
+
         $logoHtml = '';
         if ($logoBase64) {
             $logoHtml = '<div style="position: absolute; top: 15px; right: 20px; text-align: right; z-index: 1000;">
@@ -420,12 +417,12 @@ body {
                 </div>
               </div>';
         }
-        
+
         $granjaRaw = $cabecera['tcencos'] ?? '';
-        $granjaTxt = strpos($granjaRaw, 'C=') !== false 
-            ? trim(explode('C=', $granjaRaw)[0]) 
+        $granjaTxt = strpos($granjaRaw, 'C=') !== false
+            ? trim(explode('C=', $granjaRaw)[0])
             : $granjaRaw;
-        
+
         // Calcular porcentajes por nivel
         $porcentajes = [];
         foreach ($registros as $r) {
@@ -440,7 +437,7 @@ body {
             }
         }
 
-        // Agrupar por sistema
+    // Agrupar por sistema
         $porSistema = [];
         foreach ($registros as $reg) {
             $sistema = $reg['tsistema'] ?? '';
@@ -600,13 +597,13 @@ body {
             $html .= '<img src="' . htmlspecialchars($logoBase64) . '" style="width: 50px; height: 50px; vertical-align: top;" />';
             $html .= '</div>';
         }
-        
+
         // Contenedor con doble borde estilo segunda imagen
         $html .= '<div class="first-page-content">';
         $html .= '<div class="first-page-title">GRANJA ' . htmlspecialchars($granjaTxt) . '</div>';
         $html .= '<div class="first-page-line"></div>';
         $html .= '<div class="first-page-subtitle">Campaña ' . htmlspecialchars($cabecera['tcampania'] ?? '') . '</div>';
-        
+
         // Nueva fila con N° Reg y Fecha
         $numreg = $cabecera['numreg'] ?? $cabecera['tnumreg'] ?? '';
         $fecha = '--/--/----';
@@ -620,7 +617,7 @@ body {
             }
         }
         $html .= '<div class="first-page-subtitle" style="margin-top: 10px;">N° Reg: ' . htmlspecialchars($numreg) . ' &nbsp;&nbsp; Fecha: ' . htmlspecialchars($fecha) . '</div>';
-        
+
         $html .= '<div class="first-page-subtitle">GALPÓN ' . htmlspecialchars($cabecera['tgalpon'] ?? '') . '</div>';
         $html .= '<div class="first-page-subtitle">EDAD ' . htmlspecialchars($cabecera['tedad'] ?? '') . ' DÍAS</div>';
         $html .= '</div>';
@@ -643,26 +640,26 @@ body {
             }
 
             $html .= '<h2>' . htmlspecialchars(strtoupper($sistema)) . '</h2>';
-            
+
             // Calcular cuántas columnas por fila (2 o 3)
             $totalNiveles = count($porNivel);
             $columnasPorFila = $totalNiveles <= 2 ? 2 : 3;
             $anchoColumna = $columnasPorFila == 2 ? '50%' : '33%';
-            
+
             $html .= '<table width="100%" cellpadding="5">';
-            
+
             $nivelesList = array_keys($porNivel);
             foreach ($nivelesList as $i => $nivel) {
                 $items = $porNivel[$nivel];
-                
+
                 // Abrir nueva fila cada 2 o 3 columnas
                 if ($i % $columnasPorFila == 0) {
                     $html .= '<tr>';
                 }
-                
+
                 // Imagen (por ahora sin imagen, solo placeholder)
                 $imgHtml = 'Sin evidencia';
-                
+
                 // Porcentajes
                 $porcHtml = '';
                 $porcentajesNivel = $porcentajes[$nivel] ?? [];
@@ -684,7 +681,7 @@ body {
                 }
                 $html .= '</table>';
                 $html .= '</td>';
-                
+
                 // Cerrar fila cada 2 o 3 columnas o al final
                 if (($i + 1) % $columnasPorFila == 0 || $i == count($nivelesList) - 1) {
                     $html .= '</tr>';
@@ -696,10 +693,10 @@ body {
 
         // Sección de Diagnóstico Presuntivo en nueva página
         $diagnosticoPresuntivo = $cabecera['tdiagpresuntivo'] ?? $cabecera['diagnostico_presuntivo'] ?? '';
-        
+
         // Salto de página antes de la sección de diagnóstico
         $html .= '<div style="page-break-before: always;"></div>';
-        
+
         // Siempre mostrar la sección, con "No se registró diagnóstico" si está vacío
         $html .= '<div class="diagnostico-section" style="margin-top: 40px; margin-bottom: 20px; page-break-inside: avoid;">';
         $html .= '<div class="diagnostico-title" style="font-size: 18pt; font-weight: bold; color: #002060; text-align: center; margin-bottom: 12px; border-bottom: 3px solid #002060; padding-bottom: 8px;">';

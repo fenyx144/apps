@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Descarga de la nómina DNI → proveedor para proponer el proveedor en un
+ * Descarga de la nómina DNI  proveedor para proponer el proveedor en un
  * ingreso no planificado (también sin señal). Solo lectura.
  *
  * Si algo falla responde `data.disponible = false` y la app conserva lo que tenía.

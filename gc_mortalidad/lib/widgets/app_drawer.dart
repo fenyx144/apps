@@ -312,7 +312,7 @@ class _AppDrawerState extends State<AppDrawer> {
           continue;
         }
 
-        // guardar_mortalidad_movil.php → san_fact_mortalidad_cab / san_fact_mortalidad_det
+        // guardar_mortalidad_movil.php san_fact_mortalidad_cab / san_fact_mortalidad_det
         final result = await _apiService.uploadMortalidadMovil(
           record: Map<String, dynamic>.from(record),
         );

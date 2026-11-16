@@ -38,7 +38,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _hasAttemptedValidation = false;
 
   /// ¿Hay red para intentar el login en línea?
-  ///
   /// Con un tope corto: en una red lenta o cautiva el `lookup` podía quedarse
   /// esperando y el vigilante veía el cargando sin fin. Ante la duda se dice
   /// «no hay red» y el login sigue por el camino offline.
@@ -67,7 +66,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// ¿Hay algo en el equipo para validar usuario/clave sin servidor?
-  ///
   /// Puede ser el hash del último login en línea o el catálogo de usuarios
   /// descargado (password_hex / libtri). Sin ninguno de los dos, en offline no
   /// hay forma de saber si la clave es correcta.

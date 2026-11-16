@@ -7,7 +7,6 @@ import 'package:bioseguridad/widgets/proveedor_dialog.dart';
 import 'package:flutter/foundation.dart';
 
 /// Catálogo descargado del servidor: proveedores que planifican en la web.
-///
 /// Se guarda en el dispositivo y se usa offline en el diálogo de proveedor.
 class ProveedorPlanCatalogService {
   ProveedorPlanCatalogService(this._storage, {ApiService? api})

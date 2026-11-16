@@ -105,14 +105,14 @@ class _RegistroEnvioMuestraScreenState
           'muestras',
           'paquetes',
           'analisis',
-          
+
         ],
       );
     } else {
       await catalogService.loadFromPrefs();
     }
 
-    _limpiarFormulario();    
+    _limpiarFormulario();
   }
 
   TimeOfDay? parseTimeOfDay(String? timeString) {
@@ -140,10 +140,10 @@ class _RegistroEnvioMuestraScreenState
             drawer: const AppDrawer(),
             body: SafeArea(
               bottom:
-                  false, 
+                  false,
               child: Column(
                 children: [
-                  // 👇 Zona desplazable: todo el contenido del formulario MENOS el botón
+                  // Zona desplazable: todo el contenido del formulario MENOS el botón
                   Expanded(
                     child: RefreshIndicator(
                       onRefresh: _refreshData,
@@ -425,7 +425,7 @@ class _RegistroEnvioMuestraScreenState
                   onTap: () {
                     controller.setLaboratorio(codigo, nombre);
                     Navigator.pop(ctx);
-                    // 👇 Desenfocar cualquier TextField abierto
+                    // Desenfocar cualquier TextField abierto
                     FocusScope.of(context).unfocus();
                   },
                 );

@@ -30,7 +30,6 @@ import com.rinconadadelsur.sistemas.bioseguridad.databinding.FragmentPresentacio
 
 import java.util.Calendar;
 
-
 public class PresentacionFragment extends Fragment {
 
     private FragmentPresentacionBinding bg;
@@ -50,14 +49,11 @@ public class PresentacionFragment extends Fragment {
     String querys;
 
     public PresentacionFragment() {
-        // Required empty public constructor
     }
-
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_presentacion, container, false);
     }
 
@@ -65,9 +61,6 @@ public class PresentacionFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-
-
     }
-
 
 }

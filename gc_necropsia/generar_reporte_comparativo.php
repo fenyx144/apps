@@ -6,7 +6,6 @@ ini_set('log_errors', 1);
 
 date_default_timezone_set('America/Lima');
 
-
 ob_start();
 include_once '../../../conexion_grs_joya/conexion.php';
 $conn = conectar_joya();
@@ -51,9 +50,9 @@ if (is_string($galpones) && $galpones !== 'todos') {
 
 // Construir consulta SQL
 $sql = "SELECT DISTINCT
-    tcencos, tgranja, tgalpon, tedad, tsistema, tnivel, tparametro, 
+    tcencos, tgranja, tgalpon, tedad, tsistema, tnivel, tparametro,
     tporcentajetotal, tobservacion, tdate, tfectra
-FROM t_regnecropsia 
+FROM t_regnecropsia
 WHERE tdate >= ? AND tdate <= ?";
 
 $params = [];
@@ -109,10 +108,10 @@ $stmt->close();
 
 // Obtener TODAS las combinaciones únicas de sistema/nivel/parámetro (sin filtrar por fechas)
 $sqlTodosNiveles = "
-    SELECT DISTINCT tsistema, tnivel, tparametro 
-    FROM t_regnecropsia 
-    ORDER BY 
-        CASE 
+    SELECT DISTINCT tsistema, tnivel, tparametro
+    FROM t_regnecropsia
+    ORDER BY
+        CASE
             WHEN LOWER(tsistema) LIKE '%inmunol%' THEN 1
             WHEN LOWER(tsistema) LIKE '%digestiv%' THEN 2
             WHEN LOWER(tsistema) LIKE '%respirat%' THEN 3
@@ -129,7 +128,7 @@ while ($row = $resultTodosNiveles->fetch_assoc()) {
     $sistema = $row['tsistema'] ?? '';
     $nivel = $row['tnivel'] ?? '';
     $parametro = $row['tparametro'] ?? '';
-    
+
     if (!isset($todosNiveles[$sistema])) {
         $todosNiveles[$sistema] = [];
     }
@@ -162,7 +161,7 @@ foreach ($registros as $reg) {
         ];
     }
     $datosAgrupados[$key]['registros'][] = $reg;
-    
+
     // Agrupar cencos únicos
     if (!isset($cencosUnicos[$reg['tcencos']])) {
         $cencosUnicos[$reg['tcencos']] = $reg['tgranja'];
@@ -181,7 +180,7 @@ if ($formato === 'excel') {
 
 function _generarPDF($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos, $esComparativoCencos, $todosNiveles) {
     require_once '../../vendor/autoload.php';
-    
+
     // Obtener lista de galpones con información completa (agrupados por CENCO)
     $galponesUnicos = [];
     $galponesPorCenco = [];
@@ -224,7 +223,7 @@ function _generarPDF($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos, 
     try {
         $mpdf = new \Mpdf\Mpdf([
             'mode' => 'utf-8',
-            'format' => [$anchoMM, 210], // [ancho, alto] → landscape si ancho > 210
+            'format' => [$anchoMM, 210], // [ancho, alto] landscape si ancho > 210
             'orientation' => 'L',
             'margin_left' => 8,
             'margin_right' => 8,
@@ -249,19 +248,19 @@ function _generarPDF($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos, 
         ');
 
         $html = _generarHTMLReporte(
-            $datosAgrupados, 
-            $fecha_inicio, 
-            $fecha_fin, 
-            $cencosUnicos, 
-            $esComparativoCencos, 
+            $datosAgrupados,
+            $fecha_inicio,
+            $fecha_fin,
+            $cencosUnicos,
+            $esComparativoCencos,
             $todosNiveles,
             $galponesUnicos,
-            $galponesPorCenco  // pasamos la agrupación por CENCO
+            $galponesPorCenco // pasamos la agrupación por CENCO
         );
 
         $mpdf->WriteHTML($html);
         $mpdf->Output('reporte_comparativo_' . date('Ymd_His') . '.pdf', 'I');
-        
+
     } catch (Exception $e) {
         die('Error generando PDF: ' . $e->getMessage());
     }
@@ -269,10 +268,10 @@ function _generarPDF($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos, 
 
 function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos, $esComparativoCencos, $todosNiveles) {
     require_once '../../vendor/autoload.php';
-    
+
     $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
-    
+
     // Obtener lista de galpones únicos para las columnas
     $galponesUnicos = [];
     foreach ($datosAgrupados as $key => $grupo) {
@@ -285,7 +284,7 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
             ];
         }
     }
-    
+
     // Estilos
     $headerStyle = [
         'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
@@ -301,7 +300,7 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
             ]
         ]
     ];
-    
+
     $cellStyle = [
         'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP],
         'borders' => [
@@ -311,9 +310,9 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
             ]
         ]
     ];
-    
+
     $row = 1;
-    
+
     // Título
     $numCols = count($galponesUnicos) * 2 + 3; // 3 columnas base + 2 por cada galpón
     $lastCol = $sheet->getCellByColumnAndRow($numCols, 1)->getColumn();
@@ -324,12 +323,12 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
         'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]
     ]);
     $row++;
-    
+
     // Fechas
     $sheet->setCellValue('A' . $row, 'Período: ' . $fecha_inicio . ' - ' . $fecha_fin);
     $sheet->mergeCells('A' . $row . ':' . $lastCol . $row);
     $row++;
-    
+
     // Cabecera de CENCOS si es comparativo entre cencos
     if ($esComparativoCencos) {
         $sheet->setCellValue('A' . $row, 'CENCOS COMPARADOS:');
@@ -342,7 +341,7 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
             ]
         ]);
         $row++;
-        
+
         $col = 1;
         foreach ($cencosUnicos as $cenco => $granja) {
             $sheet->setCellValueByColumnAndRow($col++, $row, 'Cenco: ' . $cenco);
@@ -352,10 +351,10 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
     } else {
         $row++;
     }
-    
+
     // Usar todos los niveles (sin filtrar por datos existentes)
     $sistemas = $todosNiveles;
-    
+
     // Obtener lista de galpones únicos para las columnas
     $galponesUnicos = [];
     foreach ($datosAgrupados as $key => $grupo) {
@@ -368,57 +367,57 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
             ];
         }
     }
-    
+
     // Generar cabecera - REORGANIZADA: Cenco/Granja/Edad en primera fila
     $col = 1;
     $sheet->setCellValueByColumnAndRow($col++, $row, 'Sistema');
     $sheet->setCellValueByColumnAndRow($col++, $row, 'Nivel');
     $sheet->setCellValueByColumnAndRow($col++, $row, 'Parámetro');
-    
+
     // Fila 1: Información de cada galpón (Cenco, Granja, Edad) - COLSPAN 2
     foreach ($galponesUnicos as $galpon => $info) {
         $sheet->setCellValueByColumnAndRow($col, $row, 'Cenco: ' . $info['tcencos'] . "\nGranja: " . $info['tgranja'] . "\nEdad: " . $info['tedad']);
         $sheet->mergeCells($sheet->getCellByColumnAndRow($col, $row)->getCoordinate() . ':' . $sheet->getCellByColumnAndRow($col + 1, $row)->getCoordinate());
         $col += 2;
     }
-    
+
     // Aplicar estilo a la cabecera
     $headerRange = 'A' . $row . ':' . $sheet->getCellByColumnAndRow($col - 1, $row)->getCoordinate();
     $sheet->getStyle($headerRange)->applyFromArray($headerStyle);
     $sheet->getStyle($headerRange)->getAlignment()->setWrapText(true);
     $row++;
-    
+
     // Fila 2: Galpón (colspan 2)
     $col = 1;
     $sheet->setCellValueByColumnAndRow($col++, $row, '');
     $sheet->setCellValueByColumnAndRow($col++, $row, '');
     $sheet->setCellValueByColumnAndRow($col++, $row, '');
-    
+
     foreach ($galponesUnicos as $galpon => $info) {
         $sheet->setCellValueByColumnAndRow($col, $row, 'Galpón ' . $galpon);
         $sheet->mergeCells($sheet->getCellByColumnAndRow($col, $row)->getCoordinate() . ':' . $sheet->getCellByColumnAndRow($col + 1, $row)->getCoordinate());
         $col += 2;
     }
-    
+
     $subHeaderRange = 'A' . $row . ':' . $sheet->getCellByColumnAndRow($col - 1, $row)->getCoordinate();
     $sheet->getStyle($subHeaderRange)->applyFromArray($headerStyle);
     $row++;
-    
+
     // Fila 3: % y Observaciones
     $col = 1;
     $sheet->setCellValueByColumnAndRow($col++, $row, '');
     $sheet->setCellValueByColumnAndRow($col++, $row, '');
     $sheet->setCellValueByColumnAndRow($col++, $row, '');
-    
+
     foreach ($galponesUnicos as $galpon => $info) {
         $sheet->setCellValueByColumnAndRow($col++, $row, '%');
         $sheet->setCellValueByColumnAndRow($col++, $row, 'Observaciones');
     }
-    
+
     $subHeaderRange = 'A' . $row . ':' . $sheet->getCellByColumnAndRow($col - 1, $row)->getCoordinate();
     $sheet->getStyle($subHeaderRange)->applyFromArray($headerStyle);
     $row++;
-    
+
     // Calcular total de filas por sistema para rowspan
     $filasPorSistema = [];
     foreach ($sistemas as $sistema => $niveles) {
@@ -428,21 +427,21 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
         }
         $filasPorSistema[$sistema] = $totalFilas;
     }
-    
+
     // Datos por sistema
     foreach ($sistemas as $sistema => $niveles) {
         $firstRowSistema = $row;
         $totalFilasSistema = $filasPorSistema[$sistema];
-        
+
         foreach ($niveles as $nivel => $parametros) {
             foreach ($parametros as $parametro) {
                 $col = 1;
-                
+
                 // Sistema solo en la primera fila
                 if ($row == $firstRowSistema) {
                     $sheet->setCellValueByColumnAndRow($col++, $row, $sistema);
                     $sheet->mergeCells(
-                        $sheet->getCellByColumnAndRow(1, $row)->getCoordinate() . ':' . 
+                        $sheet->getCellByColumnAndRow(1, $row)->getCoordinate() . ':' .
                         $sheet->getCellByColumnAndRow(1, $row + $totalFilasSistema - 1)->getCoordinate()
                     );
                     $sheet->getStyle($sheet->getCellByColumnAndRow(1, $row)->getCoordinate())->applyFromArray([
@@ -462,15 +461,15 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
                 } else {
                     $col++;
                 }
-                
+
                 $sheet->setCellValueByColumnAndRow($col++, $row, $nivel);
                 $sheet->setCellValueByColumnAndRow($col++, $row, $parametro);
-                
+
                 // Buscar datos para cada galpón
                 foreach ($galponesUnicos as $galpon => $info) {
                     $porcentaje = '';
                     $observacion = '';
-                    
+
                     // Buscar en los datos agrupados
                     foreach ($datosAgrupados as $grupo) {
                         if ($grupo['tgalpon'] == $galpon) {
@@ -485,22 +484,22 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
                             }
                         }
                     }
-                    
+
                     $sheet->setCellValueByColumnAndRow($col++, $row, $porcentaje);
                     $sheet->setCellValueByColumnAndRow($col++, $row, $observacion);
                 }
-                
+
                 $row++;
             }
         }
         $row++; // Espacio entre sistemas
     }
-    
+
     // Aplicar estilos a todas las celdas de datos (desde la fila de datos, no desde la fila 4)
     $dataStartRow = 4; // Fila donde empiezan los datos (después de las cabeceras)
     $dataRange = 'A' . $dataStartRow . ':' . $sheet->getCellByColumnAndRow(count($galponesUnicos) * 2 + 3, $row - 1)->getCoordinate();
     $sheet->getStyle($dataRange)->applyFromArray($cellStyle);
-    
+
     // Ajustar ancho de columnas
     $sheet->getColumnDimension('A')->setWidth(20);
     $sheet->getColumnDimension('B')->setWidth(20);
@@ -509,12 +508,12 @@ function _generarExcel($datosAgrupados, $fecha_inicio, $fecha_fin, $cencosUnicos
         $colLetter = $sheet->getCellByColumnAndRow(4 + $i, 1)->getColumn();
         $sheet->getColumnDimension($colLetter)->setWidth(15);
     }
-    
+
     // Enviar archivo
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment;filename="reporte_comparativo_' . date('Ymd_His') . '.xlsx"');
     header('Cache-Control: max-age=0');
-    
+
     $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
     $writer->save('php://output');
     exit;

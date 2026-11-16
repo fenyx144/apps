@@ -45,9 +45,9 @@ public class RegistrarDispositivoAndroidActivity extends AppCompatActivity {
         setContentView(bg.getRoot());
 
         sIdAndroid = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
-        sFabricante = Build.MANUFACTURER;//Xiaomi
-        sFamilia = Build.BRAND;//Redmi
-        sModelo = Build.MODEL;//mk
+        sFabricante = Build.MANUFACTURER; // Xiaomi
+        sFamilia = Build.BRAND; // Redmi
+        sModelo = Build.MODEL; // mk
 
         sSaltoLinea="\n";
         bg.tietIdAndroid.setText(sIdAndroid);
@@ -76,18 +76,15 @@ public class RegistrarDispositivoAndroidActivity extends AppCompatActivity {
                     sCadena="";
                     bg.tvRespuestaServidor.setText("");
 
-
                     hV.sMiIpDispositivo = hM.getIP();
                     hV.sMiIpConexion = hM.ipConexion(hV.sMiIpDispositivo);
                     hV.sMiURL = hV.sMiSeg + hV.sMiIpConexion + "/" + hV.sMiCarpeta + "/" + hV.phpRegistrarDispositivo;
-
 
                     registrarDispositivo(hV.sMiURL,sDescripcion);
                 }
 
             }
         });
-
 
     }
 

@@ -106,7 +106,7 @@ class _MortalityTypeSelectScreenState extends State<MortalityTypeSelectScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-             
+
               Expanded(
                 child: _visibleTypes.isEmpty
                     ? Center(

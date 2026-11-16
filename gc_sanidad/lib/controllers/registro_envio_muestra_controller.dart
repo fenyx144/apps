@@ -480,7 +480,7 @@ class RegistroEnvioMuestraController with ChangeNotifier {
     final config = _configuraciones[index];
     if (config == null) return 0;
 
-    final valor = config.tipoMuestra['lonCod']; //['longitud_codigo'];
+    final valor = config.tipoMuestra['lonCod']; // ['longitud_codigo'];
     if (valor == null) return 0;
 
     // Manejar tanto String como num

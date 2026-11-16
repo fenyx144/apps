@@ -26,6 +26,7 @@ class InlineMortalitySection extends StatefulWidget {
   final bool showCausa;
   final List<MotivoMortalidad> motivos;
   final Color tabAccentColor;
+
   /// Si es true, las cantidades se bloquean (registro sin mortalidad).
   final bool sinMortalidad;
 
@@ -48,6 +49,7 @@ class InlineMortalitySection extends StatefulWidget {
 class _SexInlineData {
   final TextEditingController cantidadController = TextEditingController();
   final TextEditingController observacionController = TextEditingController();
+  String? tipoMuerte;
   String? causaCodigo;
   String? causaNombre;
   final List<String> fotos = [];
@@ -105,6 +107,8 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection> {
       _hembra.cantidadController.text = '';
       _macho.cantidadController.addListener(_onCantidadChanged);
       _hembra.cantidadController.addListener(_onCantidadChanged);
+      _macho.tipoMuerte = null;
+      _hembra.tipoMuerte = null;
       if (widget.showCausa) {
         _macho.causaCodigo = null;
         _macho.causaNombre = null;
@@ -127,6 +131,7 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection> {
       } else if (d.cantidad > 0) {
         tab.cantidadController.text = '${tab.cantidad + d.cantidad}';
       }
+      tab.tipoMuerte = d.tipoMuerte;
       tab.causaCodigo = d.causaCodigo;
       tab.causaNombre = d.causaNombre;
       tab.fotos.addAll(d.fotos);
@@ -156,6 +161,7 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection> {
       sexo: sexo,
       cantidad: sinMort ? 0 : tab.cantidad,
       causaCodigo: sinMort || !widget.showCausa ? null : tab.causaCodigo,
+      tipoMuerte: sinMort ? null : tab.tipoMuerte,
       causaNombre: sinMort || !widget.showCausa ? null : tab.causaNombre,
       observacion: obs.isEmpty ? null : obs,
       fotos: List.from(tab.fotos),
@@ -165,7 +171,10 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection> {
   Future<void> _openCausaDialog(_SexInlineData tab, String sexoLabel) async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (widget.motivos.isEmpty) {
-      showInfoToast(context, 'No hay causas disponibles. Descargue desde el menú.');
+      showInfoToast(
+        context,
+        'No hay causas disponibles. Descargue desde el menú.',
+      );
       return;
     }
     await showSearchableSelectDialog<MotivoMortalidad>(
@@ -217,12 +226,18 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_camera_rounded, color: AppColors.textSecondary),
+                leading: const Icon(
+                  Icons.photo_camera_rounded,
+                  color: AppColors.textSecondary,
+                ),
                 title: const Text('Cámara'),
                 onTap: () => Navigator.pop(ctx, ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library_rounded, color: AppColors.textSecondary),
+                leading: const Icon(
+                  Icons.photo_library_rounded,
+                  color: AppColors.textSecondary,
+                ),
                 title: const Text('Galería'),
                 onTap: () => Navigator.pop(ctx, ImageSource.gallery),
               ),
@@ -323,16 +338,35 @@ class _InlineMortalitySectionState extends State<InlineMortalitySection> {
             onTap: () => _openCausaDialog(_hembra, 'Hembras'),
           ),
         ),
+      SexoGridRow(
+        label: 'Tipo muerte',
+        cellM: SexoTipoMuerteCell(
+          value: _macho.tipoMuerte,
+          accent: accent,
+          onChanged: enabled
+              ? (v) => setState(() {
+                  _macho.tipoMuerte = v;
+                  _notifyParent();
+                })
+              : null,
+        ),
+        cellH: SexoTipoMuerteCell(
+          value: _hembra.tipoMuerte,
+          accent: accent,
+          onChanged: enabled
+              ? (v) => setState(() {
+                  _hembra.tipoMuerte = v;
+                  _notifyParent();
+                })
+              : null,
+        ),
+      ),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SexoGridTable(
-          accent: accent,
-          rows: rows,
-          errors: _errorLines,
-        ),
+        SexoGridTable(accent: accent, rows: rows, errors: _errorLines),
         const SizedBox(height: 10),
         SexoObsFotoBlock(
           sexoLabel: 'Machos',

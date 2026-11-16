@@ -14,7 +14,7 @@ function bio_procesar_guardado(mysqli $conn, array $data, bool $esActualizacion)
 {
     $reporte = strtolower(trim((string) ($data['reporte'] ?? '')));
     if (!in_array($reporte, BIO_REPORTES_VALIDOS, true)) {
-        return bio_resp(400, false, 'Reporte no válido (garita, cerco, fomites, ingreso o salida).', 'INVALID_REPORTE');
+        return bio_resp(400, false, 'Reporte no válido (garita, cerco, fomites, ingreso, salida o artículos).', 'INVALID_REPORTE');
     }
 
     $fecha = bio_norm_fecha((string) ($data['fecha'] ?? ''));
@@ -24,7 +24,12 @@ function bio_procesar_guardado(mysqli $conn, array $data, bool $esActualizacion)
 
     $granja = bio_norm_granja((string) ($data['granja'] ?? ''));
     $campania = bio_norm_campania((string) ($data['campania'] ?? ''));
-    if (trim($granja) === '' || $campania === '') {
+    if ($reporte === 'articulos') {
+        if (trim($granja) === '' || $campania === '') {
+            $granja = '000';
+            $campania = '000';
+        }
+    } elseif (trim($granja) === '' || $campania === '') {
         return bio_resp(400, false, 'Granja y campaña son obligatorias.', 'MISSING_GRANJA');
     }
     $cencos = bio_cenco($granja, $campania);
@@ -181,6 +186,27 @@ function bio_procesar_guardado(mysqli $conn, array $data, bool $esActualizacion)
         $ctx['proveedorRuc'] = trim((string) ($registro['proveedor_ruc'] ?? $registro['proveedorRuc'] ?? ''));
         $ctx['planVisitaId'] = bio_norm_plan_visita_id($registro['plan_visita_id'] ?? $registro['planVisitaId'] ?? 0);
         $ctx['dnis'] = $dnis;
+    } elseif ($reporte === 'articulos') {
+        $dni = preg_replace('/[^0-9A-Za-z]/', '', (string) ($registro['dni'] ?? '')) ?? '';
+        if ($dni === '') {
+            return bio_resp(400, false, 'Indique el DNI de la persona.', 'MISSING_DNI');
+        }
+        $articulos = is_array($registro['articulos'] ?? null) ? $registro['articulos'] : [];
+        $validos = 0;
+        foreach ($articulos as $a) {
+            if (!is_array($a)) {
+                continue;
+            }
+            if (trim((string) ($a['descripcion'] ?? '')) !== '') {
+                $validos++;
+            }
+        }
+        if ($validos === 0) {
+            return bio_resp(400, false, 'Registre al menos un artículo.', 'MISSING_ARTICULOS');
+        }
+        $ctx['dni'] = $dni;
+        $ctx['nombrePersona'] = trim((string) ($registro['nombre'] ?? ''));
+        $ctx['articulos'] = $articulos;
     } elseif ($reporte === 'salida') {
         $dnis = bio_dnis_normalizados($registro['dnis'] ?? []);
         $vehiculos = bio_ingreso_vehiculos($registro);

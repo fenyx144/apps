@@ -1,0 +1,133 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:app_links/app_links.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:get/get.dart';
+import 'package:provider/provider.dart';
+
+import '../screens/login_screen.dart';
+import '../screens/register_cerco_screen.dart';
+import '../screens/register_fomites_screen.dart';
+import '../utils/bio_navigation.dart';
+import '../utils/constants.dart';
+import 'catalog_service.dart';
+import 'storage_service.dart';
+
+/// Enlace externo `gcbioseguridad://abrir?modulo=fomites&granja=642&dni=...`
+/// enviado por otra app (p. ej. rondas). Abre el registro con los datos
+/// precargados y, si hace falta, inicia sesión con el catálogo `usuarios`.
+abstract final class DeepLinkService {
+  static Map<String, String>? _pendiente;
+  static bool _splashListo = false;
+  static String _ultimo = '';
+  static DateTime _ultimoEn = DateTime(2000);
+
+  static Future<void> init() async {
+    final links = AppLinks();
+    links.uriLinkStream.listen(_recibir);
+    try {
+      _recibir(await links.getInitialLink()
+          .timeout(const Duration(seconds: 2)));
+    } catch (_) {}
+  }
+
+  static void _recibir(Uri? uri) {
+    if (uri == null || uri.scheme != 'gcbioseguridad') return;
+    // getInitialLink y el stream pueden entregar el mismo enlace al arrancar.
+    final s = uri.toString();
+    if (s == _ultimo && DateTime.now().difference(_ultimoEn).inSeconds < 5) {
+      return;
+    }
+    _ultimo = s;
+    _ultimoEn = DateTime.now();
+    _pendiente = Map<String, String>.from(uri.queryParameters);
+    if (_splashListo) unawaited(_procesar());
+  }
+
+  /// Lo llama el splash al terminar. `true` si el enlace tomó la navegación.
+  static Future<bool> alTerminarSplash() async {
+    _splashListo = true;
+    if (_pendiente == null) return false;
+    await _procesar();
+    return true;
+  }
+
+  /// Con sesión iniciada: abre el registro pendiente, si lo hay.
+  static bool abrirPendiente() {
+    final p = _pendiente;
+    if (p == null) return false;
+    _pendiente = null;
+    final mod =
+        (p['modulo'] ?? '').toLowerCase().replaceAll(RegExp('[ _-]'), '');
+    if (mod == 'fomites') {
+      Get.offAll(() => RegisterFomitesScreen(enlace: p),
+          routeName: BioNavigation.rutas[BioSecciones.fomites]!);
+    } else if (mod.startsWith('cerco')) {
+      Get.offAll(() => RegisterCercoScreen(enlace: p),
+          routeName: BioNavigation.rutas[BioSecciones.cerco]!);
+    } else {
+      return false;
+    }
+    return true;
+  }
+
+  static Future<void> _procesar() async {
+    final ctx = Get.context;
+    final p = _pendiente;
+    if (ctx == null || p == null) return;
+    final storage = Provider.of<StorageService>(ctx, listen: false);
+    final catalog = Provider.of<CatalogService>(ctx, listen: false);
+    var logged = await storage.isLoggedIn();
+
+    String n(Object? v) => (v ?? '').toString().trim().toLowerCase();
+    final cod = n(p['usuario']);
+    final ph = n(p['ph']);
+    final dni = n(p['dni']);
+    final usuarios = catalog.catalogos['usuarios'];
+    Map? u;
+    if (usuarios is List) {
+      final lista = usuarios.whereType<Map>();
+      // 1) usuario + password_hex
+      if (cod.isNotEmpty && ph.isNotEmpty) {
+        u = lista
+            .where((x) => n(x['codigo']) == cod && n(x['password_hex']) == ph)
+            .firstOrNull;
+      }
+      // 2) respaldo: el DNI está en `libtri` del usuario
+      if (u == null && dni.isNotEmpty) {
+        u = lista.where((x) => n(x['libtri']) == dni).firstOrNull;
+      }
+    }
+    final actual = n(storage.getUserCodeSync());
+    if (u != null) {
+      final codigo = n(u['codigo']);
+      // Mismo usuario con sesión: se conserva. Otro: se reemplaza.
+      if (!logged || codigo != actual) {
+        if (logged) await storage.clearSession();
+        await storage.saveLoginSession(
+          userCode: codigo,
+          userName: (u['nombre'] ?? codigo).toString(),
+          deviceId: await _deviceId(),
+        );
+        logged = true;
+      }
+    } else if (logged && (cod.isNotEmpty || dni.isNotEmpty) && cod != actual) {
+      // El enlace trae otro usuario que no se pudo validar: login manual.
+      await storage.clearSession();
+      logged = false;
+    }
+    if (logged) {
+      if (!abrirPendiente()) BioNavigation.irTrasAutenticacion(sesionActiva: true);
+      return;
+    }
+    // Sin usuario: login normal; al entrar sigue al registro (abrirPendiente).
+    Get.offAll(() => const LoginScreen(),
+        routeName: BioNavigation.rutas['login']!);
+  }
+
+  static Future<String> _deviceId() async {
+    if (!Platform.isAndroid) return 'unknown';
+    return (await DeviceInfoPlugin().androidInfo).id;
+  }
+}

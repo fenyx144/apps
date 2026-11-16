@@ -38,15 +38,19 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
 
   /// Ítems animados del menú: dashboard + las secciones de los tres tipos de
   /// bioseguridad + reportes + «Mi granja» + «Acerca de» + «Cerrar sesión».
-  ///
   /// El orden de los índices sigue el de `build`: 0 el dashboard, 1..N las
   /// secciones, y los cuatro últimos reportes, «Mi granja», «Acerca de» y
   /// «Cerrar sesión».
   int get _itemsAnimados =>
-      5 + bioNavTipos.fold<int>(0, (total, tipo) => total + tipo.secciones.length);
+      5 +
+      (AppConstants.mostrarModuloEmpresaBio ? bioEmpresaNavSecciones.length : 0) +
+      bioNavTipos.fold<int>(0, (total, tipo) => total + tipo.secciones.length);
 
   /// Grupos de bioseguridad desplegados en el menú.
   late final Set<String> _abiertos = _gruposIniciales();
+
+  /// Submenú Almacén (consumo / relevo); el título «Almacén» va en el encabezado.
+  late bool _almacenAbierto = _almacenInicialAbierto();
 
   @override
   void initState() {
@@ -706,6 +710,8 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                           ),
                           for (final tipo in bioNavTipos)
                             ..._grupo(context, tipo),
+                          if (AppConstants.mostrarModuloEmpresaBio)
+                            ..._bloqueAlmacen(context),
                           // Reportes va después de los tres grupos, no junto al
                           // dashboard. La línea de arriba lo despega del último
                           // grupo para que no se lea como una sección de
@@ -806,7 +812,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   }
 
   /// Encabezado de un bloque del menú.
-  ///
   /// Con [destacado] el ícono va dentro de una caja con el degradado de la
   /// marca y el texto crece: «Bioseguridad» agrupa Física, Química y Biológica,
   /// así que tiene que leerse como el encabezado de esos tres y no como un
@@ -821,28 +826,19 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
       padding: EdgeInsets.fromLTRB(24, destacado ? 18 : 12, 24, 8),
       child: Row(
         children: [
-          Container(
-            width: 4,
-            height: destacado ? 30 : 22,
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(2),
+          if (!destacado) ...[
+            Container(
+              width: 4,
+              height: 22,
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
+          ],
           if (icon != null) ...[
-            if (destacado)
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, size: 19, color: Colors.white),
-              )
-            else
-              Icon(icon, size: 15, color: AppColors.primary),
+            Icon(icon, size: destacado ? 18 : 15, color: AppColors.primary),
             const SizedBox(width: 8),
           ],
           Expanded(
@@ -856,6 +852,12 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
               ),
             ),
           ),
+          if (destacado)
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 22,
+              color: context.textThemeMuted,
+            ),
         ],
       ),
     );
@@ -873,7 +875,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   }
 
   /// Un grupo plegable: encabezado tocable y, si está abierto, sus secciones.
-  ///
   /// Los grupos vienen plegados salvo el del tipo activo, para que el menú no
   /// sea una lista larguísima: física aporta las cuatro secciones y química y
   /// biológica una cada una. Los tres grupos comparten «Anomalías»; el ítem viaja
@@ -964,7 +965,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   }
 
   /// `true` si [ruta] es la pantalla en la que está parado el usuario.
-  ///
   /// La comparación usa la ruta completa, que en Anomalías incluye el tipo
   /// (`/bio/anomalias/quimica`): sin eso, las tres «Anomalías» quedarían
   /// resaltadas a la vez.
@@ -972,16 +972,71 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
       ruta != null && Get.currentRoute == ruta;
 
   /// Grupos de bioseguridad con los que abre el menú.
-  ///
   /// Se deduce de la ruta actual para que el grupo en el que está parado el
   /// usuario aparezca desplegado; si no se reconoce, se abre física, que es el
   /// único con varias secciones.
   Set<String> _gruposIniciales() {
     final ruta = Get.currentRoute;
     for (final tipo in bioNavTipos) {
-      if (ruta.endsWith('/${tipo.id}')) return {tipo.id};
+      if (ruta.contains('/bio/${tipo.id}')) return {tipo.id};
     }
-    return {bioNavTipos.first.id};
+    return {};
+  }
+
+  bool _almacenInicialAbierto() {
+    final ruta = Get.currentRoute;
+    return ruta.contains(BioNavigation.rutas[BioEmpresaSecciones.consumo]!) ||
+        ruta.contains(BioNavigation.rutas[BioEmpresaSecciones.relevo]!);
+  }
+
+  int get _indiceBaseEmpresa =>
+      1 + bioNavTipos.fold<int>(0, (t, g) => t + g.secciones.length);
+
+  List<Widget> _bloqueAlmacen(BuildContext context) {
+    return [
+      _EncabezadoAlmacen(
+        abierto: _almacenAbierto,
+        activoHome: _rutaActiva(BioNavigation.rutas[BioEmpresaSecciones.almacen]),
+        onToggle: () => setState(() => _almacenAbierto = !_almacenAbierto),
+        onIrHome: () {
+          Navigator.pop(context);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Get.to(
+              () => BioNavigation.pantallaEmpresa(BioEmpresaSecciones.almacen),
+              routeName: BioNavigation.rutas[BioEmpresaSecciones.almacen],
+              transition: Transition.rightToLeft,
+              duration: const Duration(milliseconds: 300),
+            );
+          });
+        },
+      ),
+      if (_almacenAbierto)
+        for (var i = 0; i < bioEmpresaNavSecciones.length; i++)
+          _animatedItem(
+            _indiceBaseEmpresa + i,
+            _DrawerItem(
+              icon: bioEmpresaNavSecciones[i].icon,
+              title: bioEmpresaNavSecciones[i].label,
+              gradient: AppColors.primaryGradient,
+              indent: true,
+              activo: _rutaActiva(
+                BioNavigation.rutas[bioEmpresaNavSecciones[i].id],
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  final sec = bioEmpresaNavSecciones[i].id;
+                  Get.to(
+                    () => BioNavigation.pantallaEmpresa(sec),
+                    routeName: BioNavigation.rutas[sec],
+                    transition: Transition.rightToLeft,
+                    duration: const Duration(milliseconds: 300),
+                  );
+                });
+              },
+            ),
+          ),
+    ];
   }
 
   /// Gradiente del ítem. Anomalías existe en los tres grupos y cada uno usa un
@@ -1039,7 +1094,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   }
 
   /// Navega a una sección desde el drawer (equivale a «ir y reiniciar»).
-  ///
   /// La tabla de rutas y de pantallas vive en [BioNavigation], que es la misma
   /// que usa el resto de la app.
   void _goAndReset(BuildContext drawerContext, String route, {String? tipo}) {
@@ -1187,15 +1241,80 @@ class _SyncCloud extends StatelessWidget {
   }
 }
 
+/// Bloque colapsable «Almacén»: título abre el inicio; chevron despliega consumo/relevo.
+class _EncabezadoAlmacen extends StatelessWidget {
+  const _EncabezadoAlmacen({
+    required this.abierto,
+    required this.activoHome,
+    required this.onToggle,
+    required this.onIrHome,
+  });
+
+  final bool abierto;
+  final bool activoHome;
+  final VoidCallback onToggle;
+  final VoidCallback onIrHome;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 2),
+      child: Material(
+        color: activoHome
+            ? AppColors.primary.withValues(alpha: 0.08)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onIrHome,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
+              children: [
+                Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.primaryDark),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Almacén',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: activoHome ? AppColors.primaryDark : context.textThemePrimary,
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onToggle,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: AnimatedRotation(
+                      turns: abierto ? 0.25 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        Icons.chevron_right_rounded,
+                        size: 22,
+                        color: context.textThemeMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Encabezado plegable de un grupo de bioseguridad.
-///
 /// La flecha apunta hacia abajo con el grupo abierto y hacia la derecha con el
 /// grupo plegado, como un acordeón.
-///
 /// Va con sangría respecto a «Bioseguridad» para que se lea como uno de sus
 /// tres bloques (Física, Química, Biológica) y no como un ítem del mismo nivel.
 /// La izquierda coincide con el carril de la barrita de las secciones de
-/// adentro, así que la jerarquía se ve de un vistazo: Bioseguridad → grupo →
+/// adentro, así que la jerarquía se ve de un vistazo: Bioseguridad grupo
 /// sección.
 class _EncabezadoGrupo extends StatelessWidget {
   const _EncabezadoGrupo({
@@ -1255,7 +1374,6 @@ class _EncabezadoGrupo extends StatelessWidget {
 }
 
 /// Fila del menú.
-///
 /// Sin tarjeta ni borde: la jerarquía la marcan la sangría y el tamaño del ícono,
 /// y entre hermanos del mismo nivel va una línea fina. La fila de la sección
 /// activa se resalta con un tinte, la barrita izquierda y el texto en azul.
@@ -1304,7 +1422,6 @@ class _DrawerItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = context.isAppDark;
 
-    // Geometría por nivel. `izquierda` es el sangrado absoluto del contenido;
     // `textoX` es dónde arranca el texto y, por lo tanto, la sangría con la que
     // se alinea la línea divisoria.
     final izquierda = indent ? (subIndent ? 52.0 : 38.0) : 16.0;

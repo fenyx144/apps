@@ -130,8 +130,6 @@ class AppConstants {
   // queda comentada: el módulo de Vacuna al Agua todavía no está desplegado ahí
   // y sus endpoints devuelven 404 (la app recibía HTML en vez de JSON).
   static const String baseUrl = 'https://granjarinconadadelsur.com/sanidad/flutter';
-                               //'http:// 10.153.227.5/sanidad/flutter';
-                              //'http://192.168.1.163/sanidad/flutter';
 
   /// Carpeta PHP de esta app (módulo móvil de vacunación al agua).
   static const String seguimientoPath = '/vacunaagua';

@@ -160,7 +160,7 @@ class ApiService {
           'message': responseData['message'] ?? 'Éxito',
           'detalle':
               responseData['detalle'] ??
-              {}, // ← ¡Esto es clave para los códigos!
+              {}, // ¡Esto es clave para los códigos!
         };
       } else {
         return {
@@ -314,7 +314,7 @@ class ApiService {
         final data = jsonDecode(response.body);
         return data;
       } else {
-        // Error del servidor (500, 400, etc.) → no es offline
+        // Error del servidor (500, 400, etc.) no es offline
         return {'error': 'HTTP ${response.statusCode}'};
       }
     } catch (e) {
@@ -328,7 +328,7 @@ class ApiService {
         '${AppConstants.baseUrlSanidad}/reserve_codigo_envio.php',
       );
 
-      // 👇 Añadir X-User-ID al header
+      // Añadir X-User-ID al header
       final headers = {
         ..._headers, // Incluye 'Authorization: Bearer ...'
         'X-User-ID': usuarioCodigo,
@@ -357,7 +357,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> reserveCodigoEnvio2(String usuarioCodigo) async {
     try {
-      // 👇 Añadimos el usuario_id como parámetro en la URL
+      // Añadimos el usuario_id como parámetro en la URL
       final url = Uri.parse(
         '${AppConstants.baseUrlSanidad}/reserve_codigo_envio.php', // ?usuario_id=${Uri.encodeComponent(usuarioCodigo)}
       );

@@ -22,7 +22,6 @@ class BioColumn {
 
   /// Peso con el que la columna se reparte el ancho sobrante cuando la tabla
   /// no llega al borde. Con 0 (por defecto) conserva su [width].
-  ///
   /// Las tablas de cerco y fómites no lo usan a propósito: ahí las columnas
   /// tienen un ancho de contenido y la tabla hace scroll horizontal.
   final double flex;
@@ -62,7 +61,6 @@ class BioTable extends StatelessWidget {
       columns.fold<double>(0, (acc, c) => acc + c.width);
 
   /// Anchos efectivos de cada columna para un ancho de tabla [width].
-  ///
   /// Si sobra espacio, las columnas con [BioColumn.flex] se lo reparten; si no
   /// hay columnas flexibles (cerco y fómites) devuelve los anchos declarados y
   /// la tabla se desplaza en horizontal.
@@ -374,7 +372,6 @@ class BioTextField extends StatelessWidget {
   }
 
   /// Línea bajo el campo cuando [underline] está activo.
-  ///
   /// El color tenue del tema dejaba una raya de 1 px tan clara sobre la celda
   /// que no se veía hasta tocar el campo (y ahí el azul del foco la delataba).
   /// El azul de la marca, apenas rebajado, se lee sobre la celda en los dos
@@ -524,10 +521,8 @@ class _SwitchSlot extends StatelessWidget {
 }
 
 /// Interruptor NO/SI compacto usado en las columnas «¿Falló?» y «¿D. del cerco?».
-///
 /// El color sigue el criterio del reporte web: rojo cuando la respuesta es
 /// «SI» (hay falla / el animal está dentro del cerco) y verde cuando es «NO».
-///
 /// [onLabel] y [offLabel] dicen con qué se contesta la fila; son nulos para
 /// quedarse con «SI» y «NO», que es lo que pregunta la falla.
 class BioSwitchFallo extends StatelessWidget {
@@ -577,11 +572,9 @@ class BioSwitchFallo extends StatelessWidget {
 }
 
 /// Interruptor NO/SI donde el estado encendido es el BUENO.
-///
 /// Es el switch de los tres bloques del cerco: encendido = verde (el componente
 /// está como debe) y apagado = rojo (no lo está). Es el inverso de
 /// [BioSwitchFallo], que pregunta por la falla.
-///
 /// [onLabel] y [offLabel] dicen con qué se contesta la fila en el formato
 /// físico: «CT»/«FALLA» en casi todas, «No»/«SI» en las alertas del tablero.
 /// Sin indicarlos quedan «Sí» y «No».
@@ -632,21 +625,16 @@ class BioSwitchCumple extends StatelessWidget {
 }
 
 /// Celda combinada: el interruptor y su campo de ingreso, juntos.
-///
 /// Se usa en las preguntas que piden observación (cerco eléctrico): al activar
 /// el switch se habilita la observación en la misma celda. Sin falla el campo
 /// queda deshabilitado, igual que en la app antigua.
-///
 /// Con [obsSiempreActiva] el campo se escribe siempre (voltaje y nivel de
 /// batería, que se registran como valor medido esté o no la falla).
-///
 /// [value] guarda siempre la falla (true = no correcto / falló), que es el dato
 /// que viaja al backend. Con [verdeAlEncender] el interruptor se muestra como
 /// el de «está bien»: verde al estar correcto, rojo al no estarlo.
-///
 /// [onLabel] y [offLabel] se pasan al interruptor de adentro y son nulos cuando
 /// la fila no tiene un par propio.
-///
 /// Con [apilado] la observación va **debajo** del interruptor en vez de al
 /// lado. Es como se usa en el cerco: la celda queda angosta y en una fila el
 /// campo al lado le robaba ancho al interruptor y lo corría de la columna.

@@ -1365,7 +1365,7 @@ class _MarcacionScreenState extends State<MarcacionScreen>
       for (final p in todos) {
         if (_claveGrupo(p) != c) continue;
         return nombreGrupoVisible(p.grupo, p.nomGrupo);
-        
+
       }
       return 'Sin grupo';
     }

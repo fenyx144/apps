@@ -47,7 +47,7 @@ class CatalogService with ChangeNotifier {
     return data ?? [];
   }
 
-  // ⭐ Pre-carga desde SharedPreferences (llamado en main.dart)
+  // Pre-carga desde SharedPreferences (llamado en main.dart)
   Future<void> loadFromPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();

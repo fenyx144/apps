@@ -34,7 +34,6 @@ class CercoMetrica {
   /// Respuestas de la fila. En el formato físico casi todo se contesta CT
   /// (controlado: está como debe) o FALLA; las tres alertas del tablero, No o
   /// SI, porque ahí la pregunta es si la alerta está presente.
-  ///
   /// Vienen del catálogo para poder corregirlas sin publicar la app; el respaldo
   /// repite la misma regla para un catálogo viejo o sin descargar.
   String get ok => _ok ?? ((esAlerta || _esSiNo) ? 'No' : 'CT');
@@ -157,7 +156,6 @@ class CatalogService with ChangeNotifier {
   }
 
   /// Descarga los catálogos propios de bioseguridad.
-  ///
   /// Si ya hay una descarga en curso (p. ej. la silenciosa del dashboard) se
   /// espera su resultado. Antes compartía `_isLoading` con usuarios/conempre y
   /// en ese caso salía sin descargar nada, dejando el catálogo viejo.
@@ -242,7 +240,6 @@ class CatalogService with ChangeNotifier {
 
   /// Forma del tablero de cerco: qué bloque le toca a cada métrica, si pide
   /// observación y con qué se contesta.
-  ///
   /// No es la lista de filas —esas salen del catálogo descargado— sino el
   /// esqueleto con el que se interpreta: un equipo que conserva un catálogo
   /// cacheado por una versión anterior (sin `bloque`, `obs`, `ok` ni `falla`)
@@ -368,7 +365,6 @@ class CatalogService with ChangeNotifier {
   ];
 
   /// Lista de catálogo tal como la guardó la descarga.
-  ///
   /// Sin descarga (o con una tabla que el servidor todavía no envía) devuelve
   /// una lista vacía: el formulario que la use tiene que avisar que falta
   /// descargar, en vez de ofrecer opciones inventadas acá.
@@ -390,7 +386,6 @@ class CatalogService with ChangeNotifier {
   }
 
   /// `true` mientras no se haya descargado el catálogo de bioseguridad.
-  ///
   /// Los formularios lo usan para avisar que hay que descargar antes de llenar,
   /// en lugar de mostrar selectores vacíos sin explicación.
   bool get sinDescargar => _bio.isEmpty;
@@ -405,7 +400,6 @@ class CatalogService with ChangeNotifier {
 
   /// Devuelve qué tablas vienen vacías o ausentes en [data], o `null` si el
   /// catálogo llega completo.
-  ///
   /// Los catálogos no tienen copia en código: si el servidor responde a medias
   /// y eso se guarda igual, los selectores quedan vacíos y el equipo ve el
   /// aviso de «descargue» sin entender por qué. En ese caso conviene conservar
@@ -439,7 +433,6 @@ class CatalogService with ChangeNotifier {
   List<Map<String, String>> get referencias => _listaCatalogo('referencias');
 
   /// Tipos de evidencia de un fómite (Avistamiento, Huella, Muerte...).
-  ///
   /// «Intrusión» se retiró de la app: el catálogo en la base se conserva porque
   /// los registros históricos lo usan, y el endpoint de catálogos ya no lo
   /// envía. Se filtra también acá para que desaparezca aunque el equipo siga
@@ -455,8 +448,7 @@ class CatalogService with ChangeNotifier {
 
   /// Procesos de fómites. «Despacho» se retiró: el endpoint ya no lo envía y
   /// se filtra también acá por si el equipo conserva un catálogo anterior.
-  ///
-  /// Además se corrige «Descanzo» → «Descanso» al mostrar. La palabra venía con
+  /// Además se corrige «Descanzo» «Descanso» al mostrar. La palabra venía con
   /// z en `procesofomites` (la tabla del servidor, que alimenta el selector) y
   /// así quedó en 39 registros históricos. Mientras esa base no corra la
   /// migración, o mientras el equipo siga con un catálogo descargado antes, el
@@ -503,12 +495,10 @@ class CatalogService with ChangeNotifier {
   }
 
   /// Nombre del usuario del sistema cuyo DNI coincide con [dni].
-  ///
   /// `usuario.libtri` guarda el DNI (así lo usa el módulo de roles), y el
   /// catálogo de usuarios ya viene descargado para el login offline. Es la
   /// segunda barrera cuando la consulta en línea del documento no responde:
   /// el personal de la granja se resuelve sin conexión.
-  ///
   /// Devuelve cadena vacía si el DNI no está entre los usuarios descargados.
   String nombrePorDni(String dni) {
     final buscado = dni.replaceAll(RegExp(r'\D'), '');
@@ -535,7 +525,6 @@ class CatalogService with ChangeNotifier {
   }
 
   /// Filas del tablero de cerco tal como las envió el servidor.
-  ///
   /// Vacío si no hay descarga: el tablero no se arma con una lista inventada en
   /// la app, y la pantalla ya avisa que hay que descargar los catálogos.
   List<CercoMetrica> get metricasCerco {
@@ -608,7 +597,7 @@ class CatalogService with ChangeNotifier {
         .toList();
   }
 
-  /// Descripción legible de un código de catálogo (p. ej. referencia `3` → Garita).
+  /// Descripción legible de un código de catálogo (p. ej. referencia `3` Garita).
   String descripcionDe(List<Map<String, String>> catalogo, String codigo) {
     for (final item in catalogo) {
       if (item['codigo'] == codigo) return item['descripcion'] ?? codigo;

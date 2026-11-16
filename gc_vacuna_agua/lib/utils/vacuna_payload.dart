@@ -1,5 +1,4 @@
 /// Armado de los payloads que viajan al backend de Vacuna al Agua.
-///
 /// Las claves de estas funciones son un **contrato** con
 /// `sanidad/flutter/vacunaagua/vacunaagua_guardar_lib.php`: si cambian ahí,
 /// la subida falla con `MISSING_HORAS`, `MISSING_GALPONES` o `MISSING_VACUNA`.
@@ -29,13 +28,11 @@ abstract final class VacSeccion {
 }
 
 /// Una fila del detalle paramétrico del backend.
-///
 /// `seccion` es el bloque del formato y `parametro` el renglón; el valor va en
 /// la columna de su tipo: `valorNum` para cantidades, `hora` para horas, `flag`
 /// para los sí/no y `valorTexto` para lo demás. `galpon` y `grupo` van vacíos
 /// cuando la sección no los usa (`grupo` es el sub-encabezado: el bloque de
 /// bebederos o Macho/hembra en eficiencia).
-///
 /// Las claves se mandan siempre, aunque el valor sea `null`: así el contrato es
 /// explícito y del lado del servidor no hay que adivinar qué faltó.
 Map<String, dynamic> detalleFila({
@@ -87,7 +84,6 @@ List<Map<String, dynamic>> detalleEquipo(List<EquipoRecurso> equipo) {
 }
 
 /// `registro` de una Decloración de cloro.
-///
 /// El backend exige `hora_inicio` y `hora_final`; el cloro viaja ya con dos
 /// decimales porque la columna es `decimal(5,2)`.
 Map<String, dynamic> decloracionRegistro({
@@ -112,13 +108,11 @@ Map<String, dynamic> decloracionRegistro({
 }
 
 /// `registro` de una Vacunación al agua.
-///
 /// El detalle lleva todas las secciones del formato (3 a 8) en la forma del
 /// detalle paramétrico del backend: cadena de frío, equipo, tiempo de sedeó,
 /// bebederos, solución vacunal y evaluación de eficiencia. Los galpones van
 /// solo como la lista elegida: no hay campo «todos», porque el servidor puede
 /// deducirlo comparando con el catálogo de la granja y campaña.
-///
 /// `responsable` es el **nombre del usuario** que registra (el del login, no su
 /// código): la sección de vacunación no pide responsable en pantalla, pero el
 /// listado lo muestra, así que se guarda explícito en vez de dejarlo vacío.

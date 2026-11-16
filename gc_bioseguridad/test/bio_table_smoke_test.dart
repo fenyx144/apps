@@ -246,7 +246,7 @@ void main() {
 
   testWidgets('una columna con flex estira la tabla hasta el ancho disponible', (
     tester,
-  ) async {    // Caso de la tabla de DNIs del control de ingreso: el renglón del
+  ) async { // Caso de la tabla de DNIs del control de ingreso: el renglón del
     // documento es flexible y la columna de quitar queda fija, así que la
     // tabla debe llegar al borde en vez de dejar un hueco a la derecha.
     await tester.pumpWidget(

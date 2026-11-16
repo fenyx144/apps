@@ -20,7 +20,6 @@ import '../widgets/section_app_bar.dart';
 import 'register_summary_screen.dart';
 
 /// Estado de una métrica por línea (si incumple/falló + observación).
-///
 /// `fallo` guarda siempre el mismo significado: true = no está correcto.
 /// La pregunta de la tabla se muestra invertida (verde = está bien), pero el
 /// dato guardado y subido es el mismo en los tres bloques.
@@ -147,7 +146,7 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
     _aplicarGranjaDeTrabajo();
   }
 
-  /// Premarca la granja de trabajo (menú → Mi granja) con su campaña sugerida.
+  /// Premarca la granja de trabajo (menú Mi granja) con su campaña sugerida.
   void _aplicarGranjaDeTrabajo() {
     final sel = granjaDeTrabajoSeleccion(
       context.read<StorageService>(),
@@ -182,7 +181,6 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
   ];
 
   /// Aplica a un bloque las métricas del catálogo.
-  ///
   /// Si solo cambió el STD de métricas que ya estaban, se actualiza en sitio
   /// para no borrar lo que el usuario haya escrito. Si cambió la lista (otra
   /// cantidad, otro orden, qué filas piden observación o con qué se contestan),
@@ -557,7 +555,6 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
   }
 
   /// Bloque del reporte: título y filas.
-  ///
   /// Todos los bloques usan el mismo interruptor (verde = está bien), que
   /// funciona igual en las filas que tienen STD y en las que no. Lo que cambia
   /// es con qué se contesta cada fila: en el formato físico casi todo se
@@ -571,11 +568,9 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
     // con las dos líneas y tres bloques, repetir el par en cada columna era
     // ruido, y en el tablero —donde se mezcla con «No / SI»— ya no coincidía.
     // El par concreto se lee en la propia celda, que es donde se contesta.
-    //
     // Tres columnas y no cuatro: el STD va dentro de la primera, debajo del
     // nombre, como está escrito en el formato físico. Con la columna aparte la
     // tabla no entraba en la pantalla y L2 quedaba fuera de la vista.
-    //
     // La primera columna se queda el ancho sobrante, para que L1 y L2 (y por
     // tanto los interruptores) queden siempre en la misma vertical.
     return BioTable(
@@ -607,7 +602,6 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
   }
 
   /// Primera columna: el componente y, debajo, su STD.
-  ///
   /// Las dos líneas juntas porque así están en la hoja: primero qué se revisa y
   /// después contra qué. Las métricas que no tienen STD (las alertas del
   /// tablero) muestran solo el nombre.
@@ -640,7 +634,6 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
     // Verde = está bien. El dato guardado sigue siendo la falla, así que se
     // invierte al leer y al escribir. La etiqueta es la del formato físico:
     // «CT»/«FALLA», o «No»/«SI» en las alertas del tablero.
-    //
     // Solo voltaje y nivel de batería llevan además el campo de observación
     // (son valores medidos); el resto de filas se responde solo con el switch.
     // En esas dos la observación va debajo del interruptor (`apilado`), que es

@@ -31,8 +31,6 @@ public class MenuPrincipalActivity extends AppCompatActivity {
         setSupportActionBar(binding.appBarMenuPrincipal.toolbar);
         DrawerLayout drawer = binding.drawerLayout;
         NavigationView navigationView = binding.navView;
-        // Passing each menu ID as a set of Ids because each
-        // menu should be considered as top level destinations.
         mAppBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.nav_presentacion)
                 .setOpenableLayout(drawer)
@@ -44,7 +42,6 @@ public class MenuPrincipalActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_principal, menu);
         return true;
     }

@@ -4,7 +4,6 @@ import '../utils/dialog_utils.dart';
 import '../utils/theme_colors.dart';
 
 /// Selector granja + campaña para bioseguridad.
-///
 /// Reutiliza la lógica de resolución de campañas de la app de crianza
 /// (intervalo `fecha_inicio`/`fecha_fin` del catálogo ccos) pero sin galpones
 /// ni edad, que no aplican a los reportes de bioseguridad.
@@ -665,7 +664,6 @@ class GranjaCampaniaPicker {
 
   /// Selección que corresponde a [granja3] para [fechaYmd], tal como la
   /// devolvería [show] con la campaña sugerida ya resuelta.
-  ///
   /// Devuelve `{granja3, granjaNombre, campanias, campania}`, o `null` si la
   /// granja no tiene campañas elegibles esa fecha (así los formularios arrancan
   /// vacíos en vez de quedar con una campaña que no se puede registrar).

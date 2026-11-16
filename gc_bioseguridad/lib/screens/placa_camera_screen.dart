@@ -15,7 +15,7 @@ import '../utils/toast_helper.dart';
 import '../widgets/placa_input_dialog.dart';
 import '../widgets/section_app_bar.dart';
 
-/// Lee la placa: marco azul → YOLO dentro del marco → OCR (fallback marco completo).
+/// Lee la placa: marco azul YOLO dentro del marco OCR (fallback marco completo).
 class PlacaCameraScreen extends StatefulWidget {
   const PlacaCameraScreen({super.key});
 

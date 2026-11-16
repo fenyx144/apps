@@ -46,7 +46,6 @@ Map<String, Object> _prefsConGranja([Map<String, Object> extra = const {}]) => {
 };
 
 /// Monta la pantalla con los providers que usa el formulario.
-///
 /// Devuelve el [StorageService] de la pantalla para poder simular, desde la
 /// prueba, una descarga que llega mientras el formulario está abierto.
 Future<StorageService> _montar(
@@ -114,7 +113,6 @@ Future<void> _agregarPlacaManual(WidgetTester tester, String placa) async {
 }
 
 /// ¿Está tildada la casilla de la fila que muestra [texto]?
-///
 /// Las listas de planificados —personas y vehículos— viven en secciones
 /// distintas, así que se busca la casilla que está en la misma fila que el
 /// texto y no por el orden de las casillas en la pantalla. El texto escrito en
@@ -129,7 +127,6 @@ bool _marcado(WidgetTester tester, String texto) {
 }
 
 /// ¿El renglón que muestra [texto] lleva el aviso «no ingresa a la granja»?
-///
 /// El aviso es del interruptor de la web para esa placa, así que se busca
 /// dentro de su fila y no en la pantalla: con la visita cargada hay placas que
 /// entran y placas que no en la misma lista.

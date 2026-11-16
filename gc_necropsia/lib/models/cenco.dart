@@ -33,10 +33,10 @@ class Cenco {
   factory Cenco.fromJson(Map<String, dynamic> json) {
     // Convertir edad a String (puede venir como int o String desde el servidor)
     final edadValue = json['edad'];
-    final edadString = edadValue is int 
-        ? edadValue.toString() 
+    final edadString = edadValue is int
+        ? edadValue.toString()
         : (edadValue?.toString() ?? '0');
-    
+
     return Cenco(
       codigo: json['codigo']?.toString() ?? '',
       nombre: json['nombre']?.toString() ?? '',

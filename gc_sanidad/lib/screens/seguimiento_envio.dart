@@ -60,7 +60,7 @@ class _SeguimientoEnvioScreenState extends State<SeguimientoEnvioScreen>
       (index) => currentYear - index,
     ); // [2026, 2025, 2024, 2023]
     return years.map((year) {
-      final twoDigit = year.toString().substring(2); // "2026" → "26"
+      final twoDigit = year.toString().substring(2); // "2026" "26"
       return DropdownMenuItem<String>(value: twoDigit, child: Text(twoDigit));
     }).toList();
   }
@@ -179,11 +179,11 @@ class _SeguimientoEnvioScreenState extends State<SeguimientoEnvioScreen>
                     ? [
                         Color(0xFFE53935),
                         Color(0xFFB71C1C),
-                      ] // Rojo intenso → rojo oscuro
+                      ] // Rojo intenso rojo oscuro
                     : [
                         Color(0xFF4CAF50),
                         Color(0xFF2E7D32),
-                      ], // Verde fresco → verde oscuro
+                      ], // Verde fresco verde oscuro
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
               ),

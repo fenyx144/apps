@@ -12,4 +12,4 @@ class Galpon {
       fecIngMin: json['fec_ing_min']?.toString(),
     );
   }
-} 
+}

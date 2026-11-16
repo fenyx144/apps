@@ -135,8 +135,6 @@ class AppColors {
 
 class AppConstants {
   static const String baseUrl = 'https://granjarinconadadelsur.com/sanidad/flutter';
-                                //'http://192.168.15.84/sanidad/flutter';
-                              //'http://192.168.1.163/sanidad/flutter';
 
   /// Carpeta PHP de esta app (módulo móvil de bioseguridad).
   static const String seguimientoPath = '/bioseguridad';
@@ -286,7 +284,6 @@ class BioTipos {
 }
 
 /// De dónde viene quien entra a la granja: de un área de GRS o de un proveedor.
-///
 /// Son las dos listas de `get_catalogos_bioseguridad_movil.php`
 /// (`bio_areaproveedor_catalogo()`), y el valor se guarda tal cual en
 /// `san_fact_ingresogranja_cab.areaProveedor` para que el reporte web no tenga que
@@ -358,7 +355,6 @@ class BioNavTipo {
   final String id;
 
   /// Etiqueta corta del grupo («Física»).
-  ///
   /// El rótulo «BIOSEGURIDAD» ya lo dibuja el drawer sobre los tres grupos, así
   /// que repetir «Bioseguridad» en cada uno era redundante (y el nombre completo
   /// apenas cabía con el texto de accesibilidad al 200%).
@@ -372,7 +368,6 @@ class BioNavTipo {
 }
 
 /// Grupos del drawer por tipo de bioseguridad, en orden.
-///
 /// Control de personal, cerco y fómites solo existen en bioseguridad física; en
 /// química y biológica lo único que se registra son anomalías.
 const List<BioNavTipo> bioNavTipos = [

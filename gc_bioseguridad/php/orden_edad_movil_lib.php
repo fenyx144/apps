@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Aviso informativo de orden de visitas por edad de granja (menor → mayor).
+ * Aviso informativo de orden de visitas por edad de granja (menor  mayor).
  *
  * Si en el mismo día la persona o el vehículo ya ingresó a otra granja con edad
  * promedio mayor que la granja que se está registrando, la app muestra una

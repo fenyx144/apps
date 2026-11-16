@@ -235,7 +235,6 @@ class AppVersionService {
     final repetido = (info['version_notice_last'] ?? '').toString() == hoy &&
         (info['version_notice_for'] ?? '').toString() == status.requiredVersion;
 
-    // Dentro de la ventana basta con avisar una vez al día por versión pedida;
     // fuera de ella el aviso es firme y se repite en cada ingreso.
     if (status.warning && !status.mustUpdate && repetido) return;
 

@@ -33,8 +33,7 @@ class GranjaCampaniaSeleccion {
 }
 
 /// Selección premarcada de los formularios: la granja de trabajo guardada en
-/// «Mi granja» (menú → Opciones) con su campaña sugerida para [fechaYmd].
-///
+/// «Mi granja» (menú Opciones) con su campaña sugerida para [fechaYmd].
 /// Devuelve `null` cuando no hay granja guardada, o cuando esa granja no tiene
 /// campañas elegibles para la fecha: en ese caso el formulario arranca vacío,
 /// como antes de configurar la granja.
@@ -60,7 +59,6 @@ GranjaCampaniaSeleccion? granjaDeTrabajoSeleccion(
 }
 
 /// Par de campos «Granja» + «Campaña» para los formularios de bioseguridad.
-///
 /// Antes era un solo campo que abría el selector de granja y, acto seguido,
 /// obligaba a elegir campaña. Ahora cada uno se toca por separado y la campaña
 /// arranca con la sugerida por el catálogo para la fecha del registro, igual

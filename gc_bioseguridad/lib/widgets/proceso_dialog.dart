@@ -5,7 +5,6 @@ import '../utils/constants.dart';
 import '../utils/theme_colors.dart';
 
 /// Pide el proceso del proveedor: una fila del catálogo o el texto de «Otro».
-///
 /// Es la lista de proveedores que envía el servidor
 /// (`bio_areaproveedor_catalogo()['PROVEEDOR']`), la misma que la web usa para
 /// planificar. Lo elegido se guarda en `san_fact_ingresogranja_cab.motivo`.

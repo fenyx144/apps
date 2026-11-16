@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vacuna_al_agua/utils/vacuna_payload.dart';
 
 /// Contrato con `sanidad/flutter/vacunaagua/vacunaagua_guardar_lib.php`.
-///
 /// Si el backend cambia un nombre de campo, estos tests fallan antes de que la
 /// app empiece a subir registros que el servidor rechaza.
 void main() {

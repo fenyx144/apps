@@ -194,7 +194,6 @@ class CatalogSyncService {
   }
 
   /// Descarga CENCOS/galpones si el equipo todavía no los tiene.
-  ///
   /// Es el único catálogo que trae `fec_ing_min` (la fecha de ingreso con la
   /// que se calcula la edad de las aves): la proyección solo manda los códigos
   /// de galpón. Sin esta descarga el campo «Galpones» de Vacunación queda

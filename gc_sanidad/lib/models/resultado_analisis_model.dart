@@ -1,4 +1,3 @@
-
 class EnvioGrupo {
   final String codEnvio;
   final int posSolicitud;

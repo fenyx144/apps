@@ -10,6 +10,7 @@ declare(strict_types=1);
  *   fomites -> rfomites         (fecha, cencos, turno, referencia, proceso, depredador)
  *   ingreso -> san_fact_ingresogranja_cab / _det / _veh
  *   salida  -> san_fact_salidagranja_cab / _det
+ *   articulos -> san_fact_articulos_cab / _det
  *
  * Las tablas legacy (garita, cerco, fomites) son de producción: conservan su
  * `id` numérico y su nomenclatura, y solo reciben una columna aditiva `uuid`
@@ -26,7 +27,7 @@ declare(strict_types=1);
  * para física y para química el mismo día/turno.
  */
 
-const BIO_REPORTES_VALIDOS = ['garita', 'cerco', 'fomites', 'ingreso', 'salida'];
+const BIO_REPORTES_VALIDOS = ['garita', 'cerco', 'fomites', 'ingreso', 'salida', 'articulos'];
 
 /**
  * Métricas del tablero de cerco eléctrico agrupadas por bloque, con su valor
@@ -215,6 +216,16 @@ function bio_tabla_salida_det(): string
     return 'san_fact_salidagranja_det';
 }
 
+function bio_tabla_articulos_cab(): string
+{
+    return 'san_fact_articulos_cab';
+}
+
+function bio_tabla_articulos_det(): string
+{
+    return 'san_fact_articulos_det';
+}
+
 function bio_tabla_reporte(string $reporte): string
 {
     switch ($reporte) {
@@ -228,6 +239,8 @@ function bio_tabla_reporte(string $reporte): string
             return bio_tabla_ingreso_cab();
         case 'salida':
             return bio_tabla_salida_cab();
+        case 'articulos':
+            return bio_tabla_articulos_cab();
     }
     return '';
 }
@@ -241,13 +254,16 @@ function bio_tabla_reporte_det(string $reporte): string
     if ($reporte === 'salida') {
         return bio_tabla_salida_det();
     }
+    if ($reporte === 'articulos') {
+        return bio_tabla_articulos_det();
+    }
     return '';
 }
 
 /** ¿El reporte usa el esquema nuevo (llave uuid, granja/campaña, auditoría)? */
 function bio_reporte_moderno(string $reporte): bool
 {
-    return $reporte === 'ingreso' || $reporte === 'salida';
+    return $reporte === 'ingreso' || $reporte === 'salida' || $reporte === 'articulos';
 }
 
 if (!function_exists('bio_col_exists')) {
@@ -268,7 +284,7 @@ function bio_col_exists(mysqli $conn, string $tabla, string $columna): bool
 /** Garantiza la columna imagenes en las tablas de reportes (mismo patrón que hc_obs_ensure_extra_cols). */
 function bio_ensure_imagenes_col(mysqli $conn): void
 {
-    foreach (['rgarita', 'rcercoelectrico', 'rfomites', bio_tabla_ingreso_cab()] as $tabla) {
+    foreach (['rgarita', 'rcercoelectrico', 'rfomites', bio_tabla_ingreso_cab(), bio_tabla_articulos_cab()] as $tabla) {
         if (!bio_col_exists($conn, $tabla, 'imagenes')) {
             @$conn->query("ALTER TABLE `{$tabla}` ADD COLUMN `imagenes` TEXT NULL");
         }
@@ -441,6 +457,51 @@ function bio_ensure_ingreso_tablas(mysqli $conn): bool
     unset($conn);
 
     return true;
+}
+
+function bio_ensure_articulos_tablas(mysqli $conn): bool
+{
+    $sqlCab = <<<'SQL'
+CREATE TABLE IF NOT EXISTS `san_fact_articulos_cab` (
+    `id` varchar(36) NOT NULL,
+    `fecha` date NOT NULL,
+    `granja` varchar(10) NOT NULL DEFAULT '',
+    `campania` varchar(10) NOT NULL DEFAULT '',
+    `turno` varchar(10) NOT NULL DEFAULT '',
+    `dni` varchar(15) NOT NULL DEFAULT '',
+    `nombre` varchar(120) NOT NULL DEFAULT '',
+    `imagenes` text NULL,
+    `usuarioRegistrador` varchar(25) NOT NULL DEFAULT '',
+    `fechaHoraRegistro` datetime NULL DEFAULT NULL,
+    PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL;
+    $sqlDet = <<<'SQL'
+CREATE TABLE IF NOT EXISTS `san_fact_articulos_det` (
+    `id` varchar(36) NOT NULL,
+    `idCab` varchar(36) NOT NULL,
+    `posicion` int(11) NOT NULL DEFAULT 1,
+    `codigo` varchar(10) NOT NULL DEFAULT '',
+    `descripcion` varchar(120) NOT NULL DEFAULT '',
+    `permitido` tinyint(1) NOT NULL DEFAULT 1,
+    `desinfectado` tinyint(1) NOT NULL DEFAULT 1,
+    `desinfectante` varchar(80) NOT NULL DEFAULT '',
+    `anomalia_permitido` text NULL,
+    `agente_causal_permitido` varchar(255) NOT NULL DEFAULT '',
+    `accion_permitido` varchar(255) NOT NULL DEFAULT '',
+    `anomalia_desinfeccion` text NULL,
+    `agente_causal_desinfeccion` varchar(255) NOT NULL DEFAULT '',
+    `accion_desinfeccion` varchar(255) NOT NULL DEFAULT '',
+    `imagenes` text NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_articulos_det_cab` (`idCab`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL;
+    if (!$conn->query($sqlCab)) {
+        return false;
+    }
+
+    return (bool) $conn->query($sqlDet);
 }
 
 function bio_ensure_ingreso_vehiculos(mysqli $conn): bool
@@ -629,26 +690,13 @@ function bio_consultar_dni_factiliza(string $dni): array
 }
 
 /**
- * CEE para Factiliza: numérico peruano = 9 dígitos (MRZ TD2 puede traer un dígito de control extra).
- */
-function bio_normalizar_cee_consulta(string $cee): string
-{
-    $cee = strtoupper(preg_replace('/[^A-Z0-9]/', '', trim($cee)) ?? '');
-    if (preg_match('/^\d{10}$/', $cee)) {
-        return substr($cee, 0, 9);
-    }
-
-    return $cee;
-}
-
-/**
  * Consulta carné de extranjería (CEE) contra Factiliza (`/cee/info/{cee}`).
  *
  * @return array{success:bool,message?:string,nombre?:string,cee?:string}
  */
 function bio_consultar_cee_factiliza(string $cee): array
 {
-    $cee = bio_normalizar_cee_consulta($cee);
+    $cee = strtoupper(preg_replace('/[^A-Z0-9]/', '', trim($cee)) ?? '');
     if ($cee === '' || strlen($cee) < 6 || strlen($cee) > 15) {
         return ['success' => false, 'message' => 'Ingrese un carné de extranjería válido.'];
     }
@@ -1183,6 +1231,21 @@ function bio_borrar_grupo(mysqli $conn, string $reporte, array $ctx): void
             $tipos = 's';
             $params = [(string) ($ctx['uuid'] ?? '')];
             break;
+        case 'articulos':
+            $detArt = bio_tabla_articulos_det();
+            $cabArt = bio_tabla_articulos_cab();
+            $sql = "DELETE FROM `{$detArt}` WHERE `idCab` = ?";
+            $stmt = $conn->prepare($sql);
+            if ($stmt) {
+                $uuid = (string) ($ctx['uuid'] ?? '');
+                $stmt->bind_param('s', $uuid);
+                $stmt->execute();
+                $stmt->close();
+            }
+            $sql = "DELETE FROM `{$cabArt}` WHERE `id` = ?";
+            $tipos = 's';
+            $params = [(string) ($ctx['uuid'] ?? '')];
+            break;
         default:
             return;
     }
@@ -1226,6 +1289,12 @@ function bio_imagenes_grupo(mysqli $conn, string $reporte, array $ctx): string
             break;
         case 'salida':
             return '';
+        case 'articulos':
+            $cabArt = bio_tabla_articulos_cab();
+            $sql = "SELECT `imagenes` FROM `{$cabArt}` WHERE `id` = ? LIMIT 1";
+            $tipos = 's';
+            $params = [(string) ($ctx['uuid'] ?? '')];
+            break;
         default:
             return '';
     }
@@ -1619,6 +1688,115 @@ function bio_insertar_filas(mysqli $conn, string $reporte, array $ctx, string $i
                     $posicion,
                     $par['dni'],
                     $par['nombre']
+                );
+                $det->execute();
+            }
+            $det->close();
+        }
+
+        return $filas;
+    }
+
+    if ($reporte === 'articulos') {
+        if (!bio_ensure_articulos_tablas($conn)) {
+            return 0;
+        }
+        $cabArt = bio_tabla_articulos_cab();
+        $detArt = bio_tabla_articulos_det();
+        $sql = "INSERT INTO `{$cabArt}` (`id`,`fecha`,`granja`,`campania`,`turno`,`dni`,`nombre`,"
+            . '`imagenes`,`usuarioRegistrador`,`fechaHoraRegistro`)'
+            . ' VALUES (?,?,?,?,?,?,?,?,?,?)';
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            return 0;
+        }
+        $uuid = bio_cut((string) ($ctx['uuid'] ?? ''), 36);
+        $granja = bio_cut((string) ($ctx['granja'] ?? ''), 10);
+        $campania = bio_cut((string) ($ctx['campania'] ?? ''), 10);
+        $dni = bio_cut((string) ($ctx['dni'] ?? ''), 15);
+        $nombrePersona = bio_cut((string) ($ctx['nombrePersona'] ?? ''), 120);
+        $usuarioRegistrador = bio_cut((string) ($ctx['usuarioRegistrador'] ?? $tuser), 25);
+        $fechaHoraRegistro = (string) ($ctx['fechaHoraRegistro'] ?? '');
+        $stmt->bind_param(
+            'ssssssssss',
+            $uuid,
+            $fecha,
+            $granja,
+            $campania,
+            $turno,
+            $dni,
+            $nombrePersona,
+            $imagenesCsv,
+            $usuarioRegistrador,
+            $fechaHoraRegistro
+        );
+        if ($stmt->execute()) {
+            $filas = 1;
+        }
+        $stmt->close();
+
+        $det = $conn->prepare(
+            "INSERT INTO `{$detArt}` (`id`,`idCab`,`posicion`,`codigo`,`descripcion`,`permitido`,"
+            . '`desinfectado`,`desinfectante`,`anomalia_permitido`,`agente_causal_permitido`,'
+            . '`accion_permitido`,`anomalia_desinfeccion`,`agente_causal_desinfeccion`,`accion_desinfeccion`,`imagenes`)'
+            . ' VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        );
+        if ($det) {
+            $posicion = 0;
+            foreach ((array) ($ctx['articulos'] ?? []) as $a) {
+                if (!is_array($a)) {
+                    continue;
+                }
+                $desc = trim((string) ($a['descripcion'] ?? ''));
+                if ($desc === '') {
+                    continue;
+                }
+                $posicion++;
+                $idDet = bio_nuevo_uuid();
+                $codigo = bio_cut((string) ($a['codigo'] ?? '99'), 10);
+                $descripcion = bio_cut($desc, 120);
+                $permitido = bio_ingresa_flag($a['permitido'] ?? true);
+                $desinfectado = bio_ingresa_flag($a['desinfectado'] ?? true);
+                $desinfectante = bio_cut((string) ($a['desinfectante'] ?? ''), 80);
+                $anomaliaPerm = (string) ($a['anomalia_permitido'] ?? '');
+                $agentePerm = bio_cut((string) ($a['agente_causal_permitido'] ?? ''), 255);
+                $accionPerm = bio_cut((string) ($a['accion_permitido'] ?? ''), 255);
+                $anomaliaDes = (string) ($a['anomalia_desinfeccion'] ?? '');
+                $agenteDes = bio_cut((string) ($a['agente_causal_desinfeccion'] ?? ''), 255);
+                $accionDes = bio_cut((string) ($a['accion_desinfeccion'] ?? ''), 255);
+                $imgsLinea = '';
+                $imgsRaw = $a['imagenes'] ?? [];
+                if (is_array($imgsRaw) && $imgsRaw !== []) {
+                    $rutas = [];
+                    foreach ($imgsRaw as $img) {
+                        if (is_array($img)) {
+                            $p = trim((string) ($img['path'] ?? $img['ruta'] ?? ''));
+                        } else {
+                            $p = trim((string) $img);
+                        }
+                        if ($p !== '') {
+                            $rutas[] = $p;
+                        }
+                    }
+                    $imgsLinea = implode(',', $rutas);
+                }
+                $det->bind_param(
+                    'ssissiissssssss',
+                    $idDet,
+                    $uuid,
+                    $posicion,
+                    $codigo,
+                    $descripcion,
+                    $permitido,
+                    $desinfectado,
+                    $desinfectante,
+                    $anomaliaPerm,
+                    $agentePerm,
+                    $accionPerm,
+                    $anomaliaDes,
+                    $agenteDes,
+                    $accionDes,
+                    $imgsLinea
                 );
                 $det->execute();
             }

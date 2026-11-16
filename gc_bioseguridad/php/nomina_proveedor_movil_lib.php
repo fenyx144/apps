@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Nómina DNI → proveedor para el control de ingreso sin planificación.
+ * Nómina DNI  proveedor para el control de ingreso sin planificación.
  *
  * La app la descarga y, al escanear personas que no figuran en ninguna visita,
  * propone el proveedor al que pertenecen:

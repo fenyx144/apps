@@ -16,7 +16,7 @@ date_default_timezone_set('America/Lima');
 ob_start();
 include_once '../../../conexion_grs_joya/conexion.php';
 $conn = conectar_joya();
-ob_end_clean(); 
+ob_end_clean();
 
 if (!$conn) {
     echo json_encode(['success' => false, 'message' => 'Error de conexión a la base de datos'], JSON_UNESCAPED_UNICODE);
@@ -48,11 +48,11 @@ function return_bytes($val) {
             // Fall through
         case 'm':
             $val *= 1024;
-    
+
         case 'k':
             $val *= 1024;
             break;
-        default:          
+        default:
             break;
     }
     return $val;
@@ -102,7 +102,7 @@ if (empty($dataJson)) {
                 $dataJson = substr($jsonPart, 0, $jsonEnd + 1);
             }
         }
-        
+
         if (empty($dataJson) && !empty($_POST['data'])) {
             $dataJson = $_POST['data'];
         }
@@ -219,7 +219,6 @@ if (!$stmtInsert) {
     exit;
 }
 
-
 $tidContador = 1; // Contador consecutivo para tid
 
 error_log("Total de items a procesar: " . count($items));
@@ -237,14 +236,14 @@ foreach ($items as $itemIndex => $item) {
     $diagnosticoPresuntivo = $item['diagnostico_presuntivo'] ?? '';
     $tfecreghorainicio = $item['tfecreghorainicio'] ?? '';
     $tfecreghorafin = $item['tfecreghorafin'] ?? '';
-    
+
     // === CAMPOS ADICIONALES DE LA APP ===
     $tuser = $item['tuser'] ?? 'app_movil';
     $tidandroid = $item['tidandroid'] ?? 'app_movil';
     $tuser_trans = $item['tuser_trans'] ?? $tuser;
     $tdate_trans = $item['tdate_trans'] ?? date('Y-m-d');
     $ttime_trans = $item['ttime_trans'] ?? date('H:i:s');
-    
+
     // Validar y formatear fecha de transacción
     if (empty($tdate_trans) || $tdate_trans == '1000-01-01') {
         $tdate_trans = date('Y-m-d');
@@ -253,7 +252,7 @@ foreach ($items as $itemIndex => $item) {
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tdate_trans)) {
         $tdate_trans = date('Y-m-d');
     }
-    
+
     // Validar y formatear tiempo de transacción (formato HH:MM:SS o HHMMSS)
     if (empty($ttime_trans) || $ttime_trans == '00:00:00') {
         $ttime_trans = date('H:i:s');
@@ -261,7 +260,7 @@ foreach ($items as $itemIndex => $item) {
         // Convertir HHMMSS a HH:MM:SS
         $ttime_trans = substr($ttime_trans, 0, 2) . ':' . substr($ttime_trans, 2, 2) . ':' . substr($ttime_trans, 4, 2);
     }
-    
+
     // Formatear fectra si viene en formato diferente
     if (!empty($fectra)) {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fectra)) {
@@ -276,19 +275,17 @@ foreach ($items as $itemIndex => $item) {
     } else {
         $fectra = date('Y-m-d');
     }
-    
 
     $tdate = $item['tdate'] ?? date('Y-m-d');
     $ttime = $item['ttime'] ?? date('H:i:s');
     $diareg = $item['diareg'] ?? $tdate;
 
-
     // === REGISTROS DEL ITEM ===
     $registros = $item['registros'] ?? [];
-    
+
     if (empty($registros) || !is_array($registros)) {
-       
-        continue; 
+
+        continue;
     }
 
     $registrosPorNivel = [];
@@ -300,7 +297,6 @@ foreach ($items as $itemIndex => $item) {
         $registrosPorNivel[$nivel][] = $reg;
     }
 
-   
     $evidenciasMetadata = $item['evidencias_metadata'] ?? [];
     $rutasEvidenciasPorNivel = [];
 
@@ -317,7 +313,7 @@ foreach ($items as $itemIndex => $item) {
         }
         error_log("=== FIN ARCHIVOS (GUARDAR) ===");
     }
-    
+
     foreach ($evidenciasMetadata as $evidenciaKey => $evidenciaInfo) {
         $nivel = $evidenciaInfo['nivel'] ?? '';
         $cantidad = (int)($evidenciaInfo['cantidad'] ?? 0);
@@ -358,10 +354,10 @@ foreach ($items as $itemIndex => $item) {
                 $file = $_FILES[$actualFileKey];
                 $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
                 if (!$extension) $extension = 'jpg';
-                
-                $nombreArchivo = $granja . '_' . $galpon . '_' . $numreg . '_' . 
-                                str_replace('-', '', $fectra) . '_' . 
-                                strtolower(str_replace(' ', '_', $nivel)) . '_' . 
+
+                $nombreArchivo = $granja . '_' . $galpon . '_' . $numreg . '_' .
+                                str_replace('-', '', $fectra) . '_' .
+                                strtolower(str_replace(' ', '_', $nivel)) . '_' .
                                 $i . '_' . uniqid() . '.' . $extension;
 
                 $rutaFisica = $carpetaNecropsias . $nombreArchivo;
@@ -381,13 +377,13 @@ foreach ($items as $itemIndex => $item) {
             $rutasEvidenciasPorNivel[$nivel] = implode(',', $rutasNivel);
         }
     }
-    
+
     foreach ($registros as $regIndex => $reg) {
         if (!isset($reg['tuuid']) || !isset($reg['tsistema']) || !isset($reg['tnivel']) || !isset($reg['tparametro'])) {
             error_log("Registro #" . ($regIndex + 1) . " inválido (faltan campos requeridos). Keys: " . implode(', ', array_keys($reg ?? [])));
             continue;
         }
-        
+
         $tuuidRegistro = $reg['tuuid'] ?? '';
         $existeRegistro = 0;
 
@@ -406,9 +402,8 @@ foreach ($items as $itemIndex => $item) {
         }
 
         $obs = $reg['tobservacion'] ?? '';
-        $tobs = substr($obs, 0, 255); 
+        $tobs = substr($obs, 0, 255);
 
-      
         switch ($reg['tsistema']) {
             case 'SISTEMA INMUNOLOGICO':
             case 'SISTEMA INMUNOLÓGICO':
@@ -428,12 +423,11 @@ foreach ($items as $itemIndex => $item) {
                 $tcodsistema = 0;
         }
 
-        
         $evidencia = '';
         if (isset($rutasEvidenciasPorNivel[$reg['tnivel'] ?? ''])) {
             $evidencia = $rutasEvidenciasPorNivel[$reg['tnivel']];
         }
-        
+
         $tid = $tidContador;
         $tidContador++;
 
@@ -443,7 +437,7 @@ foreach ($items as $itemIndex => $item) {
         $porcentaje4 = isset($reg['tporcentaje4']) ? (double)$reg['tporcentaje4'] : 0.0;
         $porcentaje5 = isset($reg['tporcentaje5']) ? (double)$reg['tporcentaje5'] : 0.0;
         $porcentajeTotal = isset($reg['tporcentajetotal']) ? (double)$reg['tporcentajetotal'] : 0.0;
-        
+
         // IMPORTANTE: NO sobreescribir $tdate/$ttime/$diareg aquí.
         // Deben venir del frontend (o fallback a server) a nivel de cabecera/item.
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fectra)) {
@@ -452,48 +446,47 @@ foreach ($items as $itemIndex => $item) {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tdate_trans)) {
             $tdate_trans = date('Y-m-d');
         }
-        
-       
+
         $tsistema = (string)($reg['tsistema'] ?? '');
         $tnivel = (string)($reg['tnivel'] ?? '');
         $tparametro = (string)($reg['tparametro'] ?? '');
-      
+
         // Insertar nuevo registro
         $stmtInsert->bind_param(
                 "sssssssssississsddddddsssssssisss",
-                $tuuidRegistro,      // 1. tuuid: s
-                $tuser,              // 2. tuser: s
-                $tdate,              // 3. tdate: s
-                $ttime,              // 4. ttime: s
-                $tcencos,            // 5. tcencos: s
-                $granja,             // 6. tgranja: s
-                $campania,           // 7. tcampania: s
-                $edad,               // 8. tedad: s
-                $galpon,             // 9. tgalpon: s
-                $numreg,             // 10. tnumreg: i
-                $fectra,             // 11. tfectra: s
-                $diareg,             // 12. diareg: s
-                $tcodsistema,        // 13. tcodsistema: i
-                $tsistema,           // 14. tsistema: s
-                $tnivel,             // 15. tnivel: s
-                $tparametro,         // 16. tparametro: s
-                $porcentaje1,        // 17. tporcentaje1: d
-                $porcentaje2,        // 18. tporcentaje2: d
-                $porcentaje3,        // 19. tporcentaje3: d
-                $porcentaje4,        // 20. tporcentaje4: d
-                $porcentaje5,        // 21. tporcentaje5: d
-                $porcentajeTotal,    // 22. tporcentajetotal: d
-                $obs,                // 23. tobservacion: s
-                $evidencia,          // 24. evidencia: s
-                $tobs,               // 25. tobs: s
-                $tuser_trans,        // 26. tuser_trans: s
-                $tdate_trans,        // 27. tdate_trans: s
-                $ttime_trans,        // 28. ttime_trans: s
-                $tidandroid,         // 29. tidandroid: s
-                $tid,                // 30. tid: i
+                $tuuidRegistro, // 1. tuuid: s
+                $tuser, // 2. tuser: s
+                $tdate, // 3. tdate: s
+                $ttime, // 4. ttime: s
+                $tcencos, // 5. tcencos: s
+                $granja, // 6. tgranja: s
+                $campania, // 7. tcampania: s
+                $edad, // 8. tedad: s
+                $galpon, // 9. tgalpon: s
+                $numreg, // 10. tnumreg: i
+                $fectra, // 11. tfectra: s
+                $diareg, // 12. diareg: s
+                $tcodsistema, // 13. tcodsistema: i
+                $tsistema, // 14. tsistema: s
+                $tnivel, // 15. tnivel: s
+                $tparametro, // 16. tparametro: s
+                $porcentaje1, // 17. tporcentaje1: d
+                $porcentaje2, // 18. tporcentaje2: d
+                $porcentaje3, // 19. tporcentaje3: d
+                $porcentaje4, // 20. tporcentaje4: d
+                $porcentaje5, // 21. tporcentaje5: d
+                $porcentajeTotal, // 22. tporcentajetotal: d
+                $obs, // 23. tobservacion: s
+                $evidencia, // 24. evidencia: s
+                $tobs, // 25. tobs: s
+                $tuser_trans, // 26. tuser_trans: s
+                $tdate_trans, // 27. tdate_trans: s
+                $ttime_trans, // 28. ttime_trans: s
+                $tidandroid, // 29. tidandroid: s
+                $tid, // 30. tid: i
                 $diagnosticoPresuntivo, // 31. tdiagpresuntivo: s
-                $tfecreghorainicio,  // 32. tfecreghorainicio: s
-                $tfecreghorafin      // 33. tfecreghorafin: s
+                $tfecreghorainicio, // 32. tfecreghorainicio: s
+                $tfecreghorafin // 33. tfecreghorafin: s
             );
 
         if ($stmtInsert->execute()) {
@@ -503,13 +496,12 @@ foreach ($items as $itemIndex => $item) {
             error_log($errorMsg);
         }
     }
-    
+
 }
 
 $stmtInsert->close();
 $checkDuplicado->close();
 $conn->close();
-
 
 $respuesta = [
     "insertados" => $insertados,
@@ -521,7 +513,7 @@ error_log("RESUMEN: Insertados=$insertados, Duplicados=$duplicados, Total items 
 
 echo json_encode([
     "success" => $totalProcesados > 0,
-    "message" => $totalProcesados > 0 
+    "message" => $totalProcesados > 0
         ? ("Datos procesados correctamente. Insertados: $insertados, Duplicados: $duplicados" .
            ($imagenesRecibidas > 0 && $imagenesGuardadas == 0 ? " (Advertencia: no se pudo guardar ninguna imagen; revise límites del servidor)" : ""))
         : "No se procesaron registros. Verifique los logs para más detalles.",

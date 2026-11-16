@@ -708,7 +708,7 @@ class _SolicitudMuestraCardState extends State<SolicitudMuestraCard> {
             '', // paqueteNombre
             !isSelected,
           ),
-          //onTap: () => controller.toggleAnalisis(index, codigo, !isSelected),
+          // onTap: () => controller.toggleAnalisis(index, codigo, !isSelected),
         );
       }).toList(),
     );

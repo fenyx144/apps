@@ -229,7 +229,7 @@ Rect mapGuideRectToImage({
   );
 }
 
-/// Caja YOLO (normalizada sobre [imageSize]) → coordenadas del cuerpo/preview.
+/// Caja YOLO (normalizada sobre [imageSize]) coordenadas del cuerpo/preview.
 Rect mapNormalizedBoxToBody({
   required Rect normalizedBox,
   required Size imageSize,
@@ -322,7 +322,7 @@ Future<String> exportGuideRegionJpeg({
   return outPath;
 }
 
-/// Caja YOLO (0–1 sobre el JPEG del marco) → recorte OCR preprocesado.
+/// Caja YOLO (0–1 sobre el JPEG del marco) recorte OCR preprocesado.
 Future<String> cropOcrFromYoloInGuideJpeg({
   required String guideJpegPath,
   required Rect normalizedBoxInGuide,
@@ -427,7 +427,7 @@ Future<String> _guardarRecorteRaw(img.Image cropped, String prefix) async {
   return outPath;
 }
 
-/// OCR en orden rápido→exhaustivo; para si la placa ya es confiable.
+/// OCR en orden rápidoexhaustivo; para si la placa ya es confiable.
 Future<String?> reconocerPlacaEnRecorteOptimizado({
   required String rawCropPath,
   required Future<String?> Function(String imagePath) leerPlacaEnImagen,

@@ -8,7 +8,6 @@ import 'evidencia_select_field.dart';
 
 /// Nombre de vacuna: se elige del maestro de productos (la línea de vacunas),
 /// igual que Planificación al armar un programa.
-///
 /// No se escribe a mano: el maestro (`mitm`) es el que manda el nombre, así que
 /// el informe muestra siempre la misma descripción para el mismo producto y no
 /// conviven «Newcastle», «new castle» y «NC» como si fueran tres vacunas.

@@ -70,7 +70,7 @@ class StorageService with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Granja de trabajo elegida en «Mi granja» (menú → Opciones). Vacía si el
+  /// Granja de trabajo elegida en «Mi granja» (menú Opciones). Vacía si el
   /// usuario todavía no la eligió: en ese caso los formularios arrancan como
   /// antes, sin granja premarcada.
   String getGranjaTrabajo() =>
@@ -255,7 +255,6 @@ class StorageService with ChangeNotifier {
   }
 
   /// Registros visibles para el usuario actual (solo los suyos).
-  ///
   /// Sin sesión se muestran todos, para que el dashboard no quede en cero. Un
   /// registro sin usuario también cuenta: es legado y [getAllRecords] se lo
   /// asigna a quien lo abre.
@@ -298,7 +297,6 @@ class StorageService with ChangeNotifier {
   }
 
   /// El servidor recibió el uuid pero las imágenes no quedaron completas.
-  ///
   /// Sigue en el dispositivo como pendiente para que el menú lo reenvíe y el
   /// servidor repare los archivos. [guardadoBackend] indica que la fila ya
   /// existe y no hay que insertarla de nuevo.

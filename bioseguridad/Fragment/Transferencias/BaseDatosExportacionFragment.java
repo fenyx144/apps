@@ -48,16 +48,15 @@ public class BaseDatosExportacionFragment extends Fragment {
 
     String tempTabla,sSaltoLinea,sCadena,sCadenaUrl;
 
-    String sCodTipoPollo,sNomTipoPollo;//Tipo de Pollo
-    String sCodDestPollo,sNomDestPollo;//Destino de Pollo
-    String sFecha,sFechaSaca,sPlaca;//Placas de Camion
+    String sCodTipoPollo,sNomTipoPollo; // Tipo de Pollo
+    String sCodDestPollo,sNomDestPollo; // Destino de Pollo
+    String sFecha,sFechaSaca,sPlaca; // Placas de Camion
 
     String sCodUser,sNomUser,sDniUser,sPerUser,sIdAndroid,sMensaje;
-    //Recepcion de Aves
+    // Recepcion de Aves
 
     Integer iDia,iMes,iAnio;
     String sDia,sMes;
-
 
     String miFecha,miTime,sMiApp,sMiVersion;
 
@@ -85,15 +84,12 @@ public class BaseDatosExportacionFragment extends Fragment {
     Integer iNumError=0;
     JsonObject jsonObjectDetalle;
 
-
     public BaseDatosExportacionFragment() {
-        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_base_datos_exportacion, container, false);
     }
 
@@ -113,7 +109,6 @@ public class BaseDatosExportacionFragment extends Fragment {
 
         bg.tvFecha.setText(sFechaActual);
         bg.tvNombreUsuario.setText(sNombreUsuario);
-
 
         jsonObjectDetalle = new JsonObject();
 
@@ -142,13 +137,9 @@ public class BaseDatosExportacionFragment extends Fragment {
                     sMiApp=getString(R.string.app_name);
                     sMiVersion=getString(R.string.sVersion);
 
-
                     hV.sMiIpDispositivo = hM.getIP();
                     hV.sMiIpConexion = hM.ipConexion(hV.sMiIpDispositivo);
                     hV.sMiURL = hV.sMiSeg + hV.sMiIpConexion + "/" + hV.sMiCarpeta + "/" + hV.phpExportar;
-
-
-                    //exportarDatos(hV.sMiURL, sFecha, sIdAndroid);
 
                     AsyncTaskRecepcionAvesVivas asyncTaskRecepcionAvesVivas;
                     asyncTaskRecepcionAvesVivas= new AsyncTaskRecepcionAvesVivas(sFecha,hV.sMiURL);
@@ -196,14 +187,14 @@ public class BaseDatosExportacionFragment extends Fragment {
         }
         @Override
         protected String doInBackground(String... params){
-            //Variables de Conexion
+            // Variables de Conexion
             iNumError=0;
             if (atFecha.trim().equals("")){
                 atPD_mensaje="Ingrese una fecha valida";
             }
             else{
                 JsonArray jsonArrayData = new JsonArray();
-                //Todo: Codigo para guardar el Historial
+                // TODO: Codigo para guardar el Historial
                 jsonObjectDetalle.addProperty("tabla", "t_bitacora_exportacion");
                 jsonObjectDetalle.addProperty("tuser", sCodigoUsuario);
                 jsonObjectDetalle.addProperty("tapp", sMiApp);
@@ -211,7 +202,7 @@ public class BaseDatosExportacionFragment extends Fragment {
                 jsonObjectDetalle.addProperty("tidandroid", sIdAndroid);
                 jsonObjectDetalle.addProperty("tfecpro", atFecha);
                 jsonArrayData.add(jsonObjectDetalle);
-                //Todo: Codigo para Transferir la Data
+                // TODO: Codigo para Transferir la Data
                 String resp01[] =hTJ.crearDataGarita(atFecha,sCodigoUsuario,sIdAndroid,jsonArrayData);
                 atPD_mensaje =atPD_mensaje+ resp01[0]+sSaltoLinea;
                 atPD_data= resp01[1];
@@ -232,10 +223,9 @@ public class BaseDatosExportacionFragment extends Fragment {
                 atPD_data= resp04[1];
                 iNumError=iNumError+Integer.parseInt(resp04[2]);
 
+                jsonArrayData = JsonParser.parseString(atPD_data).getAsJsonArray() ; // JsonParser.parseString(atPD_data);// JSON.parse(resp01[1]);
 
-                jsonArrayData = JsonParser.parseString(atPD_data).getAsJsonArray() ;//JsonParser.parseString(atPD_data);// JSON.parse(resp01[1]);
-
-                //Todo: Codigo de Respuesta del Servidor
+                // TODO: Codigo de Respuesta del Servidor
                 String respServer[] =makeRequest(atUrl,jsonArrayData.toString());
                 atPD_mensaje =atPD_mensaje+ respServer[0]+sSaltoLinea;
                 iNumError=iNumError+Integer.parseInt(respServer[1]);
@@ -256,8 +246,6 @@ public class BaseDatosExportacionFragment extends Fragment {
 
     }
 
-
-
     public static String[] makeRequest(String uri, String json) {
         HttpURLConnection urlConnection;
         String url;
@@ -265,7 +253,7 @@ public class BaseDatosExportacionFragment extends Fragment {
         String result = null;
         String sNumError="0";
         try {
-            //Connect
+            // Connect
             urlConnection = (HttpURLConnection) ((new URL(uri).openConnection()));
             urlConnection.setDoOutput(true);
             urlConnection.setRequestProperty("Content-Type", "application/json");
@@ -273,24 +261,24 @@ public class BaseDatosExportacionFragment extends Fragment {
             urlConnection.setRequestMethod("POST");
             urlConnection.connect();
 
-            //Write
+            // Write
             OutputStream outputStream = urlConnection.getOutputStream();
             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream, "UTF-8"));
             writer.write(data);
             writer.close();
             outputStream.close();
 
-            //Read
+            // Read
             BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "UTF-8"));
 
             String line = null;
             StringBuilder sb = new StringBuilder();
 
             while ((line = bufferedReader.readLine()) != null) {
-                if  (line.contains("NUMERODEERRORES=")){//16
+                if  (line.contains("NUMERODEERRORES=")){ // 16
                     sNumError=hM.rightCadena(line.toString(),line.toString().length()-16);
                 }else{
-                    sb.append(line + "\n");//Respuesta del Servidor
+                    sb.append(line + "\n"); // Respuesta del Servidor
                 }
             }
 

@@ -28,7 +28,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
   void initState() {
     super.initState();
     _loadDeviceInfo();
-    
+
     // Agregar listener para ocultar error cuando el usuario escriba
     _descripcionController.addListener(() {
       if (_hasAttemptedValidation && _descripcionController.text.trim().isNotEmpty) {
@@ -53,7 +53,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
           _fabricante = androidInfo.manufacturer;
           _familia = androidInfo.brand;
           _modelo = androidInfo.model;
-         
+
         });
       } else if (Platform.isIOS) {
         final iosInfo = await deviceInfo.iosInfo;
@@ -80,7 +80,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
     setState(() {
       _hasAttemptedValidation = true;
     });
-    
+
     // Validar campo manualmente antes de mostrar el diálogo
     if (_descripcionController.text.trim().isEmpty) {
       return;
@@ -188,10 +188,10 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        bottom: true, // ⭐ EVITA SOLAPAMIENTO CON BARRA DE NAVEGACIÓN INFERIOR
+        bottom: true, // EVITA SOLAPAMIENTO CON BARRA DE NAVEGACIÓN INFERIOR
         child: Column(
           children: [
-            // ⭐ HEADER SIMPLE (como en login, pero sin curva)
+            // HEADER SIMPLE (como en login, pero sin curva)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: Row(
@@ -215,7 +215,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
 
             const SizedBox(height: 20),
 
-            // ⭐ CONTENIDO PRINCIPAL (COMPACTO Y COHERENTE CON LOGIN)
+            // CONTENIDO PRINCIPAL (COMPACTO Y COHERENTE CON LOGIN)
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -253,7 +253,6 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
 
                       const SizedBox(height: 24),
 
-                   
                       Text(
                         'Descripción',
                         style: TextStyle(
@@ -299,7 +298,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
 
                       const SizedBox(height: 32),
 
-                      // ⭐ BOTÓN COMPACTO Y ESTILO LOGIN
+                      // BOTÓN COMPACTO Y ESTILO LOGIN
                       SizedBox(
                         width: double.infinity,
                         height: 52,
@@ -349,7 +348,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
     if (!_hasAttemptedValidation || _descripcionController.text.trim().isNotEmpty) {
       return const SizedBox.shrink();
     }
-    
+
     return Padding(
       padding: const EdgeInsets.only(left: 16, top: 4),
       child: Text(

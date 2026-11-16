@@ -11,7 +11,6 @@ import '../widgets/granja_campania_picker.dart';
 import '../widgets/section_app_bar.dart';
 
 /// Pantalla para elegir la granja de trabajo del usuario.
-///
 /// Lo que se guarda acá queda premarcado al abrir cualquiera de los formularios
 /// de vacuna al agua: la granja con la campaña que le corresponde a la fecha del
 /// registro. Si no hay granja elegida, los formularios arrancan como antes.

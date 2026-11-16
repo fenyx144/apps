@@ -7,7 +7,7 @@ class SearchableSelector extends StatefulWidget {
   final String? selectedCodigo;
   final List<Map<String, dynamic>> items;
   final ValueChanged<String?> onSelectedCodigo;
-  final String? errorText; 
+  final String? errorText;
 
   const SearchableSelector({
     super.key,
@@ -15,7 +15,7 @@ class SearchableSelector extends StatefulWidget {
     required this.selectedCodigo,
     required this.items,
     required this.onSelectedCodigo,
-    this.errorText, 
+    this.errorText,
   });
 
   @override
@@ -195,7 +195,7 @@ class _SearchableSelectorState extends State<SearchableSelector> {
                               itemBuilder: (context, index) {
                                 final opcion = opcionesFiltradas[index];
                                 final isSelected = opcion['codigo'] == widget.selectedCodigo;
-                                
+
                                 return InkWell(
                                   onTap: () {
                                     Navigator.of(dialogContext).pop({
@@ -241,7 +241,7 @@ class _SearchableSelectorState extends State<SearchableSelector> {
                                                 )
                                               : null,
                                         ),
-                                        
+
                                         // Texto de la opción en MAYÚSCULAS
                                         Expanded(
                                           child: Text(
@@ -258,7 +258,7 @@ class _SearchableSelectorState extends State<SearchableSelector> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        
+
                                         // Icono de flecha para indicar selección
                                         if (isSelected)
                                           const Padding(
@@ -302,12 +302,11 @@ class _SearchableSelectorState extends State<SearchableSelector> {
     }
   }
 
- 
   @override
 Widget build(BuildContext context) {
-  final String displayValue = getDisplayValue(); 
+  final String displayValue = getDisplayValue();
   final bool hasValue = displayValue.isNotEmpty;
-  final bool hasError = widget.errorText != null; // 🔥 Detectar si hay error
+  final bool hasError = widget.errorText != null; // Detectar si hay error
 
   return InkWell(
     onTap: () async {
@@ -317,7 +316,7 @@ Widget build(BuildContext context) {
         options: widget.items,
       );
       if (selected != null) {
-        widget.onSelectedCodigo(selected['codigo']); 
+        widget.onSelectedCodigo(selected['codigo']);
       }
     },
     child: InputDecorator(
@@ -325,8 +324,8 @@ Widget build(BuildContext context) {
         labelText: widget.label,
         labelStyle: TextStyle(color: Colors.grey[700]),
         hintText: hasValue ? null : 'Seleccionar',
-        
-        // ✅ Borde normal
+
+        // Borde normal
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: Colors.grey, width: 1.2),
@@ -334,14 +333,14 @@ Widget build(BuildContext context) {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
-            color: hasError ? Colors.red : Colors.grey, // 🔥 Rojo si hay error
+            color: hasError ? Colors.red : Colors.grey, // Rojo si hay error
             width: hasError ? 1.5 : 1.2,
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
-            color: hasError ? Colors.red : AppColors.primary, // 🔥 Rojo si hay error
+            color: hasError ? Colors.red : AppColors.primary, // Rojo si hay error
             width: 1.8,
           ),
         ),
@@ -353,15 +352,15 @@ Widget build(BuildContext context) {
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: Colors.red, width: 1.8),
         ),
-        
-        // 🔥 Mostrar el texto de error
+
+        // Mostrar el texto de error
         errorText: widget.errorText,
         errorStyle: const TextStyle(
           color: Colors.red,
           fontSize: 10,
           height: 1.2,
         ),
-        
+
         suffixIcon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
         contentPadding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       ),

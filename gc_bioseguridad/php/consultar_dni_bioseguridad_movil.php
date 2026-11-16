@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Consulta el nombre de un DNI o carné de extranjería (API Factiliza) para la app.
  *
  * Acepta GET (?dni= / ?documento=) y POST (JSON o formulario).
- * Si el valor son 8 dígitos → `/dni/info/`; si no → `/cee/info/`.
+ * Si el valor son 8 dígitos  `/dni/info/`; si no  `/cee/info/`.
  */
 
 ob_start();

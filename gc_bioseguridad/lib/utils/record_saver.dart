@@ -10,7 +10,7 @@ import '../utils/record_id.dart';
 import '../utils/toast_helper.dart';
 
 /// Guardado común de los reportes de bioseguridad: siempre persiste en local y,
-/// si hay conexión, intenta subir de inmediato (con manejo de 409 → actualizar).
+/// si hay conexión, intenta subir de inmediato (con manejo de 409 actualizar).
 class BioRecordSaver {
   /// Comprueba conexión al servidor (no basta con tener red local).
   static Future<bool> hasServerReachable() async {
@@ -24,14 +24,29 @@ class BioRecordSaver {
   }
 
   /// Guarda [record] en el dispositivo y, si hay red, intenta enviarlo.
-  ///
   /// Devuelve `true` si quedó sincronizado con el backend.
   static Future<bool> save(
     BuildContext context,
     Map<String, dynamic> record,
   ) async {
     final storage = context.read<StorageService>();
-    await storage.saveRecord(record);
+    // Solo registros abiertos por enlace (uuid de rondas): mismo id = se
+    // reemplaza, no se duplica. El flujo normal no cambia.
+    final reg = record['registro'];
+    final desdeEnlace = reg is Map && reg['origen'] != null;
+    final id = EvidenciaRecordId.of(record);
+    final previo = !desdeEnlace || id.isEmpty
+        ? null
+        : storage
+            .getAllRecords()
+            .where((r) => EvidenciaRecordId.of(r) == id)
+            .firstOrNull;
+    if (previo == null) {
+      await storage.saveRecord(record);
+    } else {
+      await storage.updateRecord(record);
+    }
+    final actualizar = previo?['guardado_backend'] == true;
     record['synced'] = false;
     if (!await hasServerReachable()) return false;
     if (!context.mounted) return false;
@@ -41,6 +56,7 @@ class BioRecordSaver {
     try {
       final result = await ApiService().uploadBioseguridad(
         record,
+        isUpdate: actualizar,
         timeout: const Duration(seconds: 45),
       );
       debugPrint(

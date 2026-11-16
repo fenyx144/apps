@@ -1679,9 +1679,6 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
           ),
           */
 
-
-
-
       ],
     );
   }
@@ -2358,7 +2355,7 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
                       ),
                       child: Column(
                         children: [
-                          // Indicador de posición de pestañas - Se oculta cuando el teclado está visible
+                        // Indicador de posición de pestañas - Se oculta cuando el teclado está visible
                           AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             curve: Curves.easeInOut,
@@ -3000,7 +2997,7 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
           builder: (context, setDialogState) {
             return Dialog(
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12), // ✅ Menos radio
+                borderRadius: BorderRadius.circular(12), // Menos radio
               ),
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.85,
@@ -3010,11 +3007,11 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
                 ),
                 constraints: const BoxConstraints(
                   maxHeight: 500,
-                ), // ✅ Más corto
+                ), // Más corto
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ✅ HEADER COMPACTO (sin color verde)
+                    // HEADER COMPACTO (sin color verde)
                     Container(
                       padding: const EdgeInsets.symmetric(
                         vertical: 12,
@@ -3061,14 +3058,14 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
                       ),
                     ),
 
-                    // ✅ BUSCADOR COMPACTO
+                    // BUSCADOR COMPACTO
                     Padding(
                       padding: const EdgeInsets.only(
                         left: 12,
                         right: 12,
                         top: 12,
                         bottom: 8,
-                      ), // ✅ Menos padding
+                      ), // Menos padding
                       child: TextField(
                         controller: searchController,
                         decoration: InputDecoration(
@@ -3077,20 +3074,20 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
                           prefixIcon: const Icon(Icons.search, size: 18),
                           prefixIconConstraints: const BoxConstraints(
                             minWidth: 36,
-                          ), // ✅ Ajustar ícono
+                          ), // Ajustar ícono
                           contentPadding: const EdgeInsets.symmetric(
                             vertical: 8,
                             horizontal: 12,
-                          ), // ✅ Más compacto
+                          ), // Más compacto
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(
                               10,
-                            ), // ✅ Menos radio
+                            ), // Menos radio
                             borderSide: BorderSide(color: Colors.grey.shade300),
                           ),
                           filled: true,
                           fillColor: AppColors.cardBackground,
-                          isDense: true, // ✅ Clave para altura reducida
+                          isDense: true, // Clave para altura reducida
                         ),
                         onChanged: (value) {
                           setDialogState(() {
@@ -3108,7 +3105,7 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
                       ),
                     ),
 
-                    // ✅ LISTA COMPACTA
+                    // LISTA COMPACTA
                     Expanded(
                       child: displayedItems.isEmpty
                           ? const Center(
@@ -3133,7 +3130,7 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
                                 return ListTile(
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 14,
-                                    vertical: 6, // ✅ Más compacto
+                                    vertical: 6, // Más compacto
                                   ),
                                   title: Text(
                                     getLabel(item),
@@ -3167,7 +3164,7 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
                                     Navigator.pop(context);
                                   },
                                   visualDensity:
-                                      VisualDensity.compact, // ✅ Más compacto
+                                      VisualDensity.compact, // Más compacto
                                   dense: true,
                                   trailing: isSelected
                                       ? Icon(
@@ -3501,7 +3498,7 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
       imageFiles = List<XFile?>.from(_fisicaImages[section]!);
     }
 
-    // Asegurar que siempre haya 3 elementos
+          // Asegurar que siempre haya 3 elementos
     while (imageFiles.length < 3) {
       imageFiles.add(null);
     }
@@ -4492,10 +4489,8 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
                       const SizedBox(width: 12),
                       ElevatedButton(
                         onPressed: () {
-                          //Navigator.pop(context);
 
                           _confirmSave(data);
-                          //Navigator.of(context).pop(true);
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
@@ -4609,7 +4604,7 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
     List<Map<String, dynamic>> registros,
     Map<String, dynamic> evidenciasCompletas,
   ) {
-    // Agrupar registros por sistema
+      // Agrupar registros por sistema
     final Map<String, List<Map<String, dynamic>>> registrosPorSistema = {};
 
     for (var registro in registros) {
@@ -4883,8 +4878,8 @@ class _RegisterNecropciaScreenState extends State<RegisterNecropciaScreen>
       data['tidandroid'] = await storage.getDeviceId() ?? 'app_movil';
 
       // SIMPLIFICADO: Usar una única bandera guardado_backend
-      // Si guardado_backend == true, el registro ya existe en el backend → usar actualizar_necropsia_movil.php
-      // Si guardado_backend == false o no existe, el registro es nuevo → usar guardar_necropsia_movil.php
+      // Si guardado_backend == true, el registro ya existe en el backend usar actualizar_necropsia_movil.php
+      // Si guardado_backend == false o no existe, el registro es nuevo usar guardar_necropsia_movil.php
       if (widget.isEditing && widget.initialData != null) {
         // CRÍTICO: Leer guardado_backend directamente desde storage para asegurar que tenemos el valor más actualizado
         // El initialData puede estar desactualizado si el registro fue sincronizado después de cargar la pantalla

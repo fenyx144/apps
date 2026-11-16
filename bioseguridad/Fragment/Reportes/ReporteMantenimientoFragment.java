@@ -53,13 +53,11 @@ public class ReporteMantenimientoFragment extends Fragment {
     String querys;
 
     public ReporteMantenimientoFragment() {
-        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_reporte_mantenimiento, container, false);
     }
 
@@ -108,7 +106,6 @@ public class ReporteMantenimientoFragment extends Fragment {
         mostrarTotales(sFecha, sCencos);
 
     }
-
 
     private void buscarCencos() {
         db=conn.getReadableDatabase();
@@ -185,6 +182,5 @@ public class ReporteMantenimientoFragment extends Fragment {
             toast.show();
         }
     }
-
 
 }

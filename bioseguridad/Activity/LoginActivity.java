@@ -37,7 +37,6 @@ public class LoginActivity extends AppCompatActivity {
     String stidandroid,stserie,sfecha,sestado;
     String sCodClv,sNomClv;
 
-
     dbEstructura dbE;
     hMetodos hM;
     hVariables hV;
@@ -49,7 +48,6 @@ public class LoginActivity extends AppCompatActivity {
     RequestQueue requestQueue;
     ProgressDialog progressDialog;
 
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -58,7 +56,6 @@ public class LoginActivity extends AppCompatActivity {
         bg = ActivityLoginBinding.inflate(getLayoutInflater());
         setContentView(bg.getRoot());
 
-        //Todo: DATA
         dbE=new dbEstructura();
         hM=new hMetodos();
         conn=new ConexionSQLiteHelper(this, dbE.miBaseDatos,null,1);
@@ -76,7 +73,6 @@ public class LoginActivity extends AppCompatActivity {
                 hV.sMiIpConexion=hM.ipConexion(hV.sMiIpDispositivo);
                 hV.sMiURL=hV.sMiSeg+hV.sMiIpConexion+"/"+hV.sMiCarpeta+"/" +hV.phpIngreso ;
 
-
                 String miHora,miDia,miVersion;
                 miHora = hM.gethoraActual();
                 miDia =hM.getfechaActual();
@@ -84,7 +80,6 @@ public class LoginActivity extends AppCompatActivity {
 
                 sUsuario=bg.etUsuario.getText().toString();
                 sPassword=bg.etPassword.getText().toString();
-
 
                 progressDialog.setCanceledOnTouchOutside(false);
                 progressDialog.setTitle("Conectando al servidor");
@@ -104,14 +99,10 @@ public class LoginActivity extends AppCompatActivity {
             }
         });
 
-
-
     }
 
     private void validarUsuario(String URL){
         String requestBody = "";
-
-
 
         JsonArrayRequest jsonArrayRequest= new JsonArrayRequest( URL, new Response.Listener<JSONArray>() {
             @Override
@@ -170,7 +161,7 @@ public class LoginActivity extends AppCompatActivity {
                         String dato = bg.etUsuario.getText().toString();
                         // Instancias
                         Intent intent = new Intent(LoginActivity.this, MenuPrincipalActivity.class);
-                        //empaquetar la informacion para enviar a la segunda pantalla
+                        // empaquetar la informacion para enviar a la segunda pantalla
                         intent.putExtra("clv", dato);
                         Toast toast2 = Toast.makeText(getApplicationContext(), "Cargando", Toast.LENGTH_SHORT);
                         toast2.show();
@@ -201,13 +192,10 @@ public class LoginActivity extends AppCompatActivity {
         db=conn.getReadableDatabase();
         try{
             sValida="N";
-            //idAndroid = (Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID));
-            //utd.sMiIdAdroid=idAndroid;
             sql="SELECT * FROM "+dbE.t_android+"  ;";
             Cursor cursor1=db.rawQuery(sql,null);
             if (cursor1 != null) {
                 if (cursor1.getCount() > 0) {
-                    //cursor.moveToFirst();
                     while (cursor1.moveToNext()) {
                         sValida="A";
                     }
@@ -222,7 +210,6 @@ public class LoginActivity extends AppCompatActivity {
                 Cursor cursor = db.rawQuery(sql, null);
                 if (cursor != null) {
                     if (cursor.getCount() > 0) {
-                        //cursor.moveToFirst();
                         db.delete(dbE.TABLA_CLV, null, null);
                         while (cursor.moveToNext()) {
 
@@ -236,9 +223,9 @@ public class LoginActivity extends AppCompatActivity {
 
                             bg.etPassword.setText("");
                             String dato = bg.etUsuario.getText().toString();
-                            // Instancias
+                        // Instancias
                             Intent intent = new Intent(LoginActivity.this, MenuPrincipalActivity.class);
-                            //empaquetar la informacion para enviar a la segunda pantalla
+                        // empaquetar la informacion para enviar a la segunda pantalla
                             intent.putExtra("clv", dato);
                             /* Mensaje de carga */
                             Toast toast2 = Toast.makeText(getApplicationContext(), "Cargando", Toast.LENGTH_SHORT);

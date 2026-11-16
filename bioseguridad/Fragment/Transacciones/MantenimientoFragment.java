@@ -52,7 +52,6 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
     String sql,sColaborador,miDate,miTime;;
     String sDescripcion,sEstado,sValidaReg,sId,sFecha,sCencos,sElemento,sTurno,sOtros;
 
-
     /*<!-- TODO: VARIABLES G PARA MOSTRAR -->*/
 
     /*<!-- TODO: TABLA -->*/
@@ -73,18 +72,14 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
     ArrayList<String> listaRegEliminar;
     ArrayList<eRegEliminar>regEliminarList;
 
-
     /*<!-- TODO: LISTAS-ENTIDADES -->*/
 
-
     public MantenimientoFragment() {
-        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_mantenimiento, container, false);
     }
 
@@ -128,14 +123,11 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
 
         /*<!-- TODO: CARGA DE DATA SPINNER ARRAY -->*/
         List<String> listt = new ArrayList<>();
-        //listt.add("Seleccione");
         listt.add("Dia");
         listt.add("Noche");
         ArrayAdapter<String> adaptert = new ArrayAdapter<String>(getContext(), R.layout.items_list, listt);
         adaptert.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         bg.spnTurno.setAdapter(adaptert);
-
-
 
         /*<!-- TODO: CAPTURA DE POSICION EXCLUYENDO LA PRIMERA -->*/
         bg.spnTurno.setOnItemClickListener(new AdapterView.OnItemClickListener() {
@@ -179,7 +171,6 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
         bg.etOtros.setEnabled(false);
         bg.etDescOtros.setEnabled(false);
 
-
         /*<!-- TODO: AL INGRESAR UN DATO -->*/
         bg.spnTurno.addTextChangedListener(new TextWatcher() {
             @Override
@@ -222,8 +213,7 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
             public void onClick(View view) {
                 bg.btnEliminar.setEnabled(false);
 
-
-                androidx.appcompat.app.AlertDialog.Builder dialogo1 = new AlertDialog.Builder(view.getContext());//this
+                androidx.appcompat.app.AlertDialog.Builder dialogo1 = new AlertDialog.Builder(view.getContext()); // this
                 dialogo1.setTitle("Eliminar");
                 dialogo1.setMessage("¿ Desea Eliminar dicho registro ?");
                 dialogo1.setCancelable(false);
@@ -234,7 +224,7 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
                             toast = Toast.makeText(getActivity().getApplicationContext(), "Item Seleccionado No valido", Toast.LENGTH_SHORT);
                             toast.show();
                         } else {
-                            //Eliminar Registro
+                            // Eliminar Registro
                             String slFecha=bg.tvFecha.getText().toString();
                             String slCencos=bg.etCencos.getText().toString().substring(0,6);
                             String slId=regEliminarList.get(iPosEli).get_id();
@@ -243,19 +233,16 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
                             toast = Toast.makeText(getActivity().getApplicationContext(), rMensaje, Toast.LENGTH_SHORT);
                             toast.show();
 
-
                             sFecha = bg.tvFecha.getText().toString();
                             sCencos = bg.etCencos.getText().toString().substring(0, 6);
                             mostrarTotales(sFecha, sCencos);
                             listaItems(sFecha, sCencos);
-
 
                         }
                     }
                 });
                 dialogo1.setNegativeButton("Cancelar", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialogo1, int id) {
-                        //cancelar();
                     }
                 });
                 dialogo1.show();
@@ -442,7 +429,7 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
     private void guardarDatos(){
         db = conn.getWritableDatabase();
 
-        //Todo:MAXIMO REGISTRO
+        // TODO:MAXIMO REGISTRO
         try{
             sql = "SELECT MAX(ABS(" + dbE.c_rmId + "))  FROM " + dbE.t_RMantenimiento + " WHERE " + dbE.c_rmFecha + "='" + bg.tvFecha.getText().toString() + "';";
             Cursor cursor1 = db.rawQuery(sql,null);
@@ -457,7 +444,7 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
                 }
             }
 
-            //Todo:Agregamos campos generales a la Tabla
+            // TODO:Agregamos campos generales a la Tabla
 
             sFecha = bg.tvFecha.getText().toString();
             sCencos = bg.etCencos.getText().toString().substring(0,6);
@@ -691,9 +678,8 @@ public class MantenimientoFragment extends Fragment implements View.OnClickListe
     private void listaItems(String xFecha,String xCencos){
 
         db = conn.getReadableDatabase();
-        //PARA FILTRAR TABLA
+        // PARA FILTRAR TABLA
         sTurno = bg.spnTurno.getText().toString();
-
 
         eRegEliminar regEliminar = null;
         regEliminarList = new ArrayList<eRegEliminar>();

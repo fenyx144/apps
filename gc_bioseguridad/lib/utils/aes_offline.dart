@@ -19,9 +19,8 @@ Uint8List _deriveKey(String enom) {
 
 /// Calcula el HEX de los primeros 8 bytes de AES-128-ECB(password, enom)
 /// con padding PKCS7, replicando el comportamiento de MySQL AES_ENCRYPT.
-///
 /// Mismo resultado que MySQL:
-///   HEX(LEFT(AES_ENCRYPT(password, enom), 8))
+/// HEX(LEFT(AES_ENCRYPT(password, enom), 8))
 String computePasswordHex(String password, String enom) {
   final key = _deriveKey(enom);
   final plainBytes = utf8.encode(password);

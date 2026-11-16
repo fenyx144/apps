@@ -111,14 +111,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
       // Recolectar TODOS los enom disponibles
       final enomCandidates = <String>[];
-      
+
       // 1. Primero, el enom guardado del ultimo login exitoso (es el mas confiable)
       final savedLoginEnom = storage.getLoginEnom() ?? '';
       if (savedLoginEnom.isNotEmpty) {
         enomCandidates.add(savedLoginEnom);
         debugPrint('[OFFLINE_LOGIN] enom guardado del login: len=${savedLoginEnom.length} hex=${savedLoginEnom.codeUnits.map((b) => b.toRadixString(16).padLeft(2, '0')).join('')}');
       }
-      
+
       // 2. Los enom del catalogo conempre descargado
       if (conempreList != null) {
         for (final ce in conempreList) {

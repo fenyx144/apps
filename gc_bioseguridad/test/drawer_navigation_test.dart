@@ -38,12 +38,10 @@ Future<void> _desplazarHasta(WidgetTester tester, Finder destino) async {
 }
 
 /// Abre el drawer y toca el ítem [titulo].
-///
 /// El objetivo se busca dentro del [Drawer] a propósito: cuando ya estamos en
 /// una sección, su AppBar muestra el mismo texto que el ítem del menú. Además,
 /// la lista del menú puede quedar más alta que la ventana de pruebas, así que se
 /// desplaza hasta que el ítem se monte antes de tocarlo.
-///
 /// [indice] elige cuál de las coincidencias se toca: «Anomalías» aparece una vez
 /// por grupo de bioseguridad, y el orden de esos grupos es parte de lo que se
 /// valida aquí.
@@ -300,7 +298,7 @@ void main() {
     final fisica = tester.getTopLeft(_enDrawer('Física')).dx;
     final ingreso = tester.getTopLeft(_enDrawer(AppStrings.menuIngreso)).dx;
 
-    // Bioseguridad → grupo → sección: cada nivel entra un poco más adentro, así
+    // Bioseguridad grupo sección: cada nivel entra un poco más adentro, así
     // se ve que física, química y biológica cuelgan de Bioseguridad.
     expect(fisica, greaterThan(rotulo));
     expect(ingreso, greaterThan(fisica));

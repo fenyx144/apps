@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 
 /// Marco de guía sobre la cámara y avisos breves.
-///
 /// Se dibuja un único recuadro, con la forma del código de barras del DNI: un
 /// rectángulo ancho y bajo. Antes se dibujaban dos (la franja y el cuadrado del
 /// QR) superpuestos, y al apuntar se veían como dos marcos que competían entre
@@ -70,7 +69,7 @@ class BioScanGuide extends StatelessWidget {
                   ),
                 ),
               ),
-            
+
           ],
         );
       },

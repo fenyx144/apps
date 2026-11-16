@@ -1,5 +1,4 @@
 /// Comidas del personal de despacho y códigos de la tabla `marc`.
-///
 /// Los tipos 1 a 3 los usa el reloj (entrada, salida y marcas intermedias).
 /// Estas seis marcas de comida ocupan 4 a 9.
 enum Comida { desayuno, almuerzo, cena }
@@ -241,7 +240,6 @@ String etiquetaMomento(MomentoComida momento) {
 }
 
 /// Matriz del horario de despacho (Joya y Mollendo).
-///
 /// No está en `dpollo_programacion_personal` ni en el maestro de grupos que
 /// documenta el módulo. Si el servidor encuentra una tabla con desayuno,
 /// almuerzo y cena, esa lista reemplaza a esta.
@@ -438,7 +436,6 @@ class GrupoMarcacion {
 }
 
 /// Agrupa al personal por código operativo para el ingreso masivo.
-///
 /// Quien no tiene ninguna comida (descanso, vacaciones, administrativo)
 /// no entra. Los grupos que no toman [comida] quedan al final, con
 /// [GrupoMarcacion.permite] en falso, para verlos sin poder marcarlos.
@@ -496,7 +493,7 @@ int _compararGrupo(String a, String b, Map<String, bool> permite) {
   return a.compareTo(b);
 }
 
-/// Granja de 3 dígitos + campaña de 3 dígitos. Ejemplo: 621 y 192 → 621192.
+/// Granja de 3 dígitos + campaña de 3 dígitos. Ejemplo: 621 y 192 621192.
 String tcencosDe(String granja, String campania) {
   String tres(String raw) {
     var d = raw.replaceAll(RegExp(r'\D'), '');

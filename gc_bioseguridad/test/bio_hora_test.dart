@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 const double altoDeFila = 44.0;
 
 /// Fila centrada de una lista: la que queda bajo el recuadro.
-///
 /// Hace falta ubicarla por posición y no por texto: la lista dibuja solo las
 /// filas vecinas a la centrada, así que buscar un texto suelto puede no
 /// encontrarlo (o encontrar el de arriba o el de abajo).

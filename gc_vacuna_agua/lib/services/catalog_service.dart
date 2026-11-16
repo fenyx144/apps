@@ -92,7 +92,6 @@ class CatalogService with ChangeNotifier {
   }
 
   /// Descarga los catálogos propios de Vacuna al Agua (equipo y turnos).
-  ///
   /// Si ya hay una descarga en curso (p. ej. la silenciosa del dashboard) se
   /// espera su resultado. Si no, dos disparos simultáneos dejarían el catálogo
   /// viejo en memoria.
@@ -147,7 +146,6 @@ class CatalogService with ChangeNotifier {
   // ── Accesos tipados al catálogo de Vacuna al Agua ───────────────────────
 
   /// Respaldo del equipo de vacunación cuando aún no se descargó el catálogo.
-  ///
   /// Debe coincidir con `equipovacunacion` y con el respaldo de
   /// `get_catalogos_vacunaagua_movil.php`, para que la tabla de equipo se vea
   /// igual antes y después de la primera descarga.
@@ -183,7 +181,6 @@ class CatalogService with ChangeNotifier {
       descripcion.trim().toLowerCase() == 'otro';
 
   /// Vacunas del maestro de productos (línea 003), en el orden del catálogo.
-  ///
   /// Es la misma lista que usa Planificación al elegir el producto de un
   /// programa: el nombre de la vacuna sale del maestro y no se escribe a mano.
   /// Sin catálogo descargado devuelve lista vacía y el campo avisa que hay que
@@ -216,12 +213,10 @@ class CatalogService with ChangeNotifier {
   }
 
   /// Nombre del usuario del sistema cuyo DNI coincide con [dni].
-  ///
   /// `usuario.libtri` guarda el DNI (así lo usa el módulo de roles), y el
   /// catálogo de usuarios ya viene descargado para el login offline. Es la
   /// segunda barrera cuando la consulta en línea del documento no responde:
   /// el personal de la granja se resuelve sin conexión.
-  ///
   /// Devuelve cadena vacía si el DNI no está entre los usuarios descargados.
   String nombrePorDni(String dni) {
     final buscado = dni.replaceAll(RegExp(r'\D'), '');
@@ -238,7 +233,7 @@ class CatalogService with ChangeNotifier {
     return '';
   }
 
-  /// Descripción legible de un código de catálogo (p. ej. equipo `4` → Termómetro).
+  /// Descripción legible de un código de catálogo (p. ej. equipo `4` Termómetro).
   String descripcionDe(List<Map<String, String>> catalogo, String codigo) {
     for (final item in catalogo) {
       if (item['codigo'] == codigo) return item['descripcion'] ?? codigo;

@@ -93,7 +93,7 @@ class GalponesResolver {
     return int.tryParse(n) ?? 0;
   }
 
-  /// Por granja: mismo tcodint → conservar CENCO más reciente (mayor código).
+  /// Por granja: mismo tcodint conservar CENCO más reciente (mayor código).
   static List<Map<String, dynamic>> dedupeGalponesPreferHigherCenco(
     List<Map<String, dynamic>> raw,
   ) {
@@ -193,7 +193,7 @@ class GalponesResolver {
     );
   }
 
-  /// Prioridad: CENCO exacto → por granja (3 díg.) → mismo prefijo con galpones.
+  /// Prioridad: CENCO exacto por granja (3 díg.) mismo prefijo con galpones.
   static List<Map<String, dynamic>> resolveOffline({
     required String granjaCodigo,
     required String campania,

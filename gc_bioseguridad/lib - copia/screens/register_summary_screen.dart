@@ -119,7 +119,6 @@ String? _rutaImagen(dynamic item) {
 }
 
 /// Nombre visible de cada reporte.
-///
 /// El tipo guardado sigue siendo `garita` (es la tabla `rgarita` y la llave de
 /// los registros ya enviados); lo que cambió es el nombre que ve el usuario.
 String nombreReporte(String reporte) {
@@ -158,7 +157,6 @@ IconData iconoReporte(String reporte) {
 
 /// DNIs declarados en un registro de Control de ingreso, con el nombre
 /// consultado cuando lo hay.
-///
 /// Acepta los formatos que existen en la app: pares `{dni, nombre}` (lo que
 /// guarda el formulario con el escáner), lista de números (registros anteriores)
 /// y texto separado por comas (reportes que vienen del backend).

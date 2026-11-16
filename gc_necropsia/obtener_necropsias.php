@@ -33,11 +33,11 @@ $conn->query("SET sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''))"
 // Query para obtener necropsias agrupadas por lote (tdate, tnumreg, tgranja, tgalpon, tfectra)
 // Ordenar por fecha descendente, luego por numreg descendente, luego por granja
 // Usar GROUP BY en lugar de DISTINCT para mejor compatibilidad con MySQL 5.4
-$sql = "SELECT 
+$sql = "SELECT
     tdate, tnumreg, tgranja, tgalpon, tfectra, tcencos, tedad, tcampania
-FROM t_regnecropsia 
+FROM t_regnecropsia
 GROUP BY tdate, tnumreg, tgranja, tgalpon, tfectra, tcencos, tedad, tcampania
-ORDER BY 
+ORDER BY
     tdate DESC,
     tnumreg DESC,
     tgranja ASC

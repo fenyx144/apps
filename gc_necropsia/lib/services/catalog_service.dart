@@ -11,7 +11,7 @@ class CatalogService with ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isEmpty => _catalogos.isEmpty;
 
-  // ⭐ Pre-carga desde SharedPreferences (llamado en main.dart)
+  // Pre-carga desde SharedPreferences (llamado en main.dart)
   Future<void> loadFromPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -43,7 +43,7 @@ class CatalogService with ChangeNotifier {
 
         // Merge de datos (download.php devuelve: laboratorios, emp_trans, usuarios, muestras, paquetes, analisis)
         _catalogos.addAll(nuevosDatos);
-        
+
         // Guardar en SharedPreferences
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('catalogos', jsonEncode(_catalogos));
@@ -64,6 +64,5 @@ class CatalogService with ChangeNotifier {
     _catalogos.clear();
     notifyListeners();
   }
-
 
 }

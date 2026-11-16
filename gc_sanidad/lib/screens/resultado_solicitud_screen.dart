@@ -64,7 +64,7 @@ class _ResultadoSolicitudScreenState extends State<ResultadoSolicitudScreen>
         posSolicitud: widget.posSolicitud,
       );
 
-      // 👇 Verifica que el widget sigue montado
+      // Verifica que el widget sigue montado
       if (!mounted) return;
 
       setState(() {
@@ -74,7 +74,7 @@ class _ResultadoSolicitudScreenState extends State<ResultadoSolicitudScreen>
         _docsCuantitativos = docs['cuantitativos'] ?? [];
         _isLoading = false;
 
-        // 👇 Este print ahora SÍ dRebería aparecer
+        // Este print ahora SÍ dRebería aparecer
         print(
           '✅ setState ejecutado: _analisisCualitativos.length = ${_analisisCualitativos.length}',
         );
@@ -143,7 +143,7 @@ class _ResultadoSolicitudScreenState extends State<ResultadoSolicitudScreen>
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: buildAppBar(context, 'Resultado de solicitud', showBackButton: true),
-    
+
       body: Column(
         children: [
           _buildMainTabBar(),

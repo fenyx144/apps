@@ -29,8 +29,9 @@ class SexoGridTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkTheme;
-    final divider =
-        (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06);
+    final divider = (isDark ? Colors.white : Colors.black).withValues(
+      alpha: 0.06,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +170,8 @@ class SexoGridRow extends StatelessWidget {
                   Icon(
                     icon,
                     size: 15,
-                    color: iconColor ??
+                    color:
+                        iconColor ??
                         (isDark ? Colors.white54 : Colors.grey.shade600),
                   ),
                   const SizedBox(width: 5),
@@ -328,8 +330,8 @@ class SexoSelectCell extends StatelessWidget {
                     color: !enabled
                         ? (isDark ? Colors.white38 : Colors.grey.shade500)
                         : has
-                            ? (isDark ? Colors.white : AppColors.textPrimary)
-                            : (isDark ? Colors.white38 : Colors.grey.shade500),
+                        ? (isDark ? Colors.white : AppColors.textPrimary)
+                        : (isDark ? Colors.white38 : Colors.grey.shade500),
                   ),
                 ),
               ),
@@ -339,6 +341,64 @@ class SexoSelectCell extends StatelessWidget {
                 color: accent.withValues(alpha: 0.8),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Selector MN/ME (Tipo muerte). Sin selección por defecto: solo muestra
+/// lo que el usuario tocó explícitamente; tocar de nuevo deselecciona.
+class SexoTipoMuerteCell extends StatelessWidget {
+  final String? value;
+  final ValueChanged<String?>? onChanged;
+  final Color accent;
+
+  const SexoTipoMuerteCell({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkTheme;
+    final base = isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
+    return SizedBox(
+      width: double.infinity,
+      child: SegmentedButton<String>(
+        segments: const [
+          ButtonSegment(value: 'MN', label: Text('M.N.'), tooltip: 'Natural'),
+          ButtonSegment(value: 'ME', label: Text('M.E.'), tooltip: 'Eliminado'),
+        ],
+        selected: value == null ? const <String>{} : {value!},
+        emptySelectionAllowed: true,
+        showSelectedIcon: false,
+        onSelectionChanged: onChanged == null
+            ? null
+            : (s) => onChanged!(s.isEmpty ? null : s.first),
+        style: ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 4),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (st) => st.contains(WidgetState.selected) ? Colors.white : base,
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (st) =>
+                st.contains(WidgetState.selected) ? accent : Colors.transparent,
+          ),
+          side: WidgetStatePropertyAll(
+            BorderSide(
+              color: isDark ? AppColors.darkBorder : AppColors.borderLight,
+            ),
           ),
         ),
       ),
@@ -493,24 +553,21 @@ class SexoObsFotoBlock extends StatelessWidget {
               padding: const EdgeInsets.only(top: 4),
               children: [
                 ...fotos.asMap().entries.map(
-                      (e) => Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: DashedPhotoSlot(
-                          size: 72,
-                          imagePath: e.value,
-                          onAdd: onAddFoto,
-                          onTapImage: () => onEditFoto(e.key),
-                          onDeleteImage: () => onRemoveFoto(e.key),
-                        ),
-                      ),
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: DashedPhotoSlot(
+                      size: 72,
+                      imagePath: e.value,
+                      onAdd: onAddFoto,
+                      onTapImage: () => onEditFoto(e.key),
+                      onDeleteImage: () => onRemoveFoto(e.key),
                     ),
+                  ),
+                ),
                 if (fotos.length < maxFotos)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
-                    child: DashedPhotoSlot(
-                      size: 72,
-                      onAdd: onAddFoto,
-                    ),
+                    child: DashedPhotoSlot(size: 72, onAdd: onAddFoto),
                   ),
               ],
             ),

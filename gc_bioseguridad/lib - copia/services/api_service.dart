@@ -302,7 +302,6 @@ class ApiService {
   }
 
   /// Nombre de un DNI consultado en la API Factiliza (vía backend).
-  ///
   /// El token de Factiliza vive solo en el servidor, así que la app envía el
   /// documento y recibe el nombre ya armado.
   Future<Map<String, dynamic>> consultarDni(String dni) async {
@@ -342,7 +341,6 @@ class ApiService {
   }
 
   /// Razón social de un RUC consultada en la API Factiliza (vía backend).
-  ///
   /// Es la misma consulta que hace la web al elegir un proveedor: la app manda
   /// los 11 dígitos y recibe la razón social ya resuelta, sin conocer el token.
   Future<Map<String, dynamic>> consultarRuc(String ruc) async {
@@ -522,7 +520,6 @@ class ApiService {
 
   /// Consulta informativa de la «Planificación de visitas» del portal web:
   /// ¿la placa o los DNIs estaban programados para esa granja en esa fecha?
-  ///
   /// Devuelve el bloque `data` del servidor solo cuando la planificación está
   /// disponible (`disponible == true`). Ante cualquier otra cosa (sin red,
   /// tiempo agotado, token rechazado, tablas aún no creadas en el servidor)
@@ -565,7 +562,6 @@ class ApiService {
   /// Consulta informativa del «Estatus Sanitario Granja» del portal web: ¿la
   /// granja del registro está en situación especial y alguno de los DNIs viene
   /// de otra granja que sí lo está?
-  ///
   /// Devuelve el bloque `data` solo cuando el servidor tiene las tablas del
   /// estatus (`disponible == true`). Ante cualquier otra cosa (sin red, tiempo
   /// agotado, token rechazado, tablas aún no creadas) devuelve `null` y la
@@ -656,7 +652,6 @@ class ApiService {
   }
 
   /// Sube un registro de bioseguridad (Garita, Cerco Eléctrico o Fómites).
-  ///
   /// El backend responde 409 cuando el grupo (fecha + granja/campaña + turno
   /// [+ filtro | referencia + proceso]) ya existe; en ese caso se reintenta
   /// automáticamente como actualización.
@@ -768,7 +763,6 @@ class ApiService {
   }
 
   /// Verifica que el backend confirmó las imágenes locales que se enviaron.
-  ///
   /// El registro ya existía (`ya_existia`): es idempotencia por id, cuenta como
   /// subida completa. Si el backend responde `imagenes_ok`, manda ese dato. Si
   /// no, se compara cuántos archivos confirmó contra los enviados (el backend

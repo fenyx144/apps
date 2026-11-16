@@ -1,6 +1,5 @@
 /// Utilidades de DNI compartidas por Control de ingreso, el resumen y los
 /// reportes locales.
-///
 /// El DNI se puede escribir a mano o leer con el escáner (QR o código de
 /// barras). Cuando se escanea, la app consulta el nombre en el backend, así que
 /// un registro maneja pares documento + nombre y no solo el número.
@@ -23,7 +22,6 @@ class DniEntrada {
 }
 
 /// Interpreta el contenido leído por el escáner y extrae el DNI de 8 dígitos.
-///
 /// El DNI peruano trae el número en un código de barras; según el modelo el
 /// contenido es solo el número, un PDF417 con el número al inicio, o una trama
 /// separada por «|», «,» o espacios. Se prueban esos casos de más preciso a
@@ -62,7 +60,6 @@ abstract final class DniCodeParser {
 }
 
 /// Convierte el campo `dnis` de un registro en entradas tipadas.
-///
 /// Acepta los tres formatos que existen en la app: pares `{dni, nombre}` (lo
 /// que guarda el formulario), lista de números (registros anteriores al
 /// escáner) y texto separado por comas (reportes que vienen del backend).
@@ -105,7 +102,6 @@ List<String> listaDnisNumeros(dynamic raw) =>
     parseDnisEntradas(raw).map((d) => d.dni).toList();
 
 /// Nombre que acompaña a un DNI en el registro.
-///
 /// Manda el nombre que resolvió la consulta (en línea o del catálogo local) y,
 /// si no hubo ninguno —sin conexión y el documento fuera del catálogo—, se usa
 /// el que escribió el operador a mano. Vacío en los dos casos no es un error:

@@ -9,7 +9,6 @@ import '../widgets/bio_scan_guide.dart';
 import '../widgets/section_app_bar.dart';
 
 /// Pantalla del escáner de DNI.
-///
 /// Sirve tanto para código de barras como para QR (el DNI peruano usa uno u otro
 /// según el modelo), así que se habilitan todos los formatos plausibles, pero la
 /// guía sobre la cámara es un solo recuadro con la forma del código de barras

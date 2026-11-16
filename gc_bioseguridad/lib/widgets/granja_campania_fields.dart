@@ -34,7 +34,6 @@ class GranjaCampaniaSeleccion {
 
 /// Selección premarcada en formularios de reportes (cerco, garita, fómites):
 /// primera granja en Mis granjas con campaña sugerida para [fechaYmd].
-///
 /// Devuelve `null` cuando no hay granja guardada, o cuando esa granja no tiene
 /// campañas elegibles para la fecha: en ese caso el formulario arranca vacío,
 /// como antes de configurar la granja.
@@ -46,7 +45,18 @@ GranjaCampaniaSeleccion? granjaDeTrabajoSeleccion(
   if (g3.isEmpty) return null;
   final granjas = storage.getGranjasTrabajo();
   if (granjas.isNotEmpty && !granjas.contains(g3)) return null;
+  return granjaSeleccionDe(storage, g3, fechaYmd: fechaYmd);
+}
 
+/// Selección de una granja cualquiera ([granja] de 3 dígitos) con su campaña
+/// sugerida para [fechaYmd]. La usa también el enlace de otra app.
+GranjaCampaniaSeleccion? granjaSeleccionDe(
+  StorageService storage,
+  String granja, {
+  required String fechaYmd,
+}) {
+  final g3 = GranjaCampaniaPicker.normGranja(granja);
+  if (g3.isEmpty) return null;
   final sel = GranjaCampaniaPicker.seleccionDeGranja(
     proyeccion: storage.getProyeccion(),
     cencosGalpones: storage.getCencosGalpones(),
@@ -76,7 +86,6 @@ GranjaCampaniaSeleccion? granjaDeTrabajoSeleccion(
 }
 
 /// Par de campos «Granja» + «Campaña» para los formularios de bioseguridad.
-///
 /// Antes era un solo campo que abría el selector de granja y, acto seguido,
 /// obligaba a elegir campaña. Ahora cada uno se toca por separado y la campaña
 /// arranca con la sugerida por el catálogo para la fecha del registro, igual

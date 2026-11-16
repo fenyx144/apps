@@ -126,7 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         color: tc.textThemePrimary,
                       ),
                     ),
-                   
+
                     const SizedBox(height: 18),
                     AppCard(
                       borderRadius: 18,

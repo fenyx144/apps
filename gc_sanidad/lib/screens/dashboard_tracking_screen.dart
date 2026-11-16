@@ -522,7 +522,7 @@ class _DashboardTrackingScreenState extends State<DashboardTrackingScreen>
             total.toString(),
             const Color(0xFF667EEA),
           ),
-          //_buildMetricResumen('Sincronizados', subidos.toString(), Colors.green),
+          // _buildMetricResumen('Sincronizados', subidos.toString(), Colors.green),
         ],
       ),
     );
@@ -1048,7 +1048,7 @@ class _CalendarTrackingCardState extends State<CalendarTrackingCard> {
               subject: item['title'] ?? 'Sin título',
               color: Color(int.parse('FF$colorHex', radix: 16)),
               notes: ubi,
-              id: cod, // ← SOLO guardamos el código, no la clave completa
+              id: cod, // SOLO guardamos el código, no la clave completa
             ),
           );
         }
@@ -1095,10 +1095,10 @@ class _CalendarTrackingCardState extends State<CalendarTrackingCard> {
             child: SfCalendar(
               view: _calendarView,
               dataSource: AppointmentDataSource(_appointments),
-              // ← CLAVE: deshabilitamos el indicador por defecto
+              // CLAVE: deshabilitamos el indicador por defecto
               monthViewSettings: const MonthViewSettings(
                 showAgenda: true,
-                appointmentDisplayMode: MonthAppointmentDisplayMode.none, // ← Esto evita los puntos duplicados
+                appointmentDisplayMode: MonthAppointmentDisplayMode.none, // Esto evita los puntos duplicados
               ),
               monthCellBuilder: (context, details) {
                 // Contamos códigos únicos en este día
@@ -1108,7 +1108,7 @@ class _CalendarTrackingCardState extends State<CalendarTrackingCard> {
                   if (a is! Appointment) continue;
                   final String code = a.id?.toString() ?? '';
                   if (code.isEmpty) continue;
-                  
+
                   // Solo agregamos si no existe (primer color que encontremos)
                   if (!uniqueCodesMap.containsKey(code)) {
                     uniqueCodesMap[code] = a.color;
@@ -1117,7 +1117,7 @@ class _CalendarTrackingCardState extends State<CalendarTrackingCard> {
 
                 final int totalEvents = uniqueCodesMap.length;
                 final List<Color> colors = uniqueCodesMap.values.toList();
-                
+
                 final bool isToday =
                     details.date.day == DateTime.now().day &&
                     details.date.month == DateTime.now().month &&

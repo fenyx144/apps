@@ -280,14 +280,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 legend: _buildTopListLegend(data.topAnalisis.items, "análisis"),
               ),
-            
+
             ],
           ),
         );
       },
     );
   }
-
 
     Widget _buildEnviosRecientes() {
     return FutureBuilder<List<EnvioReciente>>(
@@ -376,7 +375,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        // 👇 Degradado sutil
+        // Degradado sutil
         gradient: LinearGradient(
           colors: [bgColor.withOpacity(0.9), bgColor.withOpacity(0.7)],
           begin: Alignment.topLeft,
@@ -614,7 +613,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _buildTopListLegend(List<TopItem> items, String tipo) {
     if (items.isEmpty) return const SizedBox();
-    
+
     return Wrap(
       alignment: WrapAlignment.center,
       runSpacing: 4,
@@ -660,7 +659,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             '${formatRank(start + i, 2)}. ${formatNameFixedWidth(items[i].name, 30)} — ${items[i].total}',
             style: const TextStyle(
               fontSize: 11,
-              fontFamily: 'monospace', // ← clave para alineación perfecta
+              fontFamily: 'monospace', // clave para alineación perfecta
             ),
           ),
       ],
@@ -858,11 +857,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             );
           }).toList(),
         ),
-       
+
     );
   }
-    
-  
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return PreferredSize(
@@ -893,7 +890,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           _buildResumenRegistros(total, pendientes, subidos),
           const SizedBox(height: 20),
 
-          // 👇 Gráfico de estado (pendientes vs subidos)
+          // Gráfico de estado (pendientes vs subidos)
           if (total > 0)
             Container(
               padding: const EdgeInsets.all(16),

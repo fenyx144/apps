@@ -81,13 +81,13 @@ const List<DespachoEtapa> kDespachoEtapas = [
 /// Sexos para los que se registran etapas en el despacho ('macho' | 'hembra').
 const List<String> kDespachoSexos = ['macho', 'hembra'];
 
-/// Normaliza 'M'/'macho' → 'macho' y 'H'/'hembra' → 'hembra'.
+/// Normaliza 'M'/'macho' 'macho' y 'H'/'hembra' 'hembra'.
 String despachoSexoId(String sexo) {
   final s = sexo.trim().toLowerCase();
   return s == 'macho' || s == 'm' ? 'macho' : 'hembra';
 }
 
-/// Etiqueta legible del sexo: 'macho' → 'Machos', 'hembra' → 'Hembras'.
+/// Etiqueta legible del sexo: 'macho' 'Machos', 'hembra' 'Hembras'.
 String despachoSexoLabel(String sexo) =>
     despachoSexoId(sexo) == 'macho' ? 'Machos' : 'Hembras';
 

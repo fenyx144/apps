@@ -40,19 +40,19 @@ class NominaProveedores {
 
   final String generado;
 
-  /// RUC → razón social.
+  /// RUC razón social.
   final Map<String, String> proveedores;
 
-  /// RUC → procesos asignados al proveedor en el portal.
+  /// RUC procesos asignados al proveedor en el portal.
   final Map<String, List<String>> procesos;
 
-  /// RUC → último proceso con que vino (planificación o ingreso).
+  /// RUC último proceso con que vino (planificación o ingreso).
   final Map<String, String> ultimoProceso;
 
-  /// DNI → RUC de los proveedores en cuya nómina figura.
+  /// DNI RUC de los proveedores en cuya nómina figura.
   final Map<String, List<String>> nomina;
 
-  /// DNI → RUC con los que figuró en planificaciones o ingresos recientes.
+  /// DNI RUC con los que figuró en planificaciones o ingresos recientes.
   final Map<String, List<String>> historial;
 
   bool get estaVacia => nomina.isEmpty && historial.isEmpty;
@@ -130,7 +130,6 @@ class NominaProveedores {
 
   /// Proveedores de los [dnis], el que agrupa más personas primero (a
   /// igualdad, el que viene de la nómina).
-  ///
   /// [preferir]: proveedores de las visitas planificadas en pantalla. Quien
   /// figura en su nómina y además en la de otro se cuenta solo para ellos
   /// (trabaja para varios proveedores).

@@ -216,7 +216,6 @@ Future<void> cerrarPlanVisitaTrasSalidaDefinitiva(
 }
 
 /// Granja/campaña para estatus sanitario de la granja del registro.
-///
 /// No infiere «Mis granjas» ni granja única del punto: solo formulario explícito
 /// o visita planificada ya resuelta en filas.
 ({String granja, String campania}) granjaCampaniaParaEstatusSanitario({

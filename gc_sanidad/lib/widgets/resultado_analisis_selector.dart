@@ -37,7 +37,7 @@ class _ResultadoAnalisisSelectorState extends State<ResultadoAnalisisSelector> {
 
   @override
   void dispose() {
-    _obsController.dispose(); // 👈 Libera memoria
+    _obsController.dispose(); //  Libera memoria
     super.dispose();
   }
 
@@ -86,7 +86,7 @@ class _ResultadoAnalisisSelectorState extends State<ResultadoAnalisisSelector> {
               ...[
                 'Negativo',
                 'Positivo',
-              
+
               ].map((e) => DropdownMenuItem(value: e, child: Text(e))),
             ],
             onChanged: (value) {
@@ -98,7 +98,7 @@ class _ResultadoAnalisisSelectorState extends State<ResultadoAnalisisSelector> {
           ),
           const SizedBox(height: 12),
           TextField(
-            controller: _obsController, // ✅ Así se inicializa el texto
+            controller: _obsController, //  Así se inicializa el texto
             maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Observaciones...',

@@ -46,7 +46,6 @@ class RegisterControlIngresoScreen extends StatefulWidget {
 }
 
 /// Estado de la consulta del nombre para un DNI.
-///
 /// No hay estado de error a propósito: si la consulta en línea falla y el
 /// documento tampoco está en el catálogo local, el nombre queda pendiente y el
 /// operador puede escribirlo a mano. Un aviso rojo solo molesta al guardia que
@@ -55,7 +54,6 @@ enum _DniEstado { vacio, consultando, ok, sinNombre }
 
 /// Resultado informativo de la «Planificación de visitas» del portal web para
 /// la placa o para un DNI.
-///
 /// Solo informa: el registro se guarda igual esté o no planificado. Cuando no
 /// se pudo saber (sin datos descargados para esa fecha y sin red, o la
 /// planificación aún no instalada en el servidor) no hay objeto y la pantalla
@@ -105,12 +103,10 @@ class _PlanInfo {
 }
 
 /// Persona de la visita planificada de la placa.
-///
 /// Nace sin marcar: el vigilante confirma la lista real al escanear o teclear
 /// cada DNI —ahí la casilla se marca sola— o tocando la casilla a mano. Las
 /// marcadas viajan como DNIs del registro; las que nadie confirma quedan fuera
 /// y así la planificación se contrasta contra quien realmente llegó.
-///
 /// Marcar a mano no es solo tildar: la persona ingresa, así que se le pone su
 /// renglón en la tabla de los DNIs que ingresan (con el DNI y el nombre que
 /// programó la web). Desmarcarla borra ese renglón. Las dos listas siempre
@@ -141,7 +137,6 @@ class _PersonaPlan {
 }
 
 /// Fila editable de la tabla de DNIs (un renglón por documento).
-///
 /// Guarda el nombre que devuelve la consulta del documento, que puede llegar
 /// por escaneo o por haber escrito los 8 dígitos a mano. Si la consulta no lo
 /// resuelve (sin conexión y el documento tampoco está en el catálogo local), el
@@ -222,7 +217,6 @@ class _VehiculoFila {
 }
 
 /// Vehículo de la visita planificada de la web.
-///
 /// La web programa los vehículos con un interruptor «ingresa / no ingresa a la
 /// granja»; los dos llegan acá y el vigilante confirma cuáles entraron de
 /// verdad. Marcar un vehículo es «ingresó»: su placa baja al bloque de
@@ -363,7 +357,7 @@ class _RegisterControlIngresoScreenState
     });
   }
 
-  /// Premarca la granja de trabajo (menú → Mi granja) con su campaña sugerida.
+  /// Premarca la granja de trabajo (menú Mi granja) con su campaña sugerida.
   void _aplicarGranjaDeTrabajo() {
     final sel = granjaDeTrabajoSeleccion(
       context.read<StorageService>(),
@@ -469,14 +463,11 @@ class _RegisterControlIngresoScreenState
     if (sel.desdeGranja) _actualizarPlanSilencioso();
   }
 
-  // ---------------------------------------------------------------------------
   // Planificación de visitas (solo informativo)
-  //
   // Criterio: visitas activas del portal web con la misma fecha del registro y
   // la misma granja (sin granja elegida se busca en todas). La placa se compara
   // sin guiones ni espacios y el DNI por sus 8 dígitos. Nada de esto valida ni
   // bloquea: si la consulta falla, simplemente no se muestra ningún indicador.
-  // ---------------------------------------------------------------------------
 
   /// Lee la planificación descargada en el equipo.
   void _cargarPlanLocal() {
@@ -519,7 +510,6 @@ class _RegisterControlIngresoScreenState
 
   /// Tirar hacia abajo: vuelve a bajar la planificación y rehace la pantalla con
   /// lo nuevo, sin salir del formulario.
-  ///
   /// Es el mismo dato que trae la nube del menú lateral, pero a pedido: sirve
   /// cuando alguien programa una visita en la web y el de la garita quiere verla
   /// ya. A diferencia de [_actualizarPlanSilencioso] no respeta la ventana de 10
@@ -582,7 +572,6 @@ class _RegisterControlIngresoScreenState
       _vehiculosPlan.where((v) => v.efectivo).length;
 
   /// Ofrece las visitas planificadas del día para elegir una.
-  ///
   /// Es un atajo para la garita, no un paso obligatorio: sin elegir nada el
   /// formulario se llena igual escribiendo o escaneando la placa. Cuando no hay
   /// nada que ofrecer se dice por qué (sin descargar, fecha fuera de la
@@ -627,18 +616,14 @@ class _RegisterControlIngresoScreenState
     _aplicarVisitaPlanificada(_PlanInfo(planificado: true, visita: visita));
   }
 
-  // ---------------------------------------------------------------------------
   // Vehículos planificados y vehículos del formulario
-  //
   // La web programa los vehículos con un interruptor «ingresa / no ingresa» y
   // la app los muestra todos, con su casilla. Tildar un vehículo es «ingresó»:
   // su placa baja al bloque del formulario (donde se guarda, se compara con la
   // planificación y se consulta su situación especial) y destildarlo la quita.
   // Es el mismo trato que tienen las personas planificadas.
-  // ---------------------------------------------------------------------------
 
   /// Rehace la lista de vehículos planificados con los de [visita].
-  ///
   /// Arrancan destildados: el aviso «ingresa / no ingresa» de la web es solo
   /// informativo. Lo que el vigilante ya había marcado se conserva al refrescar.
   void _cargarVehiculosPlan(PlanVisita? visita) {
@@ -862,7 +847,6 @@ class _RegisterControlIngresoScreenState
   }
 
   /// Carga personas y vehículos de la visita en el bloque de planificación.
-  ///
   /// Con [forzar] la lista se rehace también cuando la visita es la misma, pero
   /// conservando lo que el vigilante ya confirmó (a mano o escaneando el DNI):
   /// volver a bajar la planificación no puede desmarcar su trabajo.
@@ -903,7 +887,6 @@ class _RegisterControlIngresoScreenState
         // Lo que la web programó se trae al formulario para que el vigilante
         // confirme en vez de volver a escribirlo. Solo si la visita lo trae y
         // si el campo está vacío: lo que él ya haya elegido no se pisa.
-        //
         // El proceso va en `proceso` en las planificaciones nuevas y en `motivo`
         // en las viejas, donde la lista de proveedores hacía de lista de
         // procesos: se aceptan las dos.
@@ -954,14 +937,11 @@ class _RegisterControlIngresoScreenState
     }
   }
 
-  // ---------------------------------------------------------------------------
   // Confirmación de la lista planificada
-  //
   // La idea es contrastar la visita planificada con la real: la casilla de una
   // persona se marca cuando su DNI aparece en la tabla (escaneado o escrito
   // completo) o cuando el vigilante la toca a mano. Nada de esto bloquea el
   // registro: los DNI que no estaban planificados siguen entrando igual.
-  // ---------------------------------------------------------------------------
 
   /// Confirma la casilla de las personas planificadas cuyo DNI ya está completo
   /// en la tabla.
@@ -1014,7 +994,6 @@ class _RegisterControlIngresoScreenState
   }
 
   /// El vigilante confirma o descarta a mano a una persona planificada.
-  ///
   /// Las dos listas dicen lo mismo: marcar es «ingresó», así que la persona
   /// pasa a la tabla de los DNIs que ingresan —se enlaza el renglón que ya
   /// tuviera o se crea uno— y desmarcar es «no ingresó», así que ese renglón se
@@ -1120,7 +1099,6 @@ class _RegisterControlIngresoScreenState
   }
 
   /// Tras cambiar granja, fecha o lo descargado: se vuelve a evaluar todo.
-  ///
   /// [forzar] llega del tirón de refresco: rehace la lista de personas
   /// planificadas aunque la visita descargada sea la misma de antes.
   void _refrescarPlanificacion({bool forzar = false}) {
@@ -1153,16 +1131,12 @@ class _RegisterControlIngresoScreenState
     _consultarEstatusSanitario();
   }
 
-  // ---------------------------------------------------------------------------
   // Estatus sanitario por granja (solo informativo)
-  //
   // Mientras una granja esté en sospecha o confirmado, quien haya ingresado a
   // ella lleva la etiqueta de situación especial al entrar a otra. La consulta
   // es puntual y silenciosa: si falla, no hay etiqueta y el registro sigue.
-  // ---------------------------------------------------------------------------
 
   /// Consulta el estatus de la granja y de los DNIs escritos en la tabla.
-  ///
   /// Con una pausa corta: al agregar varios DNI seguidos (o al refrescar) se
   /// consulta una sola vez con la lista completa.
   void _consultarEstatusSanitario() {
@@ -1319,7 +1293,6 @@ class _RegisterControlIngresoScreenState
   }
 
   /// Consulta el nombre del documento de una fila.
-  ///
   /// El token de la API vive en el servidor, así que la app solo manda los 8
   /// dígitos. Primero se intenta en línea; si eso falla (sin red, red lenta o
   /// error desconocido) se cae al catálogo local de usuarios, donde `libtri`
@@ -1712,8 +1685,8 @@ class _RegisterControlIngresoScreenState
     );
   }
 
-  /// Celda «Nombre» con el aviso de planificación debajo («✔ Planificado» o
-  /// «⚠ No planificado») y la etiqueta de situación especial cuando el DNI
+  /// Celda «Nombre» con el aviso de planificación debajo (« Planificado» o
+  /// « No planificado») y la etiqueta de situación especial cuando el DNI
   /// viene de una granja en sospecha o confirmado. Cuando se escribe el nombre
   /// a mano, los avisos quedan solo como ícono junto al DNI para no apretar la fila.
   Widget _conAvisoPlan(_DniFila fila, Widget celda) {
@@ -2196,7 +2169,6 @@ class _BotonEscanear extends StatelessWidget {
 }
 
 /// Celda «Nombre»: muestra el estado de la consulta del documento.
-///
 /// Verde con el nombre cuando lo resolvió la consulta en línea; en celeste y con
 /// otro ícono cuando salió del catálogo local de usuarios (la segunda barrera,
 /// sin conexión). Mientras consulta muestra un indicador. Si ningún camino lo
@@ -2289,7 +2261,6 @@ class _EstadoNombre extends StatelessWidget {
 }
 
 /// Campo para escribir el nombre a mano cuando la consulta no lo resolvió.
-///
 /// Se dibuja con una línea inferior para que se lea como algo editable y no como
 /// el texto gris de antes: el operador tiene que ver que ahí se escribe. El botón
 /// de refresco conserva el reintento de la consulta por si la conexión vuelve; si
@@ -2348,7 +2319,6 @@ class _NombreManual extends StatelessWidget {
 
 /// Hoja «Planificadas de hoy»: una tarjeta por visita con lo programado en la
 /// web (placa, granja, campaña, área o proveedor y motivo) y la tabla de DNIs.
-///
 /// Antes era una lista de una sola línea («AHX-742 · 3 personas») y el
 /// vigilante elegía a ciegas: dos visitas del mismo día se veían casi iguales y
 /// los DNIs no aparecían hasta después de cargar la visita. Devuelve la visita
@@ -2576,7 +2546,6 @@ class _DatoInline extends StatelessWidget {
 }
 
 /// Tabla de los DNIs de una visita planificada (documento y nombre).
-///
 /// Una visita puede traer muchos DNIs y la hoja «Planificadas de hoy» se haría
 /// larguísima: se ven los primeros y un «Ver más» abre el resto.
 class _TablaDnisVisita extends StatefulWidget {
@@ -2709,15 +2678,12 @@ class _TablaDnisVisitaState extends State<_TablaDnisVisita> {
 }
 
 /// Atajo a las visitas planificadas del día.
-///
 /// Aparece cuando ya hay granja elegida: la planificación que se ofrece es la
 /// de esa granja, así que mostrarlo antes era ofrecer la lista de todas.
-///
 /// Todo el estado va en el paréntesis del propio botón —cuántas visitas hay, o
 /// que falta descargar— en lugar de un segundo renglón de aviso: era el mismo
 /// dato repetido en dos o tres mensajes distintos debajo del atajo, y el
 /// vigilante tenía que juntarlos para saber qué hacer.
-///
 /// Solo informa: el ingreso se registra igual sin usar el atajo.
 class _PlanDelDiaAtajo extends StatelessWidget {
   const _PlanDelDiaAtajo({
@@ -2739,7 +2705,6 @@ class _PlanDelDiaAtajo extends StatelessWidget {
   final VoidCallback onTap;
 
   /// Ícono y texto que acompañan al atajo.
-  ///
   /// Sin descarga, o con la fecha fuera de lo descargado, no se puede afirmar
   /// cuántas visitas hay: en ese caso el paréntesis dice qué falta hacer, en
   /// vez de mostrar un «(0)» que parecería «no hay ninguna». Con la descarga al
@@ -2797,7 +2762,6 @@ class _PlanDelDiaAtajo extends StatelessWidget {
 }
 
 /// Etiqueta de «situación especial» de un DNI.
-///
 /// Se enciende cuando la persona ingresó recientemente a una granja que hoy
 /// está en sospecha (ámbar) o confirmado (rojo). Solo alerta: el registro de
 /// ingreso se guarda igual. Al tocarla aparece de qué granja viene y hasta
@@ -3092,8 +3056,7 @@ class _EstatusGranjaCard extends StatelessWidget {
 }
 
 /// Indicador informativo de la «Planificación de visitas».
-///
-/// Pequeño y corto: «✔ Vehículo planificado» en verde o «⚠ Vehículo no
+/// Pequeño y corto: « Vehículo planificado» en verde o « Vehículo no
 /// planificado» en ámbar (en la fila del DNI, «Planificado» / «No
 /// planificado»). Con [compacto] se muestra solo el ícono. Al tocarlo aparece
 /// el detalle (fecha, granja). Nunca bloquea nada.
@@ -3172,13 +3135,11 @@ class _AvisoPlan extends StatelessWidget {
 }
 
 /// Tarjeta de la visita planificada que coincide con la placa.
-///
 /// Solo los datos de lo programado en la web —placa, granja, campaña, área o
 /// proveedor y motivo—. La lista de personas planificadas no va acá: tiene su
 /// propia sección junto a la tabla de DNIs (ver `Planificados`), porque son dos
 /// flujos distintos —comprobar lo programado y registrar quién entra— y
 /// mezclados en la misma tarjeta se confundían.
-///
 /// Cuando la visita se eligió en la hoja «Planificadas de hoy» la tarjeta no se
 /// dibuja: los datos ya se leyeron completos ahí y el formulario solo se
 /// autocompleta.
@@ -3281,7 +3242,6 @@ class _VisitaPlanCard extends StatelessWidget {
 }
 
 /// Lista de vehículos de la visita planificada: una casilla por vehículo.
-///
 /// Los muestra todos —también los que la web marcó «no ingresa a la granja»—
 /// para poder contrastar lo programado con lo que realmente entró. La casilla se
 /// marca sola cuando la placa aparece en el formulario (la bajó la planificación
@@ -3388,7 +3348,6 @@ class _FilaVehiculoPlan extends StatelessWidget {
 }
 
 /// Lista de personas de la visita planificada: una casilla por persona.
-///
 /// La casilla se marca sola cuando el DNI de esa persona aparece en la tabla
 /// (escaneado o escrito completo) y también se puede marcar a mano. Sirve para
 /// contrastar la visita planificada con quien realmente llegó.
@@ -3507,4 +3466,3 @@ class _FilaPlanificada extends StatelessWidget {
     );
   }
 }
-

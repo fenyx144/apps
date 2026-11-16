@@ -5,14 +5,14 @@ public class dbEstructura {
 
     /*<!-- TODO: TABLAS UTILIZADAS EN EL LOGIN -->*/
 
-    //todo:Variables de TABLA CLV
+    // TODO:Variables de TABLA CLV
     public static final String TABLA_CLV="t_clv";
     public static final String Campo_uCodClv="c_codigo";
     public static final String Campo_uNomClv="c_nombre";
 
     public static final String CREATE_TABLA_CLV="CREATE TABLE "+TABLA_CLV+
             " ("+Campo_uCodClv+" TEXT,"+Campo_uNomClv+" TEXT)";
-    //todo:Variables de TABLA ANDROID
+    // TODO:Variables de TABLA ANDROID
     public static final String t_android = "t_android";
     public static final String c_aCodigo = "c_codigo";
     public static final String c_aSerie = "c_serie";
@@ -22,9 +22,7 @@ public class dbEstructura {
     public static final String CREATE_TABLA_ANDROID = "CREATE TABLE " + t_android +
             " (" + c_aCodigo + " TEXT," + c_aSerie + " TEXT," + c_aFecha + " TEXT," + c_aEstado + " TEXT)";
 
-
-
-    //todo:Variables de TABLA USUARIOS
+    // TODO:Variables de TABLA USUARIOS
     public static final String t_usuarios = "t_usuarios";
     public static final String c_uCodigo = "c_codigo";
     public static final String c_uNombre = "c_nombre";
@@ -37,8 +35,8 @@ public class dbEstructura {
 
     /*<!-- TODO: Variables de TABLA TCENCOS  -->*/
     public static final String t_TCencos = "t_tcencos";
-    public static final String c_tcCodigo = "c_codigo";//0
-    public static final String c_tcNombre = "c_nombre";//1
+    public static final String c_tcCodigo = "c_codigo"; // 0
+    public static final String c_tcNombre = "c_nombre"; // 1
 
     public static final String Create_t_TCencos = "CREATE TABLE " + t_TCencos +
             " (" + c_tcCodigo + " TEXT," + c_tcNombre + " TEXT)";
@@ -91,7 +89,6 @@ public class dbEstructura {
 
     public static final String Create_t_CcosGalpon = "CREATE TABLE "+t_CencosGalpon +
             " ("+c_cgCodigo+" TEXT,"+c_cgGalpon+" TEXT)";
-
 
     /*<!-- TODO: TABLAS UTILIZADAS EN EL REGISTRO DE DATOS -->*/
     /*<!-- TODO: VARIABLES DE TABLA RGARITA -->*/

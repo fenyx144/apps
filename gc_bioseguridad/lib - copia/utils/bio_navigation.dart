@@ -11,13 +11,11 @@ import '../screens/register_garita_screen.dart';
 import 'constants.dart';
 
 /// Navegación entre las secciones de registro.
-///
 /// Vive aquí y no en el drawer porque el propio drawer, el resumen y los
 /// reportes navegan a las mismas pantallas: así el nombre de ruta y el widget de
 /// cada sección se definen una sola vez.
 abstract final class BioNavigation {
   /// Nombres de ruta explícitos de cada sección.
-  ///
   /// Ojo con GetX: `off`/`to` deduplican por nombre de ruta y ese nombre sale
   /// del `runtimeType` del closure (`_cleanRouteName` quita el prefijo
   /// "() => "). Al pasar una variable `Widget` los casos comparten el nombre
@@ -81,7 +79,6 @@ abstract final class BioNavigation {
   }
 
   /// Navega a una sección reemplazando la pantalla actual.
-  ///
   /// Se usa `Get.off` con `routeName` explícito y `preventDuplicates: false`
   /// para poder volver a la misma sección (que la deja como estaba).
   static void ir(String seccion, {String? tipo}) {

@@ -25,7 +25,6 @@ class PlanPersona {
 }
 
 /// Vehículo programado en una visita: la placa y si ingresa a la granja.
-///
 /// El switch «Ingresa» lo marca el proveedor al planificar en la web; la app lo
 /// muestra en el control de ingreso. En planificaciones viejas —o cuando el
 /// servidor no mandó el detalle— la placa sola viaja como un vehículo que
@@ -101,7 +100,6 @@ class PlanVisita {
   /// El área o el proveedor elegido en la planificación, sin el tipo: la opción
   /// de la lista («Retiro de guano») o lo escrito a mano cuando se eligió
   /// «Otro».
-  ///
   /// Se llama así y no `motivo` porque en la base la columna es `motivo` (igual
   /// que en el control de ingreso, que guarda ahí el área o el proveedor) y el
   /// motivo de la visita —el que se escribe— es [observacion]. Viéndolos juntos
@@ -287,7 +285,6 @@ class PlanVisita {
 }
 
 /// Resultado de buscar una placa o un DNI en la planificación.
-///
 /// [visita] es la coincidencia en la granja del registro; [otraGranja], la
 /// visita de ese mismo día en otra granja cuando aquí no hay ninguna.
 class PlanCoincidencia {
@@ -301,7 +298,6 @@ class PlanCoincidencia {
 
 /// Planificación descargada en el equipo (misma técnica que los catálogos:
 /// JSON en SharedPreferences vía [StorageService]).
-///
 /// Criterio de coincidencia (igual al del servidor): visitas activas con la
 /// misma fecha del registro y la misma granja (sin granja elegida se busca en
 /// todas). La placa se compara sin guiones ni espacios; el DNI, por sus dígitos.
@@ -319,7 +315,6 @@ class PlanDescarga {
   final List<PlanVisita> visitas;
 
   /// ¿El servidor guarda y devuelve el área o proveedor de la visita?
-  ///
   /// Es `false` cuando la base todavía no tiene las columnas `areaproveedor` y
   /// `motivo` (migración pendiente): la visita llega sin ese dato y la app no
   /// puede distinguirlo de una visita sin área registrada. Se conserva para
@@ -411,7 +406,6 @@ class PlanDescarga {
   }
 
   /// Visitas de un día, para ofrecérselas a quien está en la garita.
-  ///
   /// Con [granja] vacía se devuelven las de todas las granjas: es el caso de
   /// quien todavía no eligió granja. Se conserva el orden en que llegaron del
   /// servidor, que es el de la visita. [excluir] deja fuera las que ya se

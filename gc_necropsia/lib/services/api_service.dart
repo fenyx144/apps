@@ -227,7 +227,7 @@ class ApiService {
 
       // Crear request multipart
       final request = http.MultipartRequest('POST', url);
-      
+
       // Agregar headers de autorización
       request.headers.addAll({
         'Authorization': 'Bearer ${AppConstants.apiToken}',
@@ -235,28 +235,28 @@ class ApiService {
 
       // Separar evidencias de cada necropsia para enviarlas como archivos
       final necropsiasSinEvidencias = <Map<String, dynamic>>[];
-      
+
       for (var necropsia in necropsias) {
         final necropsiaSinEvidencias = Map<String, dynamic>.from(necropsia);
         final evidenciasCompletas = necropsia['evidencias_completas'] as Map<String, dynamic>? ?? {};
-        
+
         // Extraer evidencias para enviarlas como archivos
         necropsiaSinEvidencias.remove('evidencias');
         necropsiaSinEvidencias.remove('evidencias_completas');
-        
+
         // Agregar información de evidencias como metadata (nivel + cantidad)
         final evidenciasMetadata = <String, Map<String, String>>{};
-        
+
         // Procesar evidencias por nivel (puede haber múltiples imágenes por nivel)
         // CRÍTICO: Usar bucle for normal con await en lugar de Future.forEach
         // para asegurar que todas las imágenes se procesen secuencialmente
         debugPrint('📸 uploadNecropsiasMovil - Procesando ${evidenciasCompletas.length} niveles de evidencias');
         int totalImagenesProcesadas = 0;
-        
+
         for (var entry in evidenciasCompletas.entries) {
           final nivelKey = entry.key; // ej: "INMUNOLOGICO_INDICE BURSAL"
           final imagenesListRaw = entry.value;
-          
+
           // CRÍTICO: Asegurar que imagenesList sea una List, convertir si es necesario
           List<dynamic> imagenesList = [];
           if (imagenesListRaw is List) {
@@ -265,27 +265,27 @@ class ApiService {
             debugPrint('⚠️ imagenesList no es List, tipo: ${imagenesListRaw.runtimeType}, convirtiendo...');
             imagenesList = [imagenesListRaw];
           }
-          
+
           debugPrint('   📸 Procesando nivel $nivelKey con ${imagenesList.length} imágenes');
-          
+
           if (imagenesList.isNotEmpty) {
             final primeraImagen = imagenesList[0] as Map<String, dynamic>? ?? {};
             final sistema = primeraImagen['sistema'] ?? '';
             final nivel = primeraImagen['nivel'] ?? '';
-            
+
             // IMPORTANTE: Normalizar nivelKey para que coincida con la clave del archivo
             // Reemplazar espacios y caracteres especiales con guiones bajos
             final normalizedKey = nivelKey.replaceAll(' ', '_').replaceAll('/', '_').replaceAll('\\', '_');
-            
+
             evidenciasMetadata[normalizedKey] = {
               'sistema': sistema,
               'nivel': nivel,
               'cantidad': imagenesList.length.toString(),
               'original_key': nivelKey, // Guardar la clave original para referencia
             };
-            
+
             debugPrint('DEBUG - nivelKey original: $nivelKey, normalized: $normalizedKey');
-            
+
             // Agregar cada imagen del nivel al request (con compresión)
             // IMPORTANTE: Usar índice local (0, 1, 2) para cada nivel, no global
             // IMPORTANTE: Usar normalizedKey para construir la clave del archivo (ya está declarado arriba)
@@ -299,12 +299,12 @@ class ApiService {
                     if (originalFile.existsSync()) {
                       final originalSize = await originalFile.length();
                       debugPrint('📷 Imagen original [$normalizedKey][$localIndex]: ${(originalSize / 1024 / 1024).toStringAsFixed(2)} MB');
-                      
+
                       if (originalSize > 0) {
                         // Comprimir imagen antes de enviar
                         File? compressedFile;
                         String? compressedPath;
-                        
+
                         try {
                           final tempDir = await getTemporaryDirectory();
                           final extension = path.extension(imagePath).toLowerCase();
@@ -316,7 +316,7 @@ class ApiService {
                           final fileName =
                               'compressed_${DateTime.now().millisecondsSinceEpoch}_${normalizedKey}_$localIndex$outExt';
                           compressedPath = path.join(tempDir.path, fileName);
-                          
+
                           // Compresión adaptativa para no reventar límites del backend (p.ej. 8MB por request).
                           final int maxDim = originalSize > 2 * 1024 * 1024 ? 1024 : 1280;
                           final int quality = originalSize > 2 * 1024 * 1024 ? 60 : 70;
@@ -328,26 +328,26 @@ class ApiService {
                             quality: quality,
                             format: CompressFormat.jpeg,
                           );
-                          
+
                           if (compressedData != null && compressedData.isNotEmpty) {
                             compressedFile = File(compressedPath);
                             await compressedFile.writeAsBytes(compressedData);
-                            
+
                             // CRÍTICO: Verificar que el archivo se haya escrito correctamente
                             if (!compressedFile.existsSync()) {
                               debugPrint('✗ Error: El archivo comprimido no existe después de escribirlo: $compressedPath');
                               continue;
                             }
-                            
+
                             final compressedSize = await compressedFile.length();
                             if (compressedSize == 0) {
                               debugPrint('✗ Error: El archivo comprimido está vacío: $compressedPath');
                               continue;
                             }
-                            
+
                             final compressionRatio = ((1 - compressedSize / originalSize) * 100).toStringAsFixed(1);
                             debugPrint('✓ Imagen comprimida [$normalizedKey][$localIndex]: ${(compressedSize / 1024 / 1024).toStringAsFixed(2)} MB (${compressionRatio}% reducción)');
-                            
+
                             // Crear nombre único para el archivo
                             final granja = necropsia['granja'] ?? '';
                             final galpon = necropsia['galpon'] ?? '';
@@ -355,26 +355,26 @@ class ApiService {
                             final fectra = (necropsia['fectra'] as String? ?? '').replaceAll('-', '');
                             final sistemaLower = sistema.toLowerCase();
                             final nivelLower = nivel.toLowerCase().replaceAll(' ', '_').replaceAll('/', '_');
-                            
+
                             final finalExtension = 'jpg';
                             final finalFileName = '${granja}_${galpon}_${numreg}_${fectra}_${sistemaLower}_${nivelLower}_$localIndex.$finalExtension';
-                            
+
                             // IMPORTANTE: Usar normalizedKey que ya fue declarado arriba
                             final fileKey = 'evidencia_${normalizedKey}_$localIndex';
-                            
+
                             try {
                               // CRÍTICO: Verificar que el archivo existe y tiene contenido antes de agregarlo
                               if (!compressedFile.existsSync()) {
                                 debugPrint('✗ Error: El archivo comprimido no existe: ${compressedFile.path}');
                                 continue;
                               }
-                              
+
                               final fileSize = await compressedFile.length();
                               if (fileSize == 0) {
                                 debugPrint('✗ Error: El archivo comprimido está vacío: ${compressedFile.path}');
                                 continue;
                               }
-                              
+
                               // IMPORTANTE: Usar fromPath para que el archivo se lea cuando se envíe el request
                               // Esto asegura que el Content-Type se establezca correctamente
                               final multipartFile = await http.MultipartFile.fromPath(
@@ -385,7 +385,7 @@ class ApiService {
                               request.files.add(multipartFile);
                               totalImagenesProcesadas++;
                               debugPrint('✓ Imagen agregada al request: $finalFileName (key: $fileKey, path: ${compressedFile.path}, size: $fileSize bytes) [Total: $totalImagenesProcesadas]');
-                              
+
                               // NO eliminar el archivo temporal aquí - se eliminará después de enviar el request
                             } catch (e) {
                               debugPrint('✗ Error al crear MultipartFile: $e');
@@ -436,40 +436,40 @@ class ApiService {
                           if (originalSize > 5 * 1024 * 1024) { // 5MB
                             debugPrint('⚠ ADVERTENCIA: Imagen muy grande sin comprimir (${(originalSize / 1024 / 1024).toStringAsFixed(2)} MB)');
                           }
-                          
+
                           // Intentar enviar original si es pequeña
                           final originalFileCheck = File(imagePath);
                           if (!originalFileCheck.existsSync()) {
                             debugPrint('✗ Error: El archivo original no existe: $imagePath');
                             continue;
                           }
-                          
+
                           final granja = necropsia['granja'] ?? '';
                           final galpon = necropsia['galpon'] ?? '';
                           final numreg = necropsia['numreg'] ?? '';
                           final fectra = (necropsia['fectra'] as String? ?? '').replaceAll('-', '');
                           final sistemaLower = sistema.toLowerCase();
                           final nivelLower = nivel.toLowerCase().replaceAll(' ', '_').replaceAll('/', '_');
-                          
+
                           final fileName = '${granja}_${galpon}_${numreg}_${fectra}_${sistemaLower}_${nivelLower}_$localIndex.jpg';
-                          
-                          // IMPORTANTE: Usar normalizedKey que ya fue declarado arriba
+
+                            // IMPORTANTE: Usar normalizedKey que ya fue declarado arriba
                           final fileKey = 'evidencia_${normalizedKey}_$localIndex';
-                          
+
                           try {
                             // CRÍTICO: Verificar que el archivo existe y tiene contenido
                             if (!originalFileCheck.existsSync()) {
                               debugPrint('✗ Error: El archivo original no existe: $imagePath');
                               continue;
                             }
-                            
+
                             final fileSize = await originalFileCheck.length();
                             if (fileSize == 0) {
                               debugPrint('✗ Error: El archivo original está vacío: $imagePath');
                               continue;
                             }
-                            
-                            // IMPORTANTE: Usar fromPath para que el archivo se lea cuando se envíe el request
+
+                              // IMPORTANTE: Usar fromPath para que el archivo se lea cuando se envíe el request
                           final multipartFile = await http.MultipartFile.fromPath(
                               fileKey,
                               imagePath,
@@ -497,10 +497,10 @@ class ApiService {
             }
           }
         }
-        
+
         debugPrint('📸 uploadNecropsiasMovil - Total imágenes procesadas para esta necropsia: $totalImagenesProcesadas');
         debugPrint('📸 uploadNecropsiasMovil - Total archivos en request hasta ahora: ${request.files.length}');
-        
+
         // Agregar metadata de evidencias al JSON
         if (evidenciasMetadata.isNotEmpty) {
           necropsiaSinEvidencias['evidencias_metadata'] = evidenciasMetadata;
@@ -511,7 +511,7 @@ class ApiService {
         } else {
           debugPrint('⚠️ evidencias_metadata está vacío para esta necropsia');
         }
-        
+
         necropsiasSinEvidencias.add(necropsiaSinEvidencias);
       }
 
@@ -519,7 +519,7 @@ class ApiService {
       final dataJson = jsonEncode({'necropcias': necropsiasSinEvidencias});
       final jsonSize = dataJson.length;
       request.fields['data'] = dataJson;
-      
+
       // Log de verificación: verificar que las claves de archivos coincidan con evidencias_metadata
       debugPrint('🔍 Verificación de coincidencia de claves:');
       for (var necropsia in necropsiasSinEvidencias) {
@@ -527,7 +527,7 @@ class ApiService {
         evidenciasMetadata.forEach((metadataKey, metadataValue) {
           final cantidad = int.tryParse(metadataValue['cantidad']?.toString() ?? '0') ?? 0;
           debugPrint('   📋 Metadata key: $metadataKey, cantidad: $cantidad');
-          
+
           // Verificar que existan archivos con esta clave
           for (int i = 0; i < cantidad; i++) {
             final expectedFileKey = 'evidencia_${metadataKey}_$i';
@@ -546,13 +546,13 @@ class ApiService {
           }
         });
       }
-      
+
       // Calcular tamaño real de archivos leyendo desde disco
-      // Nota: Los archivos comprimidos están en tempDir y aún no se han eliminado
+      // NOTA: Los archivos comprimidos están en tempDir y aún no se han eliminado
       int totalFilesSize = 0;
       final tempDir = await getTemporaryDirectory();
       final tempDirFiles = Directory(tempDir.path);
-      
+
       // Buscar archivos comprimidos en el directorio temporal
       if (tempDirFiles.existsSync()) {
         final files = tempDirFiles.listSync(recursive: false);
@@ -568,26 +568,26 @@ class ApiService {
           }
         }
       }
-      
+
       // Si no se encontraron archivos o el cálculo es 0, usar estimación conservadora
       if (totalFilesSize == 0 && request.files.isNotEmpty) {
         // Usar estimación de 6MB por archivo comprimido (más conservadora)
         totalFilesSize = request.files.length * 6 * 1024 * 1024;
         debugPrint('⚠ No se pudieron calcular tamaños reales, usando estimación: 6MB por archivo');
       }
-      
+
       final totalEstimatedSize = jsonSize + totalFilesSize;
       debugPrint('📦 Tamaño del JSON: ${(jsonSize / 1024 / 1024).toStringAsFixed(2)} MB');
       debugPrint('📦 Tamaño real de archivos: ${(totalFilesSize / 1024 / 1024).toStringAsFixed(2)} MB');
       debugPrint('📦 Tamaño total estimado: ${(totalEstimatedSize / 1024 / 1024).toStringAsFixed(2)} MB');
       debugPrint('📦 Número de archivos agregados al request: ${request.files.length}');
-      
+
       // Log detallado de cada archivo agregado
       for (int i = 0; i < request.files.length; i++) {
         final file = request.files[i];
         debugPrint('   📎 Archivo #${i + 1}: field=${file.field}, filename=${file.filename}');
       }
-      
+
       // Límite de seguridad: 45MB (dejando margen al límite de 50MB del servidor)
       const maxSizeBytes = 45 * 1024 * 1024; // 45MB
       if (totalEstimatedSize > maxSizeBytes) {
@@ -609,12 +609,12 @@ class ApiService {
           }
         }
       }
-      
+
       // Enviar request
       debugPrint('📤 Enviando request multipart con ${request.files.length} archivos...');
       final streamedResponse = await request.send().timeout(const Duration(seconds: 180));
       final response = await http.Response.fromStream(streamedResponse);
-      
+
       // Limpiar archivos temporales después de enviar
       for (var file in tempFilesToDelete) {
         try {
@@ -626,7 +626,7 @@ class ApiService {
           debugPrint('⚠️ Error al eliminar archivo temporal ${file.path}: $e');
         }
       }
-      
+
       debugPrint('Response status: ${response.statusCode}');
       debugPrint('Response body: ${response.body}');
 
@@ -637,7 +637,7 @@ class ApiService {
           'message': 'Respuesta vacía del servidor',
         };
       }
-      
+
       // Intentar decodificar JSON
       Map<String, dynamic> responseData;
       try {
@@ -689,7 +689,7 @@ class ApiService {
 
       // Crear request multipart
       final request = http.MultipartRequest('POST', url);
-      
+
       // Agregar headers de autorización
       request.headers.addAll({
         'Authorization': 'Bearer ${AppConstants.apiToken}',
@@ -697,11 +697,11 @@ class ApiService {
 
       // Separar evidencias de cada necropsia para enviarlas como archivos
       final necropsiasSinEvidencias = <Map<String, dynamic>>[];
-      
+
       for (var necropsia in necropsias) {
         final necropsiaSinEvidencias = Map<String, dynamic>.from(necropsia);
         final evidenciasCompletas = necropsia['evidencias_completas'] as Map<String, dynamic>? ?? {};
-        
+
         debugPrint('📸 updateNecropsiasMovil - Procesando necropsia:');
         debugPrint('   - tuuid: ${necropsia['tuuid']}');
         debugPrint('   - evidencias_completas presente: ${evidenciasCompletas.isNotEmpty}');
@@ -712,21 +712,21 @@ class ApiService {
             debugPrint('     - $key: ${imagenes.length} imágenes');
           });
         }
-        
+
         // Extraer evidencias para enviarlas como archivos
         necropsiaSinEvidencias.remove('evidencias');
         necropsiaSinEvidencias.remove('evidencias_completas');
-        
+
         // Agregar información de evidencias como metadata (nivel + cantidad)
         final evidenciasMetadata = <String, Map<String, String>>{};
-        
+
         // Procesar evidencias por nivel (mismo código que uploadNecropsiasMovil)
         // CRÍTICO: Usar bucle for normal con await en lugar de Future.forEach
         // para asegurar que todas las imágenes se procesen secuencialmente
         for (var entry in evidenciasCompletas.entries) {
           final nivelKey = entry.key;
           final imagenesListRaw = entry.value;
-          
+
           // CRÍTICO: Asegurar que imagenesList sea una List, convertir si es necesario
           List<dynamic> imagenesList = [];
           if (imagenesListRaw is List) {
@@ -735,23 +735,23 @@ class ApiService {
             debugPrint('⚠️ imagenesList no es List, tipo: ${imagenesListRaw.runtimeType}, convirtiendo...');
             imagenesList = [imagenesListRaw];
           }
-          
+
           debugPrint('   📸 Procesando nivel $nivelKey con ${imagenesList.length} imágenes');
-          
+
           if (imagenesList.isNotEmpty) {
             final primeraImagen = imagenesList[0] as Map<String, dynamic>? ?? {};
             final sistema = primeraImagen['sistema'] ?? '';
             final nivel = primeraImagen['nivel'] ?? '';
-            
+
             final normalizedKey = nivelKey.replaceAll(' ', '_').replaceAll('/', '_').replaceAll('\\', '_');
-            
+
             evidenciasMetadata[normalizedKey] = {
               'sistema': sistema,
               'nivel': nivel,
               'cantidad': imagenesList.length.toString(),
               'original_key': nivelKey,
             };
-            
+
             // Agregar cada imagen del nivel al request (con compresión)
             for (int localIndex = 0; localIndex < imagenesList.length; localIndex++) {
               final imagenData = imagenesList[localIndex];
@@ -762,18 +762,18 @@ class ApiService {
                     final originalFile = File(imagePath);
                     if (originalFile.existsSync()) {
                       final originalSize = await originalFile.length();
-                      
+
                       if (originalSize > 0) {
                         File? compressedFile;
                         String? compressedPath;
-                        
+
                         try {
                           final tempDir = await getTemporaryDirectory();
                           // Igual que en upload: convertir a JPG para reducir tamaño total y evitar límites del backend (p.ej. 8MB).
                           final fileName =
                               'compressed_${DateTime.now().millisecondsSinceEpoch}_${normalizedKey}_$localIndex.jpg';
                           compressedPath = path.join(tempDir.path, fileName);
-                          
+
                           // Compresión adaptativa para no reventar límites del backend (p.ej. 8MB por request).
                           final int maxDim = originalSize > 2 * 1024 * 1024 ? 1024 : 1280;
                           final int quality = originalSize > 2 * 1024 * 1024 ? 60 : 70;
@@ -785,35 +785,35 @@ class ApiService {
                             quality: quality,
                             format: CompressFormat.jpeg,
                           );
-                          
+
                           if (compressedData != null && compressedData.isNotEmpty) {
                             compressedFile = File(compressedPath);
                             await compressedFile.writeAsBytes(compressedData);
-                            
+
                             // CRÍTICO: Verificar que el archivo se haya escrito correctamente
                             if (!compressedFile.existsSync()) {
                               debugPrint('✗ Error: El archivo comprimido no existe después de escribirlo: $compressedPath');
                               continue;
                             }
-                            
+
                             final compressedSize = await compressedFile.length();
                             if (compressedSize == 0) {
                               debugPrint('✗ Error: El archivo comprimido está vacío: $compressedPath');
                               continue;
                             }
-                            
+
                             final granja = necropsia['granja'] ?? '';
                             final galpon = necropsia['galpon'] ?? '';
                             final numreg = necropsia['numreg'] ?? '';
                             final fectra = (necropsia['fectra'] as String? ?? '').replaceAll('-', '');
                             final sistemaLower = sistema.toLowerCase();
                             final nivelLower = nivel.toLowerCase().replaceAll(' ', '_').replaceAll('/', '_');
-                            
+
                             final finalExtension = 'jpg';
                             final finalFileName = '${granja}_${galpon}_${numreg}_${fectra}_${sistemaLower}_${nivelLower}_$localIndex.$finalExtension';
-                            
+
                             final fileKey = 'evidencia_${normalizedKey}_$localIndex';
-                            
+
                             try {
                               final multipartFile = await http.MultipartFile.fromPath(
                                 fileKey,
@@ -822,7 +822,7 @@ class ApiService {
                               );
                               request.files.add(multipartFile);
                               debugPrint('✓ Imagen agregada al request (update): $finalFileName (key: $fileKey, size: ${compressedSize} bytes)');
-                              
+
                               // Limpiar archivo temporal después de un delay
                               Future.delayed(const Duration(seconds: 30), () {
                                 try {
@@ -884,19 +884,19 @@ class ApiService {
                               debugPrint('✗ Error: El archivo original no existe: $imagePath');
                               continue;
                             }
-                            
+
                             final granja = necropsia['granja'] ?? '';
                             final galpon = necropsia['galpon'] ?? '';
                             final numreg = necropsia['numreg'] ?? '';
                             final fectra = (necropsia['fectra'] as String? ?? '').replaceAll('-', '');
                             final sistemaLower = sistema.toLowerCase();
                             final nivelLower = nivel.toLowerCase().replaceAll(' ', '_').replaceAll('/', '_');
-                            
+
                             final extension = imagePath.split('.').last.toLowerCase();
                             final fileName = '${granja}_${galpon}_${numreg}_${fectra}_${sistemaLower}_${nivelLower}_$localIndex.$extension';
-                            
+
                             final fileKey = 'evidencia_${normalizedKey}_$localIndex';
-                              
+
                             try {
                               // CRÍTICO: Leer el archivo en bytes ANTES de crear el MultipartFile
                               final fileBytes = await originalFileCheck.readAsBytes();
@@ -904,7 +904,7 @@ class ApiService {
                                 debugPrint('✗ Error: El archivo original está vacío al leerlo: $imagePath');
                                 continue;
                               }
-                              
+
                               // Crear MultipartFile desde bytes en lugar de fromPath
                               final multipartFile = http.MultipartFile.fromBytes(
                                 fileKey,
@@ -928,21 +928,21 @@ class ApiService {
             }
           }
         }
-        
+
         // Agregar metadata de evidencias al JSON
         if (evidenciasMetadata.isNotEmpty) {
           necropsiaSinEvidencias['evidencias_metadata'] = evidenciasMetadata;
         }
-        
+
         necropsiasSinEvidencias.add(necropsiaSinEvidencias);
       }
 
       // Agregar datos JSON al request
       final dataJson = jsonEncode({'necropcias': necropsiasSinEvidencias});
       request.fields['data'] = dataJson;
-      
+
       debugPrint('📦 updateNecropsiasMovil - Número de archivos agregados al request: ${request.files.length}');
-      
+
       // Log detallado de cada archivo agregado
       for (int i = 0; i < request.files.length; i++) {
         final file = request.files[i];
@@ -952,7 +952,7 @@ class ApiService {
       // Enviar request
       final streamedResponse = await request.send().timeout(const Duration(seconds: 180));
       final response = await http.Response.fromStream(streamedResponse);
-      
+
       debugPrint('Response status (update): ${response.statusCode}');
       debugPrint('Response body (update): ${response.body}');
 
@@ -962,7 +962,7 @@ class ApiService {
           'message': 'Respuesta vacía del servidor',
         };
       }
-      
+
       Map<String, dynamic> responseData;
       try {
         responseData = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1088,7 +1088,7 @@ class ApiService {
         Uri.parse('${AppConstants.baseUrl}/necropcias/get_cencos.php'),
         headers: {'Content-Type': 'application/json'},
       );
-   
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success']) {
@@ -1105,7 +1105,7 @@ class ApiService {
   }
 
   Future<List<Galpon>> getGalpones(String cencoCode) async {
-    
+
     try {
       final response = await http.get(
         Uri.parse('${AppConstants.baseUrl}/necropcias/get_galpones.php?tcencos=$cencoCode'),
@@ -1144,20 +1144,20 @@ class ApiService {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         if (data['success'] == true && data['data'] != null) {
           final cencosData = data['data']['cencos'] as List<dynamic>;
-          
+
           // Convertir CENCOS
           final List<Cenco> cencos = cencosData
               .map((e) => Cenco.fromJson(e as Map<String, dynamic>))
               .toList();
-          
+
           // Convertir galpones agrupados por CENCO
           final Map<String, List<Galpon>> galponesPorCenco = {};
-          
+
           for (var cencoData in cencosData) {
             final cencoMap = cencoData as Map<String, dynamic>;
             final codigoCenco = cencoMap['codigo'] as String;
             final galponesData = cencoMap['galpones'] as List<dynamic>? ?? [];
-            
+
             galponesPorCenco[codigoCenco] = galponesData
                 .map((g) => Galpon(
                       tcencos: codigoCenco,
@@ -1166,9 +1166,9 @@ class ApiService {
                     ))
                 .toList();
           }
-          
+
           debugPrint('✅ Descargados ${cencos.length} CENCOS con sus galpones');
-          
+
           return {
             'success': true,
             'cencos': cencos,

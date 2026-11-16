@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'api_service.dart';
 import 'app_version_service.dart';
 import 'avisos_ingreso_offline_service.dart';
+import 'bio_empresa_api.dart';
 import 'catalog_service.dart';
 import 'nomina_proveedor_service.dart';
 import 'plan_visitas_service.dart';
@@ -167,6 +168,20 @@ class CatalogSyncService {
     try {
       bioCatalogosOk = await catalog.downloadCatalogosBioseguridad();
       if (bioCatalogosOk) {
+        try {
+          final api = BioEmpresaApi();
+          if (await api.appConSesion()) {
+            final ctx = await api.get('/almacen/campo-context');
+            final data = ctx['data'];
+            if (data is Map && data['insumos'] is List) {
+              final items = (data['insumos'] as List)
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList();
+              await catalog.mergeInsumosProveedor(items);
+            }
+          }
+        } catch (_) {}
         await storage.setLastDownloadDate();
       } else {
         errors.add('Catálogos de bioseguridad: no se pudieron descargar');
@@ -192,7 +207,7 @@ class CatalogSyncService {
       await AvisosIngresoOfflineService(api: _api).descargar(storage);
     } catch (_) {}
 
-    // 9. Nómina DNI → proveedor para el ingreso sin planificación.
+    // 9. Nómina DNI proveedor para el ingreso sin planificación.
     try {
       await NominaProveedorService(api: _api).descargar(storage);
     } catch (_) {}

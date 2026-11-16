@@ -35,8 +35,6 @@ $muestras = mysqli_query($conexion, "SELECT * FROM san_dim_tipo_muestra ORDER BY
 $paquetes = mysqli_query($conexion, "SELECT * FROM san_dim_paquete ORDER BY codigo DESC");
 $analisis = mysqli_query($conexion, "SELECT * FROM san_dim_analisis ORDER BY codigo DESC");
 
-
-
 // --- Convertir a arrays ---
 function resultToArray($result)
 {
@@ -56,7 +54,7 @@ $data = [
     'muestras' => resultToArray($muestras),
     'paquetes' => resultToArray($paquetes),
     'analisis' => resultToArray($analisis),
-    
+
 ];
 
 // --- Respuesta final ---

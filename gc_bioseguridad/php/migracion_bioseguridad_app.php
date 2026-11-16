@@ -2,12 +2,12 @@
 declare(strict_types=1);
 
 /**
- * Migración Bioseguridad — script único (repo → sanidad/flutter/bioseguridad/).
+ * Migración Bioseguridad — script único (repo  sanidad/flutter/bioseguridad/).
  *
  * URL: .../migracion_bioseguridad_app.php
- *      ?omitir_san_fact=1  → solo ALTER rgarita / rcercoelectrico / rfomites
+ *      ?omitir_san_fact=1   solo ALTER rgarita / rcercoelectrico / rfomites
  *
- * Ingreso app → `san_fact_ingresogranja_cab`.`galpon` varchar(120): **línea 65**
+ * Ingreso app  `san_fact_ingresogranja_cab`.`galpon` varchar(120): **línea 65**
  * (entre `numPersonas` y `areaProveedor` dentro del CREATE que empieza ~línea 57).
  */
 

@@ -22,7 +22,6 @@ class BioColumn {
 
   /// Peso con el que la columna se reparte el ancho sobrante cuando la tabla
   /// no llega al borde. Con 0 (por defecto) conserva su [width].
-  ///
   /// Las tablas de cerco y fómites no lo usan a propósito: ahí las columnas
   /// tienen un ancho de contenido y la tabla hace scroll horizontal.
   final double flex;
@@ -30,7 +29,6 @@ class BioColumn {
 
 /// Grupo de encabezado de una [BioTable]: titula un tramo continuo de columnas
 /// (p. ej. «Pollos evaluados» sobre las columnas Macho y hembra).
-///
 /// Los índices se cuentan sobre `columns` y son inclusivos. Los grupos de una
 /// misma tabla no deben solaparse: cada columna pertenece a lo sumo a uno, y la
 /// fila de grupos dibuja una celda vacía sobre las columnas que no cubre.
@@ -85,7 +83,6 @@ class BioTable extends StatelessWidget {
 
   /// Reparte entre las columnas el ancho que sobra cuando la tabla no llega al
   /// borde de la pantalla, en proporción al ancho declarado de cada una.
-  ///
   /// Apagado (por defecto) la tabla conserva los anchos declarados y deja el
   /// hueco a la derecha: es lo que quieren las tablas que hacen scroll
   /// horizontal, donde el ancho de columna es el del contenido.
@@ -95,7 +92,6 @@ class BioTable extends StatelessWidget {
       columns.fold<double>(0, (acc, c) => acc + c.width);
 
   /// Anchos efectivos de cada columna para un ancho de tabla [width].
-  ///
   /// Si sobra espacio, las columnas con [BioColumn.flex] se lo reparten; si no
   /// hay columnas flexibles devuelve los anchos declarados y la tabla se
   /// desplaza en horizontal, salvo que [expandir] esté encendido, en cuyo caso
@@ -222,7 +218,6 @@ class _CaptionRow extends StatelessWidget {
 
 /// Fila de títulos que agrupa columnas contiguas, dibujada encima del
 /// encabezado normal.
-///
 /// Las columnas que no caen en ningún grupo llevan una celda vacía, para que
 /// los anchos sigan coincidiendo con las filas de abajo.
 class _GroupHeaderRow extends StatelessWidget {
@@ -629,7 +624,6 @@ class _SwitchSlot extends StatelessWidget {
 }
 
 /// Interruptor NO/SI compacto usado en las columnas «¿Falló?» y «¿D. del cerco?».
-///
 /// El color sigue el criterio del reporte web: rojo cuando la respuesta es
 /// «SI» (hay falla / el animal está dentro del cerco) y verde cuando es «NO».
 class BioSwitchFallo extends StatelessWidget {
@@ -678,7 +672,6 @@ class BioSwitchFallo extends StatelessWidget {
 }
 
 /// Interruptor NO/SI donde el estado encendido es el BUENO.
-///
 /// Es el switch de los tres bloques del cerco, cuya pregunta es «¿Correcto?»:
 /// encendido = verde (el componente está correcto) y apagado = rojo (no lo
 /// está). Es el inverso de [BioSwitchFallo], que pregunta por la falla.
@@ -728,14 +721,11 @@ class BioSwitchCumple extends StatelessWidget {
 }
 
 /// Celda combinada: el interruptor y su campo de ingreso, juntos.
-///
 /// Se usa en las preguntas que piden observación (cerco eléctrico): al activar
 /// el switch se habilita la observación en la misma celda. Sin falla el campo
 /// queda deshabilitado, igual que en la app antigua.
-///
 /// Con [obsSiempreActiva] el campo se escribe siempre (voltaje y nivel de
 /// batería, que se registran como valor medido esté o no la falla).
-///
 /// [value] guarda siempre la falla (true = no correcto / falló), que es el dato
 /// que viaja al backend. Con [verdeAlEncender] el interruptor se muestra como
 /// el de «¿Correcto?»: verde al estar correcto, rojo al no estarlo.

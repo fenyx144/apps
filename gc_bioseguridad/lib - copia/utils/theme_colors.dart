@@ -36,7 +36,6 @@ extension AppThemeColors on BuildContext {
       isAppDark ? AppColors.darkCard : AppColors.dialogBackground;
 
   // ── Tablas ─────────────────────────────────────────────────────────────
-  //
   // La tabla nació con el blanco de la app Android antigua. En modo oscuro eso
   // deja una cuadrícula blanca sobre el fondo oscuro, así que ahí las filas
   // pasan a gris pizarra (el mismo de las tarjetas) y la alterna sube un tono.

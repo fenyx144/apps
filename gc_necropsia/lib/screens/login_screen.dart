@@ -11,10 +11,7 @@ import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../utils/dialog_helper.dart';
 import '../utils/toast_helper.dart';
-//import 'dashboard_screen.dart';
 import 'register_device_screen.dart';
-
-
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -76,8 +73,8 @@ class _LoginScreenState extends State<LoginScreen> {
             libtri == passwordInput) {
           final nombre = (uMap['nombre'] ?? uMap['NOMBRE'])?.toString() ?? codigo;
           await storage.saveLoginSession(
-            userCode: codigo,   // identificador técnico
-            userName: nombre,   // nombre para mostrar en AppDrawer
+            userCode: codigo, // identificador técnico
+            userName: nombre, // nombre para mostrar en AppDrawer
             deviceId: deviceId,
           );
           closeDialog();
@@ -200,14 +197,14 @@ class _LoginScreenState extends State<LoginScreen> {
       SystemUiMode.manual,
       overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
     );
-    
+
     // Agregar listeners para ocultar errores cuando el usuario escriba
     _usuarioController.addListener(() {
       if (_hasAttemptedValidation && _usuarioController.text.isNotEmpty) {
         setState(() {}); // Actualizar UI para ocultar error
       }
     });
-    
+
     _passwordController.addListener(() {
       if (_hasAttemptedValidation && _passwordController.text.isNotEmpty) {
         setState(() {}); // Actualizar UI para ocultar error
@@ -241,12 +238,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    
+
     // Marcar que se intentó validar
     setState(() {
       _hasAttemptedValidation = true;
     });
-    
+
     // Validar campos manualmente antes de mostrar el diálogo de carga
     bool isValid = true;
     if (_usuarioController.text.trim().isEmpty) {
@@ -255,7 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_passwordController.text.isEmpty) {
       isValid = false;
     }
-    
+
     if (!isValid) {
       return;
     }
@@ -280,7 +277,6 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final deviceId = await _getDeviceId();
       final storage = context.read<StorageService>();
-      //storage.clearAll();
       final result = await _apiService.login(
         usuario: _usuarioController.text.trim(),
         password: _passwordController.text,
@@ -298,31 +294,31 @@ class _LoginScreenState extends State<LoginScreen> {
         debugPrint('DEBUG login - userData completo: ${userData.toString()}');
         debugPrint('DEBUG login - userData[\'codigo\']: ${userData['codigo']}');
         debugPrint('DEBUG login - userData[\'nombre\']: ${userData['nombre']}');
-        
+
         final userCode = userData['codigo']?.toString() ?? '';
         final userName = userData['nombre']?.toString() ?? '';
-        
+
         if (userCode.isEmpty) {
           debugPrint('ERROR: userCode está vacío o es null!');
         }
-        
+
         await storage.saveLoginSession(
           userCode: userCode.isEmpty ? 'app_movil' : userCode,
           userName: userName,
           deviceId: deviceId,
         );
-        
+
         // Verificar que se guardó correctamente
         final savedCode = storage.getUserCodeSync();
         debugPrint('DEBUG login - userCode guardado y verificado: $savedCode');
-        
+
         loginSuccess = true;
       } else {
         loginResult = result;
       }
     } catch (e) {
       debugPrint('Error en login: $e');
-      
+
     }
 
     final elapsed = DateTime.now().difference(startTime);
@@ -340,7 +336,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // Descargar CENCOS/galpones aquí (en background) para asegurar datos actualizados
       // para el cálculo de edad por galpón.
       _downloadCencosGalponesAfterLogin();
-      
+
       Get.off(
         () => const DashboardScreen(),
         transition: Transition.rightToLeftWithFade,
@@ -506,12 +502,12 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // ⭐ HEADER CURVO VERDE (usando ClipPath)
+              // HEADER CURVO VERDE (usando ClipPath)
               _buildHeader(),
 
               const SizedBox(height: 40),
 
-              // ⭐ FORMULARIO COMPACTO
+              // FORMULARIO COMPACTO
               _buildLoginForm(),
 
               const SizedBox(height: 32),
@@ -543,7 +539,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildHeader() {
     return ClipPath(
-      clipper: TopWaveClipper(), // ⭐ Define abajo
+      clipper: TopWaveClipper(), // Define abajo
       child: Container(
         height: 280,
         width: double.infinity,
@@ -725,7 +721,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_hasAttemptedValidation || _usuarioController.text.isNotEmpty) {
       return const SizedBox.shrink();
     }
-    
+
     return Padding(
       padding: const EdgeInsets.only(left: 16, top: 4),
       child: Text(
@@ -744,7 +740,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_hasAttemptedValidation || _passwordController.text.isNotEmpty) {
       return const SizedBox.shrink();
     }
-    
+
     return Padding(
       padding: const EdgeInsets.only(left: 16, top: 4),
       child: Text(
@@ -968,7 +964,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// ⭐ CLIPPER PARA EL HEADER CURVO CON ONDA CÓNCAVA
+// CLIPPER PARA EL HEADER CURVO CON ONDA CÓNCAVA
 class TopWaveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {

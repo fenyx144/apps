@@ -8,7 +8,6 @@ import 'package:get/get.dart';
 
 import 'dashboard_screen.dart';
 
-
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -27,24 +26,24 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _glowAnimation;
   late Animation<double> _shimmerAnimation;
   Object _providerKey = UniqueKey();
-  
+
   @override
   void initState() {
     super.initState();
 
-    // ⭐ Controlador del logo
+    // Controlador del logo
     _logoController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     );
 
-    // ⭐ Controlador del brillo pulsante
+    // Controlador del brillo pulsante
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     );
 
-    // ⭐ Controlador del efecto shimmer
+    // Controlador del efecto shimmer
     _shimmerController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2500),
@@ -76,7 +75,7 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    // ⭐ Brillo pulsante suave
+    // Brillo pulsante suave
     _glowAnimation = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween<double>(
@@ -94,7 +93,7 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     ]).animate(_glowController);
 
-    // ⭐ Shimmer (destello que cruza)
+    // Shimmer (destello que cruza)
     _shimmerAnimation = Tween<double>(begin: -1.0, end: 2.0).animate(
       CurvedAnimation(parent: _shimmerController, curve: Curves.easeInOut),
     );
@@ -140,7 +139,7 @@ class _SplashScreenState extends State<SplashScreen>
           'muestras',
           'paquetes',
           'analisis',
-          
+
         ],
       );
     } else {
@@ -152,7 +151,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (mounted) {
       Get.off(
-        () => const LoginScreen(), 
+        () => const LoginScreen(),
         transition: Transition.fadeIn,
         duration: const Duration(milliseconds: 800),
       );
@@ -189,7 +188,7 @@ class _SplashScreenState extends State<SplashScreen>
         ),
         child: Stack(
           children: [
-            // ⭐ Anillos sutiles de fondo
+            // Anillos sutiles de fondo
             Center(
               child: AnimatedBuilder(
                 animation: _glowController,
@@ -213,7 +212,7 @@ class _SplashScreenState extends State<SplashScreen>
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // ⭐ Logo con shimmer
+                      // Logo con shimmer
                       Transform.scale(
                         scale: _scaleAnimation.value,
                         child: FadeTransition(
@@ -254,7 +253,7 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                               ),
 
-                              // ⭐ Brillo pulsante alrededor del logo
+                              // Brillo pulsante alrededor del logo
                               AnimatedBuilder(
                                 animation: _glowController,
                                 builder: (context, child) {
@@ -279,7 +278,7 @@ class _SplashScreenState extends State<SplashScreen>
                                 },
                               ),
 
-                              // ⭐ Efecto shimmer que cruza
+                              // Efecto shimmer que cruza
                               AnimatedBuilder(
                                 animation: _shimmerController,
                                 builder: (context, child) {
@@ -323,7 +322,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                       const SizedBox(height: 50),
 
-                      // ⭐ Texto con fade elegante
+                      // Texto con fade elegante
                       FadeTransition(
                         opacity: _fadeAnimation,
                         child: Column(
@@ -379,7 +378,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-// ⭐ Painter para anillos sutiles de fondo
+// Painter para anillos sutiles de fondo
 class SubtleRingsPainter extends CustomPainter {
   final double intensity;
 
@@ -408,7 +407,7 @@ class SubtleRingsPainter extends CustomPainter {
       intensity != oldDelegate.intensity;
 }
 
-// ⭐ Barra de progreso minimalista
+// Barra de progreso minimalista
 class _MinimalProgressBar extends StatefulWidget {
   @override
   State<_MinimalProgressBar> createState() => _MinimalProgressBarState();

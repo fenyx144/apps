@@ -106,11 +106,9 @@ class _PdfViewerState extends State<PdfViewer> {
         ),
         // Opcional: vista integrada (solo Android)
         // FlutterCachedPdfView(
-        //   pdfPath: _pdfUrl!,
-        //   placeholder: (double progress) => Center(
-        //     child: CircularProgressIndicator(value: progress),
-        //   ),
-        // ),
+        // pdfPath: _pdfUrl!,
+        // placeholder: (double progress) => Center(
+        // child: CircularProgressIndicator(value: progress),
       ],
     );
   }

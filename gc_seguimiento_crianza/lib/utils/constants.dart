@@ -116,8 +116,6 @@ class AppColors {
 
 class AppConstants {
   static const String baseUrl = 'https://granjarinconadadelsur.com/sanidad/flutter';
-                               //'http://10.190.22.5/sanidad/flutter';
-                              //'http://localhost/sanidad/flutter';
   static const String seguimientoPath = '/seguimiento_crianza';
   static const String apiToken = 'd9f7a6b3-4c8e-11ee-be56-0242ac120002';
   static const String appName = 'PROD_SEGUIMIENTO_CRIANZA';

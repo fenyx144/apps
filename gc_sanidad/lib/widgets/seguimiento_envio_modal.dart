@@ -57,7 +57,6 @@ class _SeguimientoEnvioModalState extends State<SeguimientoEnvioModal> {
     return pasos;
   }
 
-
   List<String> _parseEvidencias(String? evidencia) {
     if (evidencia == null || evidencia.trim().isEmpty) return [];
     return evidencia
@@ -232,7 +231,7 @@ class _SeguimientoEnvioModalState extends State<SeguimientoEnvioModal> {
   Widget build(BuildContext context) {
     final (estadoTexto, bgColor, textColor) = _getEstadoStyle(widget.envio['estado']);
     final pasosHistorial = _agruparHistorialPorPaso();
-  
+
     return GestureDetector(
       onVerticalDragEnd: (details) {
         // Cerrar el modal si se desliza hacia abajo con suficiente velocidad
@@ -245,8 +244,8 @@ class _SeguimientoEnvioModalState extends State<SeguimientoEnvioModal> {
           // Detectar cuando el scroll está en la parte superior (pixels <= 0) y se intenta deslizar hacia abajo
           if (notification is ScrollUpdateNotification) {
             final metrics = notification.metrics;
-            if (metrics.pixels <= 0 && 
-                notification.scrollDelta != null && 
+            if (metrics.pixels <= 0 &&
+                notification.scrollDelta != null &&
                 notification.scrollDelta! > 0) {
               // Si está en la parte superior y se desliza hacia abajo, cerrar
               Navigator.of(context).pop();

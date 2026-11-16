@@ -40,11 +40,13 @@ Future<List<MortalityDetail>?> showMortalityDetailDialog({
 class _SexTabData {
   final TextEditingController cantidadController = TextEditingController();
   final TextEditingController observacionController = TextEditingController();
+
   /// Controllers de las etapas del proceso de despacho (solo tipo despacho).
   final Map<String, TextEditingController> etapaControllers = {};
   String? detailId;
   String? causaCodigo;
   String? causaNombre;
+  String? tipoMuerte;
   final List<String> fotos = [];
   String? errorCantidad;
   String? errorCausa;
@@ -61,9 +63,11 @@ class _SexTabData {
   int get cantidad => int.tryParse(cantidadController.text.trim()) ?? 0;
 
   int get procesoSuma => etapaControllers.values.fold(
-      0, (sum, c) => sum + (int.tryParse(c.text.trim()) ?? 0));
+    0,
+    (sum, c) => sum + (int.tryParse(c.text.trim()) ?? 0),
+  );
 
-  /// Construye el mapa columna camelCase → cantidad (solo valores > 0).
+  /// Construye el mapa columna camelCase cantidad (solo valores > 0).
   Map<String, int> get procesoEtapas {
     final map = <String, int>{};
     etapaControllers.forEach((id, c) {
@@ -197,11 +201,13 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
     tab.detailId = detail.id;
     // En despacho la cantidad es la suma de las etapas (no hay campo manual).
     if (!_isDespacho) {
-      tab.cantidadController.text =
-          detail.cantidad > 0 ? '${detail.cantidad}' : '';
+      tab.cantidadController.text = detail.cantidad > 0
+          ? '${detail.cantidad}'
+          : '';
     }
     tab.causaCodigo = detail.causaCodigo;
     tab.causaNombre = detail.causaNombre;
+    tab.tipoMuerte = detail.tipoMuerte;
     tab.observacionController.text = detail.observacion ?? '';
     tab.fotos.addAll(detail.fotos);
     // Cargar etapas del despacho guardadas en el detalle.
@@ -303,6 +309,7 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
           : (_isDespacho ? tab.procesoSuma : tab.cantidad),
       causaCodigo: _sinMortalidad ? null : causaCodigo,
       causaNombre: _sinMortalidad ? null : causaNombre,
+      tipoMuerte: _sinMortalidad ? null : tab.tipoMuerte,
       observacion: _observacionText(tab),
       fotos: List.from(tab.fotos),
       grupoId: grupoId,
@@ -324,19 +331,30 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
       return;
     }
 
-    final grupoId = widget.existingMacho?.grupoId ??
+    final grupoId =
+        widget.existingMacho?.grupoId ??
         widget.existingHembra?.grupoId ??
         const Uuid().v4();
 
     final results = <MortalityDetail>[];
     if (_macho.hasBlock) {
       results.add(
-        _buildDetail('M', _macho, id: widget.existingMacho?.id, grupoId: grupoId),
+        _buildDetail(
+          'M',
+          _macho,
+          id: widget.existingMacho?.id,
+          grupoId: grupoId,
+        ),
       );
     }
     if (_hembra.hasBlock) {
       results.add(
-        _buildDetail('H', _hembra, id: widget.existingHembra?.id, grupoId: grupoId),
+        _buildDetail(
+          'H',
+          _hembra,
+          id: widget.existingHembra?.id,
+          grupoId: grupoId,
+        ),
       );
     }
     Navigator.pop(context, results);
@@ -345,7 +363,10 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
   Future<void> _pickImage(_SexTabData tab) async {
     _unfocusKeyboard();
     if (tab.fotos.length >= _maxPhotosPerDetail) {
-      showWarningToast(context, 'Máximo $_maxPhotosPerDetail fotos por detalle');
+      showWarningToast(
+        context,
+        'Máximo $_maxPhotosPerDetail fotos por detalle',
+      );
       return;
     }
 
@@ -363,12 +384,18 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_camera_rounded, color: AppColors.textSecondary),
+                leading: const Icon(
+                  Icons.photo_camera_rounded,
+                  color: AppColors.textSecondary,
+                ),
                 title: const Text('Cámara'),
                 onTap: () => Navigator.pop(ctx, ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library_rounded, color: AppColors.textSecondary),
+                leading: const Icon(
+                  Icons.photo_library_rounded,
+                  color: AppColors.textSecondary,
+                ),
                 title: const Text('Galería'),
                 onTap: () => Navigator.pop(ctx, ImageSource.gallery),
               ),
@@ -412,7 +439,10 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
   Future<void> _openCausaDialog(_SexTabData tab, String sexoLabel) async {
     _unfocusKeyboard();
     if (widget.motivos.isEmpty) {
-      showInfoToast(context, 'No hay causas disponibles. Descargue desde el menú.');
+      showInfoToast(
+        context,
+        'No hay causas disponibles. Descargue desde el menú.',
+      );
       return;
     }
 
@@ -437,6 +467,7 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
         setState(() {
           tab.causaCodigo = code;
           tab.causaNombre = found?.nombre ?? code;
+
           tab.errorCausa = null;
         });
       },
@@ -488,6 +519,13 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
         ),
       );
     }
+    rows.add(
+      SexoGridRow(
+        label: 'Tipo muerte',
+        cellM: _buildTipoMuerteCell(_macho, accent),
+        cellH: _buildTipoMuerteCell(_hembra, accent),
+      ),
+    );
 
     if (_isDespacho) {
       for (final etapa in kDespachoEtapas) {
@@ -517,10 +555,16 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
       );
     }
 
-    return SexoGridTable(
+    return SexoGridTable(accent: accent, rows: rows, errors: _errorLines());
+  }
+
+  Widget _buildTipoMuerteCell(_SexTabData tab, Color accent) {
+    return SexoTipoMuerteCell(
+      value: tab.tipoMuerte,
       accent: accent,
-      rows: rows,
-      errors: _errorLines(),
+      onChanged: _sinMortalidad
+          ? null
+          : (v) => setState(() => tab.tipoMuerte = v),
     );
   }
 
@@ -533,13 +577,15 @@ class _MortalityDetailDialogState extends State<_MortalityDetailDialog> {
       );
     }
     // Solo muestra el total de las etapas (sin verificación contra cantidad).
-    return SexoStatusChip(
-      text: '$suma',
-      color: accent,
-    );
+    return SexoStatusChip(text: '$suma', color: accent);
   }
 
-  Widget _buildBlock(_SexTabData tab, String label, IconData icon, Color color) {
+  Widget _buildBlock(
+    _SexTabData tab,
+    String label,
+    IconData icon,
+    Color color,
+  ) {
     return SexoObsFotoBlock(
       sexoLabel: label,
       icon: icon,

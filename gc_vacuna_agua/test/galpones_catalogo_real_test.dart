@@ -6,7 +6,6 @@ import 'package:vacuna_al_agua/utils/galpones_resolver.dart';
 
 /// Reproduce la carga de galpones con la respuesta **real** de
 /// `get_cencos_galpones_movil.php` (test/fixtures/cencos_galpones_real.json).
-///
 /// La app resuelve los galpones offline a partir de este catálogo: si el
 /// resolver no encuentra los galpones de una granja/campaña del catálogo, el
 /// campo «Galpones» del registro de Vacunación aparece vacío.
@@ -45,7 +44,7 @@ void main() {
   });
 
   test('resolver offline devuelve los galpones de granja + campaña', () {
-    // 667066 → granja 667, campaña 066 (GJA. TUCSON C=66).
+    // 667066 granja 667, campaña 066 (GJA. TUCSON C=66).
     final lista = GalponesResolver.resolveOffline(
       granjaCodigo: '667',
       campania: '066',

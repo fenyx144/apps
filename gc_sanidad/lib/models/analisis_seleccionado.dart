@@ -5,7 +5,7 @@ class AnalisisSeleccionado {
   final String analisisNombre;
   final String paqueteCodigo;
   final String paqueteNombre;
-  
+
   AnalisisSeleccionado({
     required this.id,
     required this.analisisCodigo,

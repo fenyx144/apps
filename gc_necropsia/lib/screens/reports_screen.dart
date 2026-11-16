@@ -21,7 +21,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   List<Map<String, dynamic>> _necropsias = [];
   bool _isLoading = false;
   bool _isGeneratingReport = false; // Protección contra múltiples clics
-  
+
   // Filtros de fecha
   DateTime? _fechaDesde;
   DateTime? _fechaHasta;
@@ -59,7 +59,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
     }
   }
-  
+
   /// Pre-inicializa la librería PDF en background para que la primera generación sea más rápida
   void _preInitializePdfLibrary() {
     // Ejecutar en background sin bloquear la UI
@@ -183,23 +183,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Future<void> _showEditModal(Map<String, dynamic> necropsia) async {
     // SIMPLIFICADO: Usar una única bandera guardado_backend
-    // Si guardado_backend == true, el registro ya existe en el backend → usar actualizar_necropsia_movil.php
-    // Si guardado_backend == false o no existe, el registro es nuevo → usar guardar_necropsia_movil.php
+    // Si guardado_backend == true, el registro ya existe en el backend usar actualizar_necropsia_movil.php
+    // Si guardado_backend == false o no existe, el registro es nuevo usar guardar_necropsia_movil.php
     final guardadoBackend = necropsia['guardado_backend'];
-    final bool guardadoBackendBool = guardadoBackend == true || 
-                                     guardadoBackend == 'true' || 
+    final bool guardadoBackendBool = guardadoBackend == true ||
+                                     guardadoBackend == 'true' ||
                                      guardadoBackend == 1;
 
     // Crear una copia mutable de los datos para pasar al editor
     final Map<String, dynamic> initialDataForEdit = Map.from(necropsia);
-    
+
     // Preservar guardado_backend del registro original
     if (guardadoBackendBool) {
       initialDataForEdit['guardado_backend'] = true;
     } else {
       initialDataForEdit['guardado_backend'] = false;
     }
-    
+
     debugPrint('📝 _showEditModal - Preparando edición:');
     debugPrint('   - tuuid: ${necropsia['tuuid']}');
     debugPrint('   - guardado_backend: $guardadoBackend (tipo: ${guardadoBackend.runtimeType})');
@@ -278,10 +278,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
       debugPrint('   - tuuid: ${result['tuuid']}');
       debugPrint('   - synced: ${result['synced']} (tipo: ${result['synced'].runtimeType})');
       debugPrint('   - guardado_backend: ${result['guardado_backend']} (tipo: ${result['guardado_backend']?.runtimeType})');
-      
+
       // Si se guardó, actualizar el registro en el storage
       await _updateRecordInStorage(result);
-      
+
       // Verificar el estado después de guardar
       final storage = context.read<StorageService>();
       final allRecords = storage.getAllRecords(AppStrings.formType1);
@@ -289,14 +289,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
         (r) => r['tuuid']?.toString() == result['tuuid']?.toString(),
         orElse: () => {},
       );
-      
+
       if (recordGuardado.isNotEmpty) {
         debugPrint('📝 _showEditModal - Estado del registro después de guardar en storage:');
         debugPrint('   - tuuid: ${recordGuardado['tuuid']}');
         debugPrint('   - synced: ${recordGuardado['synced']} (tipo: ${recordGuardado['synced'].runtimeType})');
         debugPrint('   - guardado_backend: ${recordGuardado['guardado_backend']} (tipo: ${recordGuardado['guardado_backend']?.runtimeType})');
       }
-      
+
       if (mounted) {
         showSuccessToast(context, 'Registro actualizado exitosamente.');
         _loadNecropsias(refresh: true); // Recargar la lista de reportes
@@ -312,9 +312,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _generateReport(String tipo, Map<String, dynamic> necropsia) async {
     // Protección contra múltiples clics simultáneos
     if (_isGeneratingReport) return;
-    
+
     setState(() => _isGeneratingReport = true);
-    
+
     // Mostrar diálogo de carga
     final closeDialog = showChickenLoadingDialog(
       context,
@@ -330,7 +330,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final granja = necropsia['granja']?.toString() ?? '';
       final galpon = necropsia['galpon']?.toString() ?? '';
       final fectra = necropsia['fectra']?.toString() ?? '';
-      
+
       // Extraer registros del array 'registros' si existe
       List<Map<String, dynamic>> registros = [];
       if (necropsia.containsKey('registros') && necropsia['registros'] is List) {
@@ -367,7 +367,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       } else if (tipo == 'pdf') {
         // Obtener evidencias completas
         final evidenciasCompletas = necropsia['evidencias_completas'] as Map<String, dynamic>? ?? {};
-        
+
         // Verificar si hay imágenes registradas
         bool hasImages = false;
         for (var nivelKey in evidenciasCompletas.keys) {
@@ -389,7 +389,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             if (hasImages) break;
           }
         }
-        
+
         // Si no hay imágenes, mostrar diálogo y salir
         if (!hasImages) {
           closeDialog();
@@ -435,7 +435,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           }
           return;
         }
-        
+
         await _reportService.generateReportPDF(
           cabecera: cabecera,
           registros: registros,
@@ -443,7 +443,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           context: context,
         );
       }
-      
+
       // Cerrar diálogo de carga
       closeDialog();
     } catch (e) {
@@ -539,7 +539,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         necropsia['codigoNecropsia']?.toString().trim() ?? '';
     final campania = necropsia['campania']?.toString() ?? '';
     final edad = necropsia['edad']?.toString() ?? '';
-    
+
     // Fecha y hora de registro
     final fechaRegistro =
         necropsia['tdate_trans']?.toString() ??
@@ -550,7 +550,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         necropsia['ttime_trans']?.toString() ??
         necropsia['ttime']?.toString() ??
         '';
-    
+
     String fechaNecropsiaFormateada = _formatDate(fechaNecropsia);
     String fechaHoraRegistro = '';
     if (fechaRegistro.isNotEmpty && horaRegistro.isNotEmpty) {
@@ -597,7 +597,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    
+
                     _buildInfoRow('Fecha Necropsia', fechaNecropsiaFormateada),
                     if (fechaHoraRegistro.isNotEmpty)
                       _buildInfoRow('Registro', fechaHoraRegistro),
@@ -663,7 +663,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           color: AppColors.primary,
           child: Column(
             children: [
-            // Filtros de fecha
+  // Filtros de fecha
             Container(
               padding: const EdgeInsets.all(16),
               color: Colors.white,

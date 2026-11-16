@@ -36,7 +36,6 @@ class ResultadoAnalisisController extends ChangeNotifier {
         _currentPage = 1;
       }
 
-    
       final nuevos = response['grupos'] as List<EnvioGrupo>;
       _grupos.addAll(nuevos);
 

@@ -4,20 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
-import '../screens/dashboard_screen.dart';
-import '../screens/marcacion_screen.dart';
-import '../screens/mi_granja_screen.dart';
-import '../screens/reports_screen.dart';
+import '../screens/diagnostico_screen.dart';
+import '../screens/enrolar_screen.dart';
+import '../screens/login_screen.dart';
+import '../screens/eventos_screen.dart';
+import '../screens/personal_screen.dart';
 import '../screens/splash_screen.dart';
+import '../screens/verificacion_screen.dart';
 import '../services/api_service.dart';
 import '../services/app_version_service.dart';
-import '../services/catalog_service.dart';
-import '../services/catalog_sync_service.dart';
+import '../services/eventos_sync_service.dart';
+import '../services/nomina_store.dart';
+import '../services/nomina_sync_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../utils/dialog_helper.dart';
 import '../utils/dialog_utils.dart';
-import '../utils/record_id.dart';
 import '../utils/theme_colors.dart';
 import '../utils/toast_helper.dart';
 
@@ -45,12 +47,13 @@ class _AppDrawerState extends State<AppDrawer>
       parent: _animationController,
       curve: Curves.easeOut,
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(-0.08, 0),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
-    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(-0.08, 0), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
     _animationController.forward();
   }
 
@@ -72,51 +75,63 @@ class _AppDrawerState extends State<AppDrawer>
     }
   }
 
-  Future<void> _downloadCatalogs(BuildContext hostContext) async {
-    final close =
-        showChickenLoadingDialog(hostContext, 'Descargando Información...');
+  Future<void> _download(BuildContext hostContext) async {
+    final storage = hostContext.read<StorageService>();
+    final store = hostContext.read<NominaStore>();
+    if (!await _hasInternet()) {
+      if (hostContext.mounted) {
+        showErrorToast(hostContext, AppStrings.sinConexion);
+      }
+      return;
+    }
+    final close = showAppLoadingDialog(hostContext, 'Descargando...');
     try {
-      final storage = hostContext.read<StorageService>();
-      final catalog = hostContext.read<CatalogService>();
-        final result = await CatalogSyncService().syncAll(
-        storage: storage,
-        catalog: catalog,
+      final api = ApiService();
+      final res = await api.downloadCatalogos(tablas: ['usuarios', 'conempre']);
+      var ok = false;
+      if (res['success'] == true && res['data'] is Map) {
+        final raw = Map<String, dynamic>.from(res['data'] as Map);
+        final actual = storage.getCatalogos();
+        for (final t in ['usuarios', 'conempre']) {
+          if (raw.containsKey(t)) actual[t] = raw[t];
+        }
+        await storage.saveCatalogos(actual);
+        ok = true;
+      }
+      final info = await api.downloadAppInfo(
+        versionWarningDesde: AppVersionService.warningDesdeForApi(storage),
       );
+      if (info['success'] == true && info['data'] is Map) {
+        await AppVersionService.mergeServerPayload(
+          storage,
+          Map<String, dynamic>.from(info['data'] as Map),
+        );
+      }
+      final nomina = await NominaSyncService().syncAll(
+        storage: storage,
+        store: store,
+      );
+      if (ok) await storage.setLastDownloadDate();
       close();
       if (!hostContext.mounted) return;
-      if (!result.hadInternet) {
+      if (!nomina.hadInternet) {
+        showErrorToast(hostContext, AppStrings.sinConexion);
+        return;
+      }
+      if (nomina.errorMessage != null) {
         showErrorToast(
           hostContext,
-          '${AppStrings.sinConexion} Se usarán los datos guardados.',
+          nomina.errorMessage ?? 'No se pudo descargar.',
         );
         return;
       }
-      final faltan = <String>[
-        if (!result.cencosOk) 'granjas',
-        if (!result.catalogosOk) 'usuarios',
-        if (!result.personalOk) 'personal',
+      final partes = [
+        'Altas: ${nomina.altas}',
+        'Bajas: ${nomina.bajas}',
+        'Total: ${nomina.total}',
       ];
-      if (faltan.isEmpty) {
-        final extra = result.avisoPersonal.trim();
-        showSuccessToast(
-          hostContext,
-          extra.isEmpty
-              ? AppStrings.descargaExitosa
-              : '${AppStrings.descargaExitosa}. $extra',
-        );
-      } else if (result.cencosOk || result.catalogosOk || result.personalOk) {
-        showWarningToast(
-          hostContext,
-          'No se actualizaron: ${faltan.join(', ')}.',
-        );
-      } else {
-        showErrorToast(
-          hostContext,
-          result.errorMessage?.isNotEmpty == true
-              ? 'No se pudo descargar: ${result.errorMessage}'
-              : 'No se pudo descargar.',
-        );
-      }
+      if (nomina.omitidos > 0) partes.add('Omitidas: ${nomina.omitidos}');
+      showSuccessToast(hostContext, partes.join(' · '));
     } catch (e) {
       close();
       if (hostContext.mounted) showErrorToast(hostContext, 'Error: $e');
@@ -125,152 +140,35 @@ class _AppDrawerState extends State<AppDrawer>
 
   Future<void> _upload(BuildContext hostContext) async {
     final storage = hostContext.read<StorageService>();
-    final counts = <String, ({int pend, int sub})>{};
-    for (final r in storage.getMyRecords()) {
-      final fecha = r['fecha']?.toString() ?? '';
-      if (fecha.length < 10) continue;
-      final key = fecha.substring(0, 10);
-      final e = counts[key];
-      final subido = r['synced'] == true;
-      counts[key] = e == null
-          ? (subido ? (pend: 0, sub: 1) : (pend: 1, sub: 0))
-          : (subido
-              ? (pend: e.pend, sub: e.sub + 1)
-              : (pend: e.pend + 1, sub: e.sub));
-    }
-    if (counts.isEmpty) {
-      showInfoToast(hostContext, 'No hay marcaciones.');
+    if (storage.eventosPendientesCount() == 0) {
+      showInfoToast(hostContext, 'Sin registros.');
       return;
     }
-    final fechas = counts.keys.toList()..sort((a, b) => b.compareTo(a));
-    if (!hostContext.mounted) return;
-    final fecha = await showAppDialog<String>(
-      context: hostContext,
-      builder: (ctx) => SimpleDialog(
-        title: Text('Subir', style: TextStyle(color: ctx.textThemePrimary)),
-        children: [
-          for (final f in fechas)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, f),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _fechaCorta(f),
-                      style: TextStyle(
-                        color: ctx.textThemePrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  if (counts[f]!.pend > 0)
-                    _badge('${counts[f]!.pend}', const Color(0xFFF07D4A)),
-                  if (counts[f]!.sub > 0) ...[
-                    const SizedBox(width: 6),
-                    _badge('${counts[f]!.sub}', const Color(0xFF15803D)),
-                  ],
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-    if (fecha == null || !hostContext.mounted) return;
     if (!await _hasInternet()) {
       if (hostContext.mounted) {
         showErrorToast(hostContext, AppStrings.sinConexion);
       }
       return;
     }
-    final records = storage.getMyRecordsByDate(DateTime.parse(fecha));
-    if (records.isEmpty) {
-      showInfoToast(hostContext, 'No hay marcaciones en esa fecha.');
-      return;
-    }
-    final close = showChickenLoadingDialog(hostContext, 'Subiendo registros...');
-    final api = ApiService();
-    var ok = 0;
-    var fail = 0;
+    final close = showAppLoadingDialog(hostContext, 'Subiendo...');
     try {
-      final result = await api.uploadMarcaciones(records);
-      final data = result['data'];
-      final resultados = data is Map ? data['resultados'] : null;
-      if (resultados is List) {
-        final porId = <String, bool>{};
-        for (final item in resultados) {
-          if (item is! Map) continue;
-          final id = item['id']?.toString() ?? '';
-          if (id.isEmpty) continue;
-          porId[id] = item['ok'] == true;
-        }
-        for (final record in records) {
-          final id = EvidenciaRecordId.of(record);
-          if (porId[id] == true) {
-            await storage.markRecordAsSynced({
-              ...record,
-              'id': id,
-              'guardado_backend': true,
-            });
-            ok++;
-          } else {
-            fail++;
-          }
-        }
-      } else if (result['success'] == true) {
-        for (final record in records) {
-          await storage.markRecordAsSynced({
-            ...record,
-            'id': EvidenciaRecordId.of(record),
-            'guardado_backend': true,
-          });
-          ok++;
-        }
-      } else {
-        fail = records.length;
-      }
-      if (ok > 0) await storage.setLastSyncDate();
+      final r = await EventosSyncService.enviar(storage);
       close();
       if (!hostContext.mounted) return;
-      if (fail == 0 && ok > 0) {
+      if (r.fallidos == 0 && r.subidos > 0) {
         showSuccessToast(hostContext, AppStrings.subidaExitosa);
-      } else if (ok > 0) {
-        showWarningToast(hostContext, 'Subidos: $ok, fallidos: $fail');
-      } else {
-        showErrorToast(
+      } else if (r.subidos > 0) {
+        showWarningToast(
           hostContext,
-          result['message']?.toString().isNotEmpty == true
-              ? result['message'].toString()
-              : 'No se pudo subir.',
+          'Subidos: ${r.subidos}, fallidos: ${r.fallidos}',
         );
+      } else {
+        showErrorToast(hostContext, r.errorMessage ?? 'No se pudo subir.');
       }
     } catch (e) {
       close();
       if (hostContext.mounted) showErrorToast(hostContext, 'Error: $e');
     }
-  }
-
-  String _fechaCorta(String ymd) {
-    final p = ymd.split('-');
-    if (p.length != 3) return ymd;
-    return '${p[2]}/${p[1]}/${p[0]}';
-  }
-
-  Widget _badge(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
   }
 
   Future<void> _logout(BuildContext hostContext) async {
@@ -282,7 +180,7 @@ class _AppDrawerState extends State<AppDrawer>
           style: TextStyle(color: ctx.textThemePrimary),
         ),
         content: Text(
-          '¿Está seguro que desea cerrar sesión?',
+          '¿Cerrar sesión?',
           style: TextStyle(color: ctx.textThemeMuted),
         ),
         actions: [
@@ -304,15 +202,23 @@ class _AppDrawerState extends State<AppDrawer>
 
   Future<void> _acercaDe(BuildContext hostContext) async {
     final storage = hostContext.read<StorageService>();
-    final sync = CatalogSyncService();
-    if (await sync.hasInternet()) {
-      await sync.syncAppInfo(storage: storage);
+    if (await _hasInternet()) {
+      final info = await ApiService().downloadAppInfo(
+        versionWarningDesde: AppVersionService.warningDesdeForApi(storage),
+      );
+      if (info['success'] == true && info['data'] is Map) {
+        await AppVersionService.mergeServerPayload(
+          storage,
+          Map<String, dynamic>.from(info['data'] as Map),
+        );
+      }
     }
     if (!hostContext.mounted) return;
     final appInfo = storage.getAppInfo();
     final mejoras = AppVersionService.parseMejorasUsuario(appInfo);
-    final versionServidor =
-        (appInfo?['required_version'] ?? '').toString().trim();
+    final versionServidor = (appInfo?['required_version'] ?? '')
+        .toString()
+        .trim();
     final context = hostContext;
     showAppDialog<void>(
       context: context,
@@ -351,18 +257,16 @@ class _AppDrawerState extends State<AppDrawer>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: ctx.isAppDark
-                    ? const Color(0xFF1E1E1E)
-                    : AppColors.primary.withValues(alpha: 0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: ctx.borderSubtle),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     AppConstants.appTitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 18,
                       color: AppColors.primaryDark,
@@ -512,7 +416,7 @@ class _AppDrawerState extends State<AppDrawer>
     Navigator.pop(drawerContext);
     if (_activa(route)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (route == '/dashboard') {
+      if (route == '/verificacion') {
         Get.offAll(page, routeName: route);
       } else {
         Get.to(page, routeName: route);
@@ -522,10 +426,12 @@ class _AppDrawerState extends State<AppDrawer>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isAppDark;
     final storage = context.watch<StorageService>();
-    final pending = storage.getMyPendingCount();
-    final userName = storage.getUserName() ?? 'USUARIO';
+    final pending = storage.eventosPendientesCount();
+    final logged = storage.isLoggedInSync;
+    final userName = logged
+        ? (storage.getUserName() ?? 'USUARIO')
+        : 'MODO ESCÁNER';
 
     return Drawer(
       elevation: 0,
@@ -543,8 +449,9 @@ class _AppDrawerState extends State<AppDrawer>
                   boxShadow: AppColors.strongShadow,
                 ),
                 child: SafeArea(
+                  bottom: false,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 10),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -566,7 +473,7 @@ class _AppDrawerState extends State<AppDrawer>
                                 height: 46,
                                 fit: BoxFit.contain,
                                 errorBuilder: (_, __, ___) => const Icon(
-                                  Icons.restaurant_rounded,
+                                  Icons.face_rounded,
                                   size: 40,
                                   color: Colors.white,
                                 ),
@@ -595,7 +502,9 @@ class _AppDrawerState extends State<AppDrawer>
                                       vertical: 3,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.2),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.2,
+                                      ),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Text(
@@ -612,138 +521,257 @@ class _AppDrawerState extends State<AppDrawer>
                             ),
                           ],
                         ),
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _SyncCloud(
-                                icon: Icons.cloud_download_rounded,
-                                label: 'Descargar',
-                                lastDate: storage.lastDownloadDateDisplay,
-                                aviso: storage.needsCatalogUpdate,
-                                onTap: () async {
-                                  final host = _screenContext(context);
-                                  Navigator.pop(context);
-                                  await _downloadCatalogs(host);
-                                },
+                        if (logged) ...[
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _SyncCloud(
+                                  icon: Icons.cloud_download_rounded,
+                                  label: 'Descargar',
+                                  lastDate: storage.lastDownloadDateDisplay,
+                                  aviso: storage.needsNominaUpdate,
+                                  onTap: () async {
+                                    final host = _screenContext(context);
+                                    Navigator.pop(context);
+                                    await _download(host);
+                                  },
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _SyncCloud(
-                                icon: Icons.cloud_upload_rounded,
-                                label: 'Subir',
-                                lastDate: storage.lastSyncDateDisplay,
-                                pendingCount: pending,
-                                onTap: () async {
-                                  final host = _screenContext(context);
-                                  Navigator.pop(context);
-                                  await _upload(host);
-                                },
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _SyncCloud(
+                                  icon: Icons.cloud_upload_rounded,
+                                  label: 'Subir',
+                                  lastDate: storage.lastSyncDateDisplay,
+                                  pendingCount: pending,
+                                  onTap: () async {
+                                    final host = _screenContext(context);
+                                    Navigator.pop(context);
+                                    await _upload(host);
+                                  },
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
               ),
               Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: isDark
-                          ? const [Color(0xFF1A1A1A), Color(0xFF121212)]
-                          : [
-                              AppColors.background.withValues(alpha: 0.3),
-                              Colors.white,
-                            ],
-                    ),
+                child: ListView(
+                  padding: EdgeInsets.only(
+                    top: 12,
+                    bottom: 24 + MediaQuery.of(context).viewPadding.bottom,
                   ),
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    children: [
-                      _item(
-                        icon: Icons.dashboard_rounded,
-                        title: AppStrings.menuDashboard,
-                        gradient: AppColors.primaryGradient,
-                        activo: _activa('/dashboard') || Get.currentRoute == '/',
-                        onTap: () => _ir(
-                          context,
-                          '/dashboard',
-                          () => const DashboardScreen(),
-                        ),
+                  children: [
+                    _item(
+                      icon: Icons.face_rounded,
+                      title: AppStrings.menuVerificacion,
+                      gradient: AppColors.primaryGradient,
+                      activo:
+                          _activa('/verificacion') || Get.currentRoute == '/',
+                      onTap: () => _ir(
+                        context,
+                        '/verificacion',
+                        () => const VerificacionScreen(),
                       ),
+                    ),
+                    // Sin sesión el drawer es reducido: solo escaneo,
+                    // login y Acerca de. El resto es del supervisor.
+                    if (logged) ...[
                       _item(
-                        icon: Icons.restaurant_rounded,
-                        title: AppStrings.menuMarcacion,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFE76F51), Color(0xFFF4A261)],
-                        ),
-                        activo: _activa('/marcacion'),
-                        onTap: () => _ir(
-                          context,
-                          '/marcacion',
-                          () => const MarcacionScreen(),
-                        ),
-                      ),
-                      _item(
-                        icon: Icons.assessment_outlined,
-                        title: AppStrings.menuReportes,
+                        icon: Icons.history_rounded,
+                        title: AppStrings.menuEventos,
                         gradient: const LinearGradient(
                           colors: [Color(0xFF164072), Color(0xFF1A7FA8)],
                         ),
-                        activo: _activa('/reportes'),
+                        activo: _activa('/eventos'),
                         onTap: () => _ir(
                           context,
-                          '/reportes',
-                          () => const ReportsScreen(),
+                          '/eventos',
+                          () => const EventosScreen(),
                         ),
                       ),
                       _item(
-                        icon: Icons.home_work_rounded,
-                        title: AppStrings.menuMiGranja,
+                        icon: Icons.people_rounded,
+                        title: AppStrings.menuPersonal,
                         gradient: const LinearGradient(
                           colors: [Color(0xFF1A7FA8), Color(0xFF56BFE4)],
                         ),
-                        activo: _activa('/mi-granja'),
+                        activo: _activa('/personal'),
                         onTap: () => _ir(
                           context,
-                          '/mi-granja',
-                          () => const MiGranjaScreen(),
+                          '/personal',
+                          () => const PersonalScreen(),
                         ),
                       ),
+                      if (storage.getPuedeEnrolar())
+                        _item(
+                          icon: Icons.person_add_rounded,
+                          title: AppStrings.menuEnrolar,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF15803D), Color(0xFF22C55E)],
+                          ),
+                          activo: _activa('/enrolar'),
+                          onTap: () => _ir(
+                            context,
+                            '/enrolar',
+                            () => const EnrolarScreen(),
+                          ),
+                        ),
                       _item(
-                        icon: Icons.info_rounded,
-                        title: 'Acerca de',
+                        icon: Icons.monitor_heart_rounded,
+                        title: AppStrings.menuDiagnostico,
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF5FB8DE), Color(0xFF35A7D4)],
+                          colors: [Color(0xFF7C6CF2), Color(0xFFA78BFA)],
                         ),
-                        onTap: () {
-                          final host = _screenContext(context);
-                          Navigator.pop(context);
-                          _acercaDe(host);
-                        },
+                        activo: _activa('/diagnostico'),
+                        onTap: () => _ir(
+                          context,
+                          '/diagnostico',
+                          () => const DiagnosticoScreen(),
+                        ),
                       ),
+                      _sectionLabel(context, 'Sonido'),
+                      _switch(
+                        icon: Icons.volume_up_rounded,
+                        title: 'Sonido',
+                        value: storage.getSonido(),
+                        onChanged: (v) => storage.saveSonido(v),
+                      ),
+                      _switch(
+                        icon: Icons.record_voice_over_rounded,
+                        title: 'Voz',
+                        value: storage.getVoz(),
+                        onChanged: (v) => storage.saveVoz(v),
+                      ),
+                      _switch(
+                        icon: Icons.vibration_rounded,
+                        title: 'Vibración',
+                        value: storage.getVibracion(),
+                        onChanged: (v) => storage.saveVibracion(v),
+                      ),
+                    ],
+                    _sectionLabel(context, 'Opciones'),
+                    _item(
+                      icon: Icons.info_rounded,
+                      title: 'Acerca de',
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF5FB8DE), Color(0xFF35A7D4)],
+                      ),
+                      onTap: () {
+                        final host = _screenContext(context);
+                        Navigator.pop(context);
+                        _acercaDe(host);
+                      },
+                    ),
+                    if (!logged)
+                      _item(
+                        icon: Icons.login_rounded,
+                        title: AppStrings.loginTitle,
+                        gradient: AppColors.primaryGradient,
+                        onTap: () =>
+                            _ir(context, '/login', () => const LoginScreen()),
+                      )
+                    else
                       _item(
                         icon: Icons.logout_rounded,
                         title: AppStrings.menuCerrarSesion,
-                        gradient: const LinearGradient(colors: [AppColors.error, AppColors.errorDark]),
+                        gradient: const LinearGradient(
+                          colors: [AppColors.error, AppColors.rechazadoDark],
+                        ),
                         onTap: () {
                           final host = _screenContext(context);
                           Navigator.pop(context);
                           _logout(host);
                         },
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 22,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.primary, AppColors.primaryDark],
+              ),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            title,
+            style: TextStyle(
+              color: context.textThemePrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _switch({
+    required IconData icon,
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          color: context.surfaceCard,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: context.borderSubtle, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: context.textThemePrimary,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeThumbColor: AppColors.primary,
+            ),
+          ],
         ),
       ),
     );
@@ -757,48 +785,68 @@ class _AppDrawerState extends State<AppDrawer>
     bool activo = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       child: Material(
-        color: activo
-            ? AppColors.primary.withValues(alpha: 0.10)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            decoration: BoxDecoration(
+              color: activo
+                  ? AppColors.primary.withValues(alpha: 0.18)
+                  : context.surfaceCard,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: activo
+                    ? AppColors.primary.withValues(alpha: 0.6)
+                    : context.borderSubtle,
+                width: 1.5,
+              ),
+              boxShadow: context.cardShadow(blur: 8, dy: 2),
+            ),
             child: Row(
               children: [
                 Container(
-                  width: 3,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    gradient: activo ? gradient : null,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  width: 34,
-                  height: 34,
+                  padding: const EdgeInsets.all(9),
                   decoration: BoxDecoration(
                     gradient: gradient,
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: gradient.colors[0].withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
-                  child: Icon(icon, color: Colors.white, size: 18),
+                  child: Icon(icon, color: Colors.white, size: 22),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Text(
                     title,
                     style: TextStyle(
-                      fontSize: 15.5,
+                      fontSize: 16,
                       fontWeight: activo ? FontWeight.w700 : FontWeight.w600,
                       color: activo
-                          ? AppColors.primaryDark
+                          ? AppColors.primary
                           : context.textThemePrimary,
+                      letterSpacing: -0.2,
                     ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 12,
+                    color: AppColors.primary,
                   ),
                 ),
               ],
@@ -896,7 +944,9 @@ class _SyncCloud extends StatelessWidget {
               ),
             ),
             Text(
-              tiene ? lastDate : (label == 'Descargar' ? 'Sin descargar' : '--/--/--'),
+              tiene
+                  ? lastDate
+                  : (label == 'Descargar' ? 'Sin descargar' : '--/--/--'),
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.85),
                 fontSize: 10.5,
@@ -905,7 +955,7 @@ class _SyncCloud extends StatelessWidget {
             ),
             if (aviso)
               const Text(
-                AppStrings.actualiceCatalogos,
+                AppStrings.actualiceNomina,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFFFDE68A),

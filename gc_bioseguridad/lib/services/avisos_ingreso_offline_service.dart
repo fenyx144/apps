@@ -10,7 +10,6 @@ import 'plan_visitas_service.dart';
 import 'storage_service.dart';
 
 /// Catálogo de avisos del ingreso descargado para trabajar sin señal.
-///
 /// Con él la app calcula en el equipo lo mismo que la consulta en línea
 /// (`consultar_estatus_sanitario_*`): granja en situación especial, persona o
 /// vehículo que ingresó a una granja en situación especial y visita previa
@@ -39,7 +38,7 @@ class AvisosIngresoCatalogo {
   final Map<String, List<Map<String, dynamic>>> riesgoDnis;
   final Map<String, List<Map<String, dynamic>>> riesgoPlacas;
 
-  /// «granja|campaña» → edad en días.
+  /// «granja|campaña» edad en días.
   final Map<String, int> edades;
   final Map<String, String> nombresGranja;
   final Map<String, List<Map<String, dynamic>>> visitasHoyDnis;

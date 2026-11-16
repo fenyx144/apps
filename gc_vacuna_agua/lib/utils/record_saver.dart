@@ -23,7 +23,6 @@ class BioRecordSaver {
   }
 
   /// Guarda [record] en el dispositivo y, si hay red, intenta enviarlo.
-  ///
   /// Devuelve `true` si quedó sincronizado con el backend.
   static Future<bool> save(
     BuildContext context,

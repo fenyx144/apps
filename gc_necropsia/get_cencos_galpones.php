@@ -44,11 +44,11 @@ $query = "
             WHERE tcodigo IN ('P0001001','P0001002')
             GROUP BY tcencos, tcodint
         ) AS m ON c.codigo = m.tcencos AND g.tcodint = m.tcodint
-    WHERE 
-        LEFT(c.codigo, 1) IN ('6', '5') 
-        AND RIGHT(c.codigo, 3) <> '000' 
-        AND c.swac = 'A' 
-        AND CHAR_LENGTH(c.codigo) = 6 
+    WHERE
+        LEFT(c.codigo, 1) IN ('6', '5')
+        AND RIGHT(c.codigo, 3) <> '000'
+        AND c.swac = 'A'
+        AND CHAR_LENGTH(c.codigo) = 6
         AND LEFT(c.codigo, 3) <> '650'
     ORDER BY c.codigo ASC, g.tcodint ASC
 ";
@@ -76,7 +76,7 @@ while ($row = mysqli_fetch_assoc($result)) {
         $cencosMap[$codigo] = [
             'codigo' => $codigo,
             'nombre' => $row['nombre'],
-            
+
             'galpones' => []
         ];
     }

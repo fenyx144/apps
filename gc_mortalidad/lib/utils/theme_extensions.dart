@@ -219,4 +219,3 @@ ThemeData azulReporteTheme(BuildContext context) {
     iconTheme: base.iconTheme.copyWith(color: cs.onSurfaceVariant),
   );
 }
-

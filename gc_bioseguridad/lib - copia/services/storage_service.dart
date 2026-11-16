@@ -69,7 +69,7 @@ class StorageService with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Granja de trabajo elegida en «Mi granja» (menú → Opciones). Vacía si el
+  /// Granja de trabajo elegida en «Mi granja» (menú Opciones). Vacía si el
   /// usuario todavía no la eligió: en ese caso los formularios arrancan como
   /// antes, sin granja premarcada.
   String getGranjaTrabajo() =>

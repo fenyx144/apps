@@ -189,17 +189,17 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
     }
 
     if (!mounted) return;
-    
+
     final closeDialog = showChickenLoadingDialog(
       context,
       'Subiendo registros...',
     );
 
-    try {     
-      String? userCode = storage.getUserCodeSync();      
+    try {
+      String? userCode = storage.getUserCodeSync();
       final String deviceId = await storage.getDeviceId() ?? 'app_movil';
       final now = DateTime.now();
-      
+
       final apiService = ApiService();
       int eventualesExitosos = 0;
       int eventualesFallidos = 0;
@@ -245,17 +245,17 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
         AppStrings.formType1,
         selectedDate,
       );
-      
+
       int exitosos = 0;
       int fallidos = 0;
       int conflictosPlan = 0;
       final List<Map<String, dynamic>> registrosExitosos = [];
-      
+
       final futures = recordsToUpload.map((record) async {
         try {
           // CRÍTICO: Crear una copia profunda del registro para preservar todos los campos incluyendo evidencias_completas
           final updated = Map<String, dynamic>.from(record);
-          
+
           // Verificar que evidencias_completas esté presente y hacer copia profunda
           final evidenciasCompletas = record['evidencias_completas'];
           if (evidenciasCompletas != null) {
@@ -294,31 +294,31 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
           } else {
             debugPrint('   ⚠️ evidencias_completas NO encontrado en el registro');
           }
-          
+
           updated['tuser'] = userCode;
           updated['tidandroid'] = deviceId;
           updated['tuser_trans'] = userCode;
           updated['tdate_trans'] = formatDate(now);
           updated['ttime_trans'] = formatTime(now);
-          
+
           // SIMPLIFICADO: Usar una única bandera guardado_backend
-          // Si guardado_backend == true, el registro ya existe en el backend → usar actualizar_necropsia_movil.php
-          // Si guardado_backend == false o no existe, el registro es nuevo → usar guardar_necropsia_movil.php
+          // Si guardado_backend == true, el registro ya existe en el backend usar actualizar_necropsia_movil.php
+          // Si guardado_backend == false o no existe, el registro es nuevo usar guardar_necropsia_movil.php
           final guardadoBackend = record['guardado_backend'];
-          final isUpdate = guardadoBackend == true || 
-                          guardadoBackend == 'true' || 
+          final isUpdate = guardadoBackend == true ||
+                          guardadoBackend == 'true' ||
                           guardadoBackend == 1;
-        
+
           final endpoint = isUpdate ? 'actualizar_necropsia_movil.php' : 'guardar_necropsia_movil.php';
           debugPrint('   → Endpoint seleccionado: $endpoint');
-          
+
           // Usar el endpoint apropiado según el tipo de registro
           final result = isUpdate
               ? await apiService.updateNecropsiasMovil([updated])
               : await apiService.uploadNecropsiasMovil([updated]);
-          
+
           debugPrint('   ✓ Respuesta recibida del endpoint: $endpoint');
-          
+
           if (result['success'] == true) {
             exitosos++;
             // Marcar que el registro fue guardado en el backend
@@ -356,27 +356,27 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
             final errorMessage = result['message']?.toString().toLowerCase() ?? '';
             final detalle = result['detalle'] as Map<String, dynamic>?;
             final duplicados = detalle?['duplicados'] ?? 0;
-            
+
             // Verificar si hay duplicados en la respuesta o en el mensaje
-            if (errorMessage.contains('duplicate') || 
-                errorMessage.contains('duplicado') || 
+            if (errorMessage.contains('duplicate') ||
+                errorMessage.contains('duplicado') ||
                 (duplicados is int && duplicados > 0)) {
               debugPrint('⚠️ Registro duplicado detectado - El registro ya existe en el backend');
               debugPrint('   → Estableciendo guardado_backend=true');
               debugPrint('   → guardado_backend antes: ${record['guardado_backend']}');
-              
+
               // CRÍTICO: Crear una copia completa del registro para actualizar
               final recordToUpdate = Map<String, dynamic>.from(record);
               recordToUpdate['guardado_backend'] = true;
-              
+
               // Actualizar el registro en storage con este flag
               final updateSuccess = await storage.updateRecord(AppStrings.formType1, recordToUpdate);
-              
+
               if (updateSuccess) {
                 // También actualizar el record en memoria para que se use en la verificación
                 record['guardado_backend'] = true;
                 debugPrint('   ✓ Registro actualizado en storage con guardado_backend=true');
-                
+
                 // Verificar que se guardó correctamente
                 final allRecords = storage.getAllRecords(AppStrings.formType1);
                 final updatedRecord = allRecords.firstWhere(
@@ -400,21 +400,21 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
           return {'success': false, 'record': record, 'error': e.toString()};
         }
       }).toList();
-      
+
       // Esperar a que todos los envíos terminen (todos los "hilos")
       await Future.wait(futures);
-   
+
       closeDialog();
 
       if (!mounted) return;
-      
+
       // Marcar como sincronizados solo los registros exitosos
       if (exitosos > 0) {
         // Marcar cada registro exitoso individualmente
         for (var record in registrosExitosos) {
-         
+
           await storage.markRecordAsSynced(AppStrings.formType1, record);
-          
+
           // Verificar que se marcó correctamente
           final allRecords = storage.getAllRecords(AppStrings.formType1);
           final updatedRecord = allRecords.firstWhere(
@@ -428,7 +428,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
         }
         await storage.setLastSyncDate();
       }
-      
+
       // Mostrar resumen detallado
       if (exitosos > 0 && fallidos == 0) {
         showSuccessToast(
@@ -752,7 +752,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
             scale: _scaleAnimation,
             child: Column(
               children: [
-                // ✨ HEADER PREMIUM CON DEGRADADO ELEGANTE
+                // HEADER PREMIUM CON DEGRADADO ELEGANTE
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
@@ -880,7 +880,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
 
                                   const SizedBox(height: 28),
 
-                                  // ☁️ BOTONES DE SINCRONIZACIÓN
+                                  // BOTONES DE SINCRONIZACIÓN
                                   Consumer<StorageService>(
                                     builder: (context, storage, _) {
                                       return FutureBuilder(
@@ -948,24 +948,24 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                                                         }
 
                                                         final apiService = ApiService();
-                                                        
+
                                                         // Descargar CENCOS y galpones
                                                         final closeDialogCencos = showChickenLoadingDialog(
                                                           context,
                                                           'Descargando Información...',
                                                         );
-                                                        
+
                                                         try {
                                                           final result = await apiService.downloadCencosGalpones();
                                                           closeDialogCencos();
-                                                          
+
                                                           if (!mounted) return;
-                                                          
+
                                                           if (result['success'] == true) {
                                                             // Guardar en storage local
                                                             final cencos = result['cencos'] as List;
                                                             final galponesPorCenco = result['galponesPorCenco'] as Map<String, List<dynamic>>;
-                                                            
+
                                                             // Convertir a formato para storage
                                                             // Asegurar que todos los valores sean del tipo correcto
                                                             final cencosData = cencos.map((c) => {
@@ -974,7 +974,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                                                               'edad': c.edad?.toString() ?? '0',
                                                               'fec_ing_min': c.fecIngMin?.toString() ?? '',
                                                             }).toList();
-                                                            
+
                                                             final galponesData = <String, List<Map<String, dynamic>>>{};
                                                             galponesPorCenco.forEach((codigo, galpones) {
                                                               galponesData[codigo] = galpones.map((g) => {
@@ -983,7 +983,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                                                                 'fec_ing_min': g.fecIngMin?.toString() ?? '',
                                                               }).toList();
                                                             });
-                                                            
+
                                                             await storage.saveCencosGalpones(
                                                               cencos: cencosData,
                                                               galponesPorCenco: galponesData,
@@ -1007,13 +1007,13 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                                                                 hasta: hasta,
                                                               );
                                                             }
-                                                            
+
                                                             await storage.setLastDownloadDate();
-                                                            
+
                                                             // Descargar catálogo de usuarios para login offline
                                                             final catalogService = context.read<CatalogService>();
                                                             await catalogService.downloadCatalogos(tablas: ['usuarios']);
-                                                            
+
                                                             if (!mounted) return;
                                                             showSuccessToast(
                                                               context,
@@ -1033,8 +1033,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                                                               'Error al descargar. Inténtelo de nuevo.',
                                                             );
                                                         }
-                                                        
-                                                        
+
                                                       },
                                                     ),
                                                   ),
@@ -1120,7 +1119,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                           ),
                         ),
                          _DrawerItem(
-                          icon: Icons.dashboard_rounded, // 📊 Dashboard
+                          icon: Icons.dashboard_rounded, // Dashboard
                           title: 'Dashboard',
                           gradient: LinearGradient(
                             colors: [
@@ -1147,7 +1146,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                           },
                         ),
                         _DrawerItem(
-                          icon: Icons.assignment_rounded, 
+                          icon: Icons.assignment_rounded,
                           title: 'Registro de Necropsia',
                           gradient: LinearGradient(
                             colors: [
@@ -1195,7 +1194,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                             });
                           },
                         ),
-                      
+
                         Padding(
                           padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
                           child: Row(
@@ -1252,7 +1251,7 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
                             _handleCerrarSesion(context);
                           },
                         ),
-                       
+
                       ],
                       ),
                     ),
@@ -1266,7 +1265,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
     );
   }
 }
-
 
 class _SyncButton extends StatelessWidget {
   final IconData icon;

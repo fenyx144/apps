@@ -9,7 +9,7 @@ import '../utils/dialog_helper.dart';
 import '../utils/record_id.dart';
 
 /// Guardado común de los reportes de bioseguridad: siempre persiste en local y,
-/// si hay conexión, intenta subir de inmediato (con manejo de 409 → actualizar).
+/// si hay conexión, intenta subir de inmediato (con manejo de 409 actualizar).
 class BioRecordSaver {
   /// Comprueba conexión al servidor (no basta con tener red local).
   static Future<bool> hasServerReachable() async {
@@ -23,7 +23,6 @@ class BioRecordSaver {
   }
 
   /// Guarda [record] en el dispositivo y, si hay red, intenta enviarlo.
-  ///
   /// Devuelve `true` si quedó sincronizado con el backend.
   static Future<bool> save(
     BuildContext context,

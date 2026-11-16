@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/catalog_service.dart';
+import '../services/deep_link_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../widgets/screen_status_bar.dart';
@@ -61,6 +62,7 @@ class _SplashScreenState extends State<SplashScreen>
     ]);
 
     if (!mounted) return;
+    if (await DeepLinkService.alTerminarSplash()) return;
     BioNavigation.irTrasAutenticacion(sesionActiva: logged);
   }
 

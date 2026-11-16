@@ -22,7 +22,6 @@ Future<void> escribir(WidgetTester tester, int indice, String texto) async {
 }
 
 /// Elige una hora en una celda de hora (las que muestran `--:--`).
-///
 /// Entra por el teclado del diálogo, que es la vía determinista: las listas
 /// abren en la hora actual y el resultado dependería de cuándo se corra.
 Future<void> elegirHora(WidgetTester tester, int indice, String hora) async {

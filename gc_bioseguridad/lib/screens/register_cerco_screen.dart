@@ -5,8 +5,10 @@ import 'package:uuid/uuid.dart';
 
 import '../services/app_version_service.dart';
 import '../services/catalog_service.dart';
+import '../services/deep_link_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
+import '../utils/record_id.dart';
 import '../utils/record_saver.dart';
 import '../utils/theme_colors.dart';
 import '../utils/toast_helper.dart';
@@ -20,7 +22,6 @@ import '../widgets/section_app_bar.dart';
 import 'register_summary_screen.dart';
 
 /// Estado de una métrica por línea (si incumple/falló + observación).
-///
 /// `fallo` guarda siempre el mismo significado: true = no está correcto.
 /// La pregunta de la tabla se muestra invertida (verde = está bien), pero el
 /// dato guardado y subido es el mismo en los tres bloques.
@@ -100,7 +101,10 @@ class _BloqueCerco {
 }
 
 class RegisterCercoScreen extends StatefulWidget {
-  const RegisterCercoScreen({super.key});
+  const RegisterCercoScreen({super.key, this.enlace});
+
+  /// Parámetros del enlace gcbioseguridad://abrir (ver DeepLinkService).
+  final Map<String, String>? enlace;
 
   @override
   State<RegisterCercoScreen> createState() => _RegisterCercoScreenState();
@@ -145,9 +149,47 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
     // puede cambiar si la inspección la hizo otra persona.
     _responsableController.text = context.read<StorageService>().getUserName() ?? '';
     _aplicarGranjaDeTrabajo();
+    _aplicarEnlace();
   }
 
-  /// Premarca la granja de trabajo (menú → Mi granja) con su campaña sugerida.
+/// Datos del enlace de otra app (granja, dni, nombre, hora, lat/lng, ref).
+/// Premarca granja, responsable (nombre) y horas; todo viaja en `registro.origen`.
+  void _aplicarEnlace() {
+    final e = widget.enlace;
+    if (e == null) return;
+    final id = DeepLinkService.uuidDe(e);
+    final storage = context.read<StorageService>();
+    if (id != null &&
+        storage.getAllRecords().any((r) => EvidenciaRecordId.of(r) == id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showWarningToast(context,
+              'Esta ronda ya tiene un registro. Al guardar se reemplazará.');
+        }
+      });
+    }
+    final sel = granjaSeleccionDe(
+      context.read<StorageService>(),
+      e['granja'] ?? '',
+      fechaYmd: _fechaYmd,
+    );
+    if (sel != null) {
+      _granja = sel.granja;
+      _granjaNombre = sel.granjaNombre;
+      _campania = sel.campania;
+      _campaniasDeGranja = sel.campanias;
+    }
+    final nombre = (e['nombre'] ?? '').trim();
+    if (nombre.isNotEmpty) _responsableController.text = nombre;
+    final h = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(e['hora'] ?? '');
+    if (h != null) {
+      final t = DateTime(2000, 1, 1, int.parse(h[1]!), int.parse(h[2]!));
+      _horaInicio = _horaDelDia(t);
+      _horaFinal = _horaDelDia(t.add(const Duration(minutes: 30)));
+    }
+  }
+
+  /// Premarca la granja de trabajo (menú Mi granja) con su campaña sugerida.
   void _aplicarGranjaDeTrabajo() {
     final sel = granjaDeTrabajoSeleccion(
       context.read<StorageService>(),
@@ -182,7 +224,6 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
   ];
 
   /// Aplica a un bloque las métricas del catálogo.
-  ///
   /// Si solo cambió el STD de métricas que ya estaban, se actualiza en sitio
   /// para no borrar lo que el usuario haya escrito. Si cambió la lista (otra
   /// cantidad, otro orden, qué filas piden observación o con qué se contestan),
@@ -318,7 +359,8 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
         .toList();
 
     return {
-      'id': const Uuid().v4(),
+      // uuid del enlace (otra app) o uno nuevo.
+      'id': DeepLinkService.uuidDe(widget.enlace) ?? const Uuid().v4(),
       'reporte': 'cerco',
       'fecha': _fechaYmd,
       'granja': _granja,
@@ -334,6 +376,7 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
         'observacion': _observacionesGeneralesController.text.trim(),
         'filas': filas,
         'bloques': bloques,
+        if (widget.enlace != null) 'origen': widget.enlace,
       },
       'imagenes': imagenes,
       'synced': false,
@@ -396,11 +439,13 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
 
     final record = _buildRecord(storage);
 
+    var enviado = false;
     final saved = await RegisterSummarySheet.show(
       context,
       record: record,
       onConfirm: () async {
         final ok = await BioRecordSaver.save(context, record);
+        enviado = ok;
         if (!mounted) return;
         if (ok) {
           showSuccessToast(context, 'Registro guardado y enviado.');
@@ -413,6 +458,19 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
       },
     );
 
+    // Abierta por enlace (rondas): tras guardar vuelve a esa app con el
+    // resultado. Si no se puede abrir, se queda aquí como siempre.
+    final enlace = widget.enlace;
+    if (saved && mounted && enlace != null) {
+      final volvio = await DeepLinkService.volverAlOrigen(
+        enlace,
+        modulo: 'cerco',
+        uuid: record['id']?.toString() ?? '',
+        enviado: enviado,
+        fecha: record['fecha']?.toString() ?? '',
+      );
+      if (volvio) return;
+    }
     if (saved && mounted) {
       setState(() {
         for (final f in _filasTodas) {
@@ -427,7 +485,13 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => DeepLinkService.conRetorno(
+        widget.enlace,
+        modulo: 'cerco',
+        child: _contenido(context),
+      );
+
+  Widget _contenido(BuildContext context) {
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: SectionAppBar(
@@ -557,7 +621,6 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
   }
 
   /// Bloque del reporte: título y filas.
-  ///
   /// Todos los bloques usan el mismo interruptor (verde = está bien), que
   /// funciona igual en las filas que tienen STD y en las que no. Lo que cambia
   /// es con qué se contesta cada fila: en el formato físico casi todo se
@@ -571,11 +634,9 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
     // con las dos líneas y tres bloques, repetir el par en cada columna era
     // ruido, y en el tablero —donde se mezcla con «No / SI»— ya no coincidía.
     // El par concreto se lee en la propia celda, que es donde se contesta.
-    //
     // Tres columnas y no cuatro: el STD va dentro de la primera, debajo del
     // nombre, como está escrito en el formato físico. Con la columna aparte la
     // tabla no entraba en la pantalla y L2 quedaba fuera de la vista.
-    //
     // La primera columna se queda el ancho sobrante, para que L1 y L2 (y por
     // tanto los interruptores) queden siempre en la misma vertical.
     return BioTable(
@@ -607,7 +668,6 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
   }
 
   /// Primera columna: el componente y, debajo, su STD.
-  ///
   /// Las dos líneas juntas porque así están en la hoja: primero qué se revisa y
   /// después contra qué. Las métricas que no tienen STD (las alertas del
   /// tablero) muestran solo el nombre.
@@ -640,7 +700,6 @@ class _RegisterCercoScreenState extends State<RegisterCercoScreen> {
     // Verde = está bien. El dato guardado sigue siendo la falla, así que se
     // invierte al leer y al escribir. La etiqueta es la del formato físico:
     // «CT»/«FALLA», o «No»/«SI» en las alertas del tablero.
-    //
     // Solo voltaje y nivel de batería llevan además el campo de observación
     // (son valores medidos); el resto de filas se responde solo con el switch.
     // En esas dos la observación va debajo del interruptor (`apilado`), que es

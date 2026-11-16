@@ -22,7 +22,7 @@ class AppColors {
   static const Color textOnPrimary = Colors.white; // Texto sobre fondo verde
 
   static const Color surface = Color(0xFFF5F5F5);
-  
+
   // Errores - Mejorado
   static const Color error = Color(0xFFE57373);
   static const Color errorLight = Color(0xFFEF9A9A);
@@ -108,17 +108,16 @@ class AppColors {
 
 class AppConstants {
   // API Configuration
-  
-  static const String baseUrl = //'https://granjarinconadadelsur.com/sanidad/flutter';
+
+  static const String baseUrl = // 'https://granjarinconadadelsur.com/sanidad/flutter';
 
   'http://10.94.219.131/sanidad/flutter';
-                              //'https://granjarinconadadelsur.com/apigestcomflutter';
   static const String apiToken = 'd9f7a6b3-4c8e-11ee-be56-0242ac120002';
-  
+
   static const String appName = 'PROD_NECROPCIAS';
   static const String appDeveloper = 'JLSF Soft Soluciones EIRL.';
   static const String companyName = 'Granja Rinconada del Sur';
-    static const String appTitle = 'NECROPCIAS'; 
+    static const String appTitle = 'NECROPCIAS';
 
   static const String appVersion = '1.0.5';
     // Storage Keys
@@ -144,23 +143,23 @@ class AppStrings {
   static const String labelDispositivo = 'ID de Dispositivo';
   static const String menuModoOscuro = 'Modo Oscuro';
   static const String menuModoClaro = 'Modo Claro';
-  
+
   // Login alternativo (mantenido para compatibilidad)
   static const String userLabel = 'Usuario';
   static const String passwordLabel = 'Contraseña';
   static const String loginButton = 'LOGIN';
   static const String registerDeviceButton = 'Registra tu dispositivo';
-  
+
   // Dashboard
   static const String dashboardTitle = 'Dashboard';
   static const String todayRecords = 'Total de registros del día';
-  
+
   // Nuevo: Títulos de secciones del dashboard
   static const String resumenSemanal = 'Resumen Semanal';
   static const String registrosPorFecha = 'Registros por Fecha';
   static const String registrosPorTipo = 'Por Tipo';
   static const String registrosPorEstado = 'Estado';
-  
+
   // Menu
   static const String menuDashboard = 'Mi Dashboard';
   static const String menuFormularios = 'Registro Mercados';
@@ -169,14 +168,14 @@ class AppStrings {
   static const String menuCerrarSesion = 'Cerrar sesión';
   static const String statusOffline = 'Offline';
   static const String statusOnline = 'Online';
-  
+
   // Nuevo: Navegación y opciones
   static const String navegacion = 'Navegación';
   static const String opciones = 'Opciones';
-  
+
   // Forms
   static const String formType1 = 'necropcias';
-  
+
   // Nuevo: Formulario de mercados
   static const String fechaRegistro = 'Fecha de Registro';
   static const String ubicacion = 'Ubicación';
@@ -187,7 +186,7 @@ class AppStrings {
   static const String tiendasAledanas = 'Tiendas Aledañas';
   static const String conteo = 'Conteo';
   static const String guardarRegistro = 'Guardar Registro';
-  
+
   // Nuevo: Proyección mensual
   static const String proyeccionMensual = 'Proyección Mensual';
   static const String mesSeleccionado = 'Mes Seleccionado';
@@ -201,14 +200,14 @@ class AppStrings {
   static const String tamanioMediano = 'Mediano';
   static const String tamanioChico = 'Chico';
   static const String subtotal = 'Subtotal';
-  
+
   // Reportes
   static const String reportesTitle = 'Reportes';
   static const String reportesComerciales = 'Reportes Comerciales';
   static const String desde = 'Desde';
   static const String hasta = 'Hasta';
   static const String buscar = 'Buscar';
-  
+
   // Dialogs
   static const String cerrarSesionTitulo = 'Cerrar sesión';
   static const String cerrarSesionMensaje = '¿Está seguro que desea cerrar sesión?';
@@ -216,7 +215,7 @@ class AppStrings {
   static const String si = 'Sí';
   static const String aceptar = 'Aceptar';
   static const String cerrar = 'Cerrar';
-  
+
   // Nuevo: Sincronización
   static const String descargar = 'Descargar';
   static const String subir = 'Subir';
@@ -229,13 +228,13 @@ class AppStrings {
   static const String subidaExitosa = 'Información subida correctamente';
   static const String errorSubida = 'Error al subir información';
   static const String noHayRegistrosPendientes = 'No hay registros pendientes por subir';
-  
+
   // Errors
   static const String errorGeneral = 'Ha ocurrido un error';
   static const String errorConexion = 'Error de conexión';
   static const String errorCredenciales = 'Usuario o contraseña incorrectos';
   static const String errorDispositivoNoAutorizado = 'Dispositivo no autorizado';
-  
+
   // Nuevo: Estados y mensajes
   static const String total = 'Total';
   static const String pendientes = 'Pendientes';
@@ -246,7 +245,7 @@ class AppStrings {
   static const String guardando = 'Guardando...';
   static const String guardadoExitoso = 'Registro guardado exitosamente';
   static const String errorGuardado = 'Error al guardar el registro';
-  
+
   // Nuevo: Validaciones
   static const String campoRequerido = 'Este campo es requerido';
   static const String seleccioneOpcion = 'Seleccione una opción';

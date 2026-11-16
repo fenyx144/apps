@@ -23,6 +23,7 @@ import '../utils/documento_scan_flow.dart';
 import '../utils/dni_utils.dart';
 import '../utils/placa_ocr_parser.dart';
 import '../utils/plan_ingreso_helper.dart';
+import '../utils/dialog_helper.dart';
 import '../utils/record_saver.dart';
 import '../utils/theme_colors.dart';
 import '../utils/toast_helper.dart';
@@ -38,6 +39,9 @@ import '../widgets/proveedor_dialog.dart';
 import '../widgets/bio_scan_tiles.dart';
 import '../widgets/placa_input_dialog.dart';
 import '../widgets/section_app_bar.dart';
+import '../widgets/dismiss_keyboard_scope.dart';
+import '../widgets/ingreso_alcoholemia_section.dart';
+import '../services/alcoholemia_api_service.dart';
 import '../widgets/orden_edad_dialog.dart';
 import '../widgets/planificadas_sheet.dart';
 import '../widgets/situacion_dialog.dart';
@@ -58,7 +62,6 @@ class RegisterControlIngresoScreen extends StatefulWidget {
 enum _NoPlanificados { cancelar, incluir, aparte }
 
 /// Estado de la consulta del nombre para un DNI.
-///
 /// No hay estado de error a propósito: si la consulta en línea falla y el
 /// documento tampoco está en el catálogo local, el nombre queda pendiente y el
 /// operador puede escribirlo a mano. Un aviso rojo solo molesta al guardia que
@@ -67,7 +70,6 @@ enum _DniEstado { vacio, consultando, ok, sinNombre }
 
 /// Resultado informativo de la «Planificación de visitas» del portal web para
 /// la placa o para un DNI.
-///
 /// Solo informa: el registro se guarda igual esté o no planificado. Cuando no
 /// se pudo saber (sin datos descargados para esa fecha y sin red, o la
 /// planificación aún no instalada en el servidor) no hay objeto y la pantalla
@@ -134,7 +136,6 @@ class _PlanInfo {
 }
 
 /// Fila editable de la tabla de DNIs (un renglón por documento).
-///
 /// Guarda el nombre que devuelve la consulta del documento, que puede llegar
 /// por escaneo o por haber escrito los 8 dígitos a mano. Si la consulta no lo
 /// resuelve (sin conexión y el documento tampoco está en el catálogo local), el
@@ -151,6 +152,10 @@ class _DniFila {
 
   /// Último documento consultado con éxito, para no repetir la llamada.
   String consultado = '';
+
+  /// DNI (normalizado) al que pertenece [plan]; evita borrar el plan en
+  /// `onChanged` espurios con el mismo documento.
+  String dniPlanificado = '';
 
   /// Resultado informativo de la planificación (`null` = neutro).
   _PlanInfo? plan;
@@ -321,6 +326,10 @@ class _RegisterControlIngresoScreenState
   EstatusGranja? _estatusGranja;
   Timer? _estatusDebounce;
 
+  int _planCargaActivas = 0;
+  Timer? _planCargaTimer;
+  void Function()? _cerrarPlanCarga;
+
   int? _visitaPlanId;
 
   bool _avisoMultiPlanMostrado = false;
@@ -328,6 +337,8 @@ class _RegisterControlIngresoScreenState
   List<String> _galponOpciones = [];
   List<String> _galponesSel = [];
   bool _galponOtro = false;
+
+  final AlcoholemiaIngresoState _alcoholemia = AlcoholemiaIngresoState();
   final _galponOtroController = TextEditingController();
 
   /// Último valor que la app escribió sola en «Personas». Mientras el campo
@@ -462,6 +473,9 @@ class _RegisterControlIngresoScreenState
       v.dispose();
     }
     _estatusDebounce?.cancel();
+    _planCargaTimer?.cancel();
+    _cerrarPlanCarga?.call();
+    _cerrarPlanCarga = null;
     _storage?.removeListener(_alCambiarStorage);
     _observacionController.dispose();
     _galponOtroController.dispose();
@@ -526,6 +540,17 @@ class _RegisterControlIngresoScreenState
     fila.visitasPlanIdsSeleccionados =
         visita.id != 0 ? {visita.id} : const {};
     fila.plan = _PlanInfo(planificado: true, visita: visita);
+    _vincularPlanAlDni(fila);
+  }
+
+  void _vincularPlanAlDni(_DniFila fila) {
+    if (fila.plan == null) {
+      fila.dniPlanificado = '';
+      return;
+    }
+    final d = DocumentoPersona.normalizar(fila.dni);
+    fila.dniPlanificado =
+        DocumentoPersona.esCompleto(d) ? d : fila.dniPlanificado;
   }
 
   Future<void> _elegirVisitaPlanParaDni(int index, List<PlanVisita> alcance) async {
@@ -863,14 +888,11 @@ class _RegisterControlIngresoScreenState
     _cargarGalpones();
   }
 
-  // ---------------------------------------------------------------------------
   // Planificación de visitas (solo informativo)
-  //
   // Criterio: visitas activas del portal web con la misma fecha del registro y
   // la misma granja (sin granja elegida se busca en todas). La placa se compara
   // sin guiones ni espacios y el DNI por sus 8 dígitos. Nada de esto valida ni
   // bloquea: si la consulta falla, simplemente no se muestra ningún indicador.
-  // ---------------------------------------------------------------------------
 
   /// Lee la planificación descargada en el equipo.
   void _cargarPlanLocal() {
@@ -892,7 +914,6 @@ class _RegisterControlIngresoScreenState
 
   /// Actualización silenciosa al elegir la granja: solo si lo descargado tiene
   /// más de 10 minutos. Sin red no pasa nada y no se muestra ningún aviso.
-  ///
   /// [forzar]: la consulta en línea trajo visitas que no están en lo
   /// descargado; se baja de nuevo sin esperar los 10 minutos (una vez por
   /// pantalla, para no entrar en un ciclo si el servidor no las incluye).
@@ -922,7 +943,6 @@ class _RegisterControlIngresoScreenState
 
   /// Tirar hacia abajo: vuelve a bajar la planificación y rehace la pantalla con
   /// lo nuevo, sin salir del formulario.
-  ///
   /// Es el mismo dato que trae la nube del menú lateral, pero a pedido: sirve
   /// cuando alguien programa una visita en la web y el de la garita quiere verla
   /// ya. A diferencia de [_actualizarPlanSilencioso] no respeta la ventana de 10
@@ -1479,6 +1499,34 @@ class _RegisterControlIngresoScreenState
     fila.dispose();
   }
 
+  void _iniciarCargaPlanificacion() {
+    _planCargaActivas++;
+    if (_planCargaActivas != 1) return;
+    _planCargaTimer?.cancel();
+    _planCargaTimer = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted || _planCargaActivas < 1 || _cerrarPlanCarga != null) {
+        return;
+      }
+      _cerrarPlanCarga = showChickenLoadingDialog(
+        context,
+        'Consultando planificación…',
+      );
+    });
+  }
+
+  Future<void> _finalizarCargaPlanificacion() async {
+    if (_planCargaActivas <= 0) return;
+    _planCargaActivas--;
+    if (_planCargaActivas > 0) return;
+    _planCargaTimer?.cancel();
+    _planCargaTimer = null;
+    final close = _cerrarPlanCarga;
+    _cerrarPlanCarga = null;
+    if (close != null) {
+      await dismissLoadingDialog(close);
+    }
+  }
+
   /// Planificación del DNI de una fila: primero lo descargado y, si hay red,
   /// la confirmación en línea.
   Future<void> _consultarPlanDni(int index) async {
@@ -1491,6 +1539,8 @@ class _RegisterControlIngresoScreenState
       _consultarEstatusSanitario();
       return;
     }
+    _iniciarCargaPlanificacion();
+  try {
     final granja = _granjaEfectiva;
     final fecha = _fechaYmd;
     if (_planLocal.cubre(fecha)) {
@@ -1561,22 +1611,38 @@ class _RegisterControlIngresoScreenState
         _actualizarPlanSilencioso(forzar: true);
       }
     } else if (enLinea != null && fila.visitasPlanAmbiguas.length <= 1) {
-      setState(() {
+      final yaResuelta = fila.plan?.planificado == true &&
+          (fila.plan?.visita != null ||
+              fila.visitasPlanIdsSeleccionados.isNotEmpty);
+      final mismoId = enLinea.visita != null &&
+          fila.plan?.visita != null &&
+          enLinea.visita!.id == fila.plan!.visita!.id;
+      final puedeActualizar = !yaResuelta ||
+          mismoId ||
+          (enLinea.planificado && enLinea.visita != null);
+      if (puedeActualizar) {
+        setState(() {
+          if (enLinea.planificado && enLinea.visita != null) {
+            _limpiarVisitasAmbiguasDni(fila);
+            fila.visitasPlanIdsSeleccionados = {enLinea.visita!.id};
+          }
+          if (!enLinea.planificado && yaResuelta) {
+            // Respuesta en línea vacía: se conserva lo descargado / ya elegido.
+          } else {
+            fila.plan = enLinea;
+            _vincularPlanAlDni(fila);
+          }
+        });
         if (enLinea.planificado && enLinea.visita != null) {
-          _limpiarVisitasAmbiguasDni(fila);
-          fila.visitasPlanIdsSeleccionados = {enLinea.visita!.id};
+          await _vincularVisitaDesdeCoincidencia(
+            PlanCoincidencia(
+              visita: enLinea.visita,
+              otraGranja: enLinea.otraGranja,
+            ),
+          );
+        } else if (mounted && !yaResuelta) {
+          _sincronizarPlanificacionGlobal();
         }
-        fila.plan = enLinea;
-      });
-      if (enLinea.planificado && enLinea.visita != null) {
-        await _vincularVisitaDesdeCoincidencia(
-          PlanCoincidencia(
-            visita: enLinea.visita,
-            otraGranja: enLinea.otraGranja,
-          ),
-        );
-      } else if (mounted) {
-        _sincronizarPlanificacionGlobal();
       }
     } else if (mounted) {
       if (fila.plan == null && fila.visitasPlanAmbiguas.isEmpty) {
@@ -1587,21 +1653,29 @@ class _RegisterControlIngresoScreenState
       }
       _sincronizarPlanificacionGlobal();
     }
+    if (fila.plan != null) _vincularPlanAlDni(fila);
     if (fila.estado == _DniEstado.sinNombre) _completarNombreDesdePlan(fila);
     _avisarSiDniYaIngresoEnPlan(dni);
     _consultarEstatusSanitario();
+  } finally {
+    await _finalizarCargaPlanificacion();
+  }
   }
 
   /// Tras cambiar granja, fecha o lo descargado: se vuelve a evaluar todo.
   void _refrescarPlanificacion({bool forzar = false}) {
     setState(() {
       for (final d in _dnis) {
+        final ambiguas = List<PlanVisita>.from(d.visitasPlanAmbiguas);
+        final idsSel = Set<int>.from(d.visitasPlanIdsSeleccionados);
         d.plan = null;
+        d.dniPlanificado = '';
         d.estatus = null;
         d.ordenEdad = null;
         // Lo marcado en las tarjetas se conserva: al volver a evaluar se
         // queda con las visitas que sigan siendo candidatas.
-        d.visitasPlanAmbiguas = const [];
+        d.visitasPlanAmbiguas = ambiguas;
+        d.visitasPlanIdsSeleccionados = idsSel;
       }
       for (final v in _vehiculos) {
         v.plan = null;
@@ -1618,16 +1692,12 @@ class _RegisterControlIngresoScreenState
     _consultarEstatusSanitario();
   }
 
-  // ---------------------------------------------------------------------------
   // Estatus sanitario por granja (solo informativo)
-  //
   // Mientras una granja esté en sospecha o confirmado, quien haya ingresado a
   // ella lleva la etiqueta de situación especial al entrar a otra. La consulta
   // es puntual y silenciosa: si falla, no hay etiqueta y el registro sigue.
-  // ---------------------------------------------------------------------------
 
   /// Consulta el estatus de la granja y de los DNIs escritos en la tabla.
-  ///
   /// Con una pausa corta: al agregar varios DNI seguidos (o al refrescar) se
   /// consulta una sola vez con la lista completa.
   void _consultarEstatusSanitario() {
@@ -1796,7 +1866,6 @@ class _RegisterControlIngresoScreenState
   }
 
   /// Consulta el nombre del documento de una fila.
-  ///
   /// El token de la API vive en el servidor, así que la app solo manda los 8
   /// dígitos. Primero se intenta en línea; si eso falla (sin red, red lenta o
   /// error desconocido) se cae al catálogo local de usuarios, donde `libtri`
@@ -1887,17 +1956,21 @@ class _RegisterControlIngresoScreenState
     final fila = _dnis[index];
     fila.debounce?.cancel();
     final valor = fila.dni;
+    final norm = DocumentoPersona.normalizar(valor);
+    final mismoDniPlan =
+        fila.dniPlanificado.isNotEmpty && norm == fila.dniPlanificado;
 
-    // Al cambiar el documento se descarta lo que pertenecía al anterior: tanto
-    // el nombre resuelto como el que el operador hubiera escrito a mano.
-    if (fila.plan != null ||
-        fila.estatus != null ||
-        fila.ordenEdad != null ||
-        fila.regreso != null ||
-        fila.yaDentro ||
-        fila.visitasPlanAmbiguas.isNotEmpty) {
+    // Solo si cambió el documento se descarta planificación / estatus del anterior.
+    if (!mismoDniPlan &&
+        (fila.plan != null ||
+            fila.estatus != null ||
+            fila.ordenEdad != null ||
+            fila.regreso != null ||
+            fila.yaDentro ||
+            fila.visitasPlanAmbiguas.isNotEmpty)) {
       setState(() {
         fila.plan = null;
+        fila.dniPlanificado = '';
         fila.estatus = null;
         fila.ordenEdad = null;
         fila.regreso = null;
@@ -1917,7 +1990,7 @@ class _RegisterControlIngresoScreenState
       });
     }
 
-    if (fila.completo) {
+    if (fila.completo && !mismoDniPlan) {
       fila.debounce = Timer(const Duration(milliseconds: 450), () {
         _consultarNombre(index);
         _consultarPlanDni(index);
@@ -1939,6 +2012,7 @@ class _RegisterControlIngresoScreenState
       fila.nombreCtrl.clear();
       fila.estado = _DniEstado.vacio;
       fila.plan = null;
+      fila.dniPlanificado = '';
       fila.estatus = null;
       fila.ordenEdad = null;
       fila.regreso = null;
@@ -2137,6 +2211,60 @@ class _RegisterControlIngresoScreenState
     );
   }
 
+  Future<void> _syncAlcoholemiaAgc(
+    Map<String, dynamic> record,
+    StorageService storage,
+  ) async {
+    if (!_alcoholemia.activa) return;
+    if (!mounted) return;
+    final umbral = context.read<CatalogService>().alcoholemiaMeta.umbralGl;
+    for (final f in _alcoholemia.filas) {
+      if (f.dni.isEmpty) continue;
+      final g = double.tryParse(f.gradoGl.replaceAll(',', '.'));
+      if (g == null || g <= umbral + 1e-9) continue;
+      try {
+        await AlcoholemiaApiService().guardarAlcoholemiaAgc({
+          'granja': record['granja']?.toString() ?? _granja,
+          'campania': record['campania']?.toString() ?? _campania,
+          'fecha': record['fecha']?.toString() ?? _fechaYmd,
+          'usuario': storage.getUserCodeSync() ?? '',
+          'dni': f.dni,
+          'nombre': f.nombre,
+          'valor_aparato': f.valorAparato,
+          'grado_g_l': g,
+          'umbral_g_l': umbral,
+          'agente_causal': f.agenteCausal,
+          'anomalia': f.anomalia,
+          'accion': f.accion,
+        });
+      } catch (_) {}
+    }
+  }
+
+  List<Map<String, dynamic>> _alcoholemiaRegistroJson() {
+    if (!_alcoholemia.activa) return const [];
+    final out = <Map<String, dynamic>>[];
+    for (final f in _alcoholemia.filas) {
+      if (f.dni.isEmpty || f.gradoGl.trim().isEmpty) continue;
+      final fotos = f.fotos
+          .whereType<String>()
+          .where((p) => p.isNotEmpty)
+          .map((p) => {'path': p})
+          .toList();
+      out.add({
+        'dni': f.dni,
+        'nombre': f.nombre,
+        'valor_aparato': f.valorAparato,
+        'grado_g_l': f.gradoGl,
+        'agente_causal': f.agenteCausal,
+        'anomalia': f.anomalia,
+        'accion': f.accion,
+        'imagenes': fotos,
+      });
+    }
+    return out;
+  }
+
   Map<String, dynamic> _buildRecordManual(
     StorageService storage, {
     required Iterable<_DniFila> dnisFilas,
@@ -2187,6 +2315,10 @@ class _RegisterControlIngresoScreenState
         'proveedor_ruc': proveedor.ruc.trim(),
         'observacion': observacion,
         'dnis': dnis,
+        if (_alcoholemiaRegistroJson().isNotEmpty) ...{
+          'alcoholemia_pruebas': _alcoholemiaRegistroJson(),
+          'alcoholemia': _alcoholemiaRegistroJson().first,
+        },
       },
       'imagenes': _imagenesRegistro(),
       'synced': false,
@@ -2249,6 +2381,23 @@ class _RegisterControlIngresoScreenState
     if (errorDni.isNotEmpty) {
       showErrorToast(context, errorDni);
       return;
+    }
+    if (_alcoholemia.activa) {
+      final umbral = context.read<CatalogService>().alcoholemiaMeta.umbralGl;
+      for (final f in _alcoholemia.filas) {
+        if (f.dni.isEmpty) continue;
+        final g = double.tryParse(f.gradoGl.replaceAll(',', '.'));
+        if (g == null) continue;
+        if (g <= umbral + 1e-9) continue;
+        final tieneFoto = f.fotos.any((p) => p != null && p.isNotEmpty);
+        if (!tieneFoto) {
+          showErrorToast(
+            context,
+            'Adjunte evidencia de alcoholemia para ${f.nombre.isNotEmpty ? f.nombre : f.dni}.',
+          );
+          return;
+        }
+      }
     }
 
     FocusManager.instance.primaryFocus?.unfocus();
@@ -2388,7 +2537,6 @@ class _RegisterControlIngresoScreenState
   /// Aviso antes de guardar un ingreso planificado con personas (o vehículos)
   /// que no figuran en ninguna visita: se guardan las visitas y esos quedan en
   /// la tabla para registrarlos en otro ingreso con su proveedor.
-  ///
   /// Con una sola visita se ofrece además incluirlos en ella (reemplazo en la
   /// misma cuadrilla o planificación sin lista de personas).
   Future<_NoPlanificados> _confirmarSepararNoPlanificados(
@@ -2540,6 +2688,7 @@ class _RegisterControlIngresoScreenState
               ),
             );
           }
+          unawaited(_syncAlcoholemiaAgc(record, storage));
         }
         if (!mounted) return;
         if (algunoOk) {
@@ -2575,6 +2724,9 @@ class _RegisterControlIngresoScreenState
       setState(() {
         _estatusGranja = null;
         _observacionController.clear();
+        _alcoholemia
+          ..activa = false
+          ..filas.clear();
         _avisoMultiPlanMostrado = false;
         for (final d in _dnis.where((d) => !quedanDnis.contains(d)).toList()) {
           _quitarFilaDeDnis(d);
@@ -2615,8 +2767,8 @@ class _RegisterControlIngresoScreenState
     return nombre.isNotEmpty ? nombre : 'DNI ${fila.dni}';
   }
 
-  /// Celda «Nombre» con el aviso de planificación debajo («✔ Planificado» o
-  /// «⚠ No planificado») y la etiqueta de situación especial cuando el DNI
+  /// Celda «Nombre» con el aviso de planificación debajo (« Planificado» o
+  /// « No planificado») y la etiqueta de situación especial cuando el DNI
   /// viene de una granja en sospecha o confirmado.
   Widget _conAvisoPlan(_DniFila fila, Widget celda) {
     final plan = fila.plan;
@@ -3354,6 +3506,18 @@ class _RegisterControlIngresoScreenState
     return _selectorGalponesIngreso();
   }
 
+  Widget _buildAlcoholemiaIngreso() {
+    return IngresoAlcoholemiaSection(
+      candidatos: [
+        for (final d in _dnisIngreso)
+          if (DocumentoPersona.esCompleto(d.dni))
+            (dni: d.dni, nombre: d.nombreEfectivo),
+      ],
+      data: _alcoholemia,
+      onChanged: (_) => setState(() {}),
+    );
+  }
+
   /// Fecha, turno, hora de ingreso (garita) y fotos; galpones en ficha si planificado.
   Widget _buildSeccionConfirmarIngreso(
     BuildContext context, {
@@ -3403,11 +3567,13 @@ class _RegisterControlIngresoScreenState
                     ),
         if (incluirEvidencias) ...[
           const SizedBox(height: _sepCampo),
-                  ImageSlotRow(
-                    paths: _imagenes,
-                    onChanged: (i, path) => setState(() => _imagenes[i] = path),
-                  ),
-                ],
+          ImageSlotRow(
+            paths: _imagenes,
+            onChanged: (i, path) => setState(() => _imagenes[i] = path),
+          ),
+          const SizedBox(height: _sepCampo),
+        ],
+        _buildAlcoholemiaIngreso(),
       ],
     );
   }
@@ -3424,11 +3590,13 @@ class _RegisterControlIngresoScreenState
             AppBarSaveButton(onPressed: _guardar),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refrescar,
-        color: AppColors.primaryDark,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
+      body: DismissKeyboardScope(
+        child: RefreshIndicator(
+          onRefresh: _refrescar,
+          color: AppColors.primaryDark,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(
             16,
             16,
@@ -3451,14 +3619,10 @@ class _RegisterControlIngresoScreenState
                     (_algunEscaneadoPlanificado &&
                         !_grupoIngresoNoPlanificado)) ...[
                   _buildSeccionFichaPlanificada(context),
-                  if (_algunEscaneadoPlanificado &&
-                      !_dnis.any(
-                        (d) =>
-                            d.visitasPlanAmbiguas.length > 1 &&
-                            d.visitasPlanIdsSeleccionados.isEmpty,
-                      )) ...[
+                  if (_personas >= 1) ...[
                     const SizedBox(height: _sepBloque),
-                    _avisoEstatusGranjaRegistro(),
+                    if (_algunEscaneadoPlanificado)
+                      _avisoEstatusGranjaRegistro(),
                     _buildSeccionConfirmarIngreso(
                       context,
                       incluirHoraIngreso: true,
@@ -3482,6 +3646,7 @@ class _RegisterControlIngresoScreenState
               ],
             ],
           ),
+        ),
         ),
       ),
     );
@@ -3516,7 +3681,6 @@ class _BotonEscanear extends StatelessWidget {
 }
 
 /// Celda «Nombre»: muestra el estado de la consulta del documento.
-///
 /// Verde con el nombre cuando lo resolvió la consulta en línea; en celeste y con
 /// otro ícono cuando salió del catálogo local de usuarios (la segunda barrera,
 /// sin conexión). Mientras consulta muestra un indicador. Si ningún camino lo
@@ -3609,7 +3773,6 @@ class _EstadoNombre extends StatelessWidget {
 }
 
 /// Campo para escribir el nombre a mano cuando la consulta no lo resolvió.
-///
 /// Se dibuja con una línea inferior para que se lea como algo editable y no como
 /// el texto gris de antes: el operador tiene que ver que ahí se escribe. El botón
 /// de refresco conserva el reintento de la consulta por si la conexión vuelve; si
@@ -3666,9 +3829,7 @@ class _NombreManual extends StatelessWidget {
   }
 }
 
-
 /// Etiqueta de «situación especial» de un DNI.
-///
 /// Se enciende cuando la persona ingresó recientemente a una granja que hoy
 /// está en sospecha (ámbar) o confirmado (rojo). Solo alerta: el registro de
 /// ingreso se guarda igual. Al tocarla aparece de qué granja viene y hasta
@@ -4093,8 +4254,7 @@ class _EstatusGranjaCard extends StatelessWidget {
 }
 
 /// Indicador informativo de la «Planificación de visitas».
-///
-/// Pequeño y corto: «✔ Vehículo planificado» en verde o «⚠ Vehículo no
+/// Pequeño y corto: « Vehículo planificado» en verde o « Vehículo no
 /// planificado» en ámbar (en la fila del DNI, «Planificado» / «No
 /// planificado»). Con [compacto] se muestra solo el ícono. Al tocarlo aparece
 /// el detalle (fecha, granja). Nunca bloquea nada.

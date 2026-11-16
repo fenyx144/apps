@@ -54,7 +54,6 @@ class _SplashScreenState extends State<SplashScreen>
 
     _logoController.forward();
 
-   
     _initializeApp();
   }
 
@@ -74,7 +73,6 @@ class _SplashScreenState extends State<SplashScreen>
       );
     }
   }
-
 
   @override
   void dispose() {

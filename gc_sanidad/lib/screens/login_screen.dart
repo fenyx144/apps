@@ -83,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
         final userData = result['data']['usuario'][0];
 
         final rol = userData['rol_sanidad'] as String?;
-        
+
         await storage.saveLoginSession(
           userCode: userData['codigo'],
           userName: userData['nombre'],
@@ -92,12 +92,12 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         showSuccessToast(context, 'Inicio de sesión exitoso');
-        
+
         // Navegar según el rol: admin -> DashboardScreen, otros -> DashboardTrackingScreen
         final targetScreen = (rol?.toLowerCase() != 'transporte')
             ? const DashboardScreen()
             : const DashboardTrackingScreen();
-            
+
         Get.off(
           () => targetScreen,
           transition: Transition.rightToLeftWithFade,
@@ -161,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<bool?> _showDeviceNotRegisteredDialog(BuildContext context) {
     return Get.dialog<bool>(
-      // ⭐ Dialog animado con GetX
+      // Dialog animado con GetX
       AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -280,12 +280,12 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const SizedBox(height: 20),
 
-                // ⭐ Header con animación GetX
+                // Header con animación GetX
                 _buildAnimatedHeader(),
 
                 const SizedBox(height: 32),
 
-                // ⭐ Card de formulario con animación
+                // Card de formulario con animación
                 _buildAnimatedFormCard(),
 
                 const SizedBox(height: 32),
@@ -309,7 +309,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // ⭐ HEADER CON ANIMACIÓN GETX
+                // HEADER CON ANIMACIÓN GETX
   Widget _buildAnimatedHeader() {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -386,7 +386,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // ⭐ CARD DE FORMULARIO CON ANIMACIÓN
+                // CARD DE FORMULARIO CON ANIMACIÓN
   Widget _buildAnimatedFormCard() {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),

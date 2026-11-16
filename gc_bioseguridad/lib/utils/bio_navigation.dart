@@ -7,17 +7,20 @@ import '../screens/register_cerco_screen.dart';
 import '../screens/register_control_ingreso_screen.dart';
 import '../screens/register_salida_screen.dart';
 import '../screens/register_fomites_screen.dart';
+import '../screens/bio_empresa/bio_almacen_home_screen.dart';
+import '../screens/bio_empresa/bio_consumo_screen.dart';
+import '../screens/bio_empresa/bio_relevo_screen.dart';
 import '../screens/register_garita_screen.dart';
+import '../screens/register_articulos_screen.dart';
+import '../services/deep_link_service.dart';
 import 'constants.dart';
 
 /// Navegación entre las secciones de registro.
-///
 /// Vive aquí y no en el drawer porque el propio drawer, el resumen y los
 /// reportes navegan a las mismas pantallas: así el nombre de ruta y el widget de
 /// cada sección se definen una sola vez.
 abstract final class BioNavigation {
   /// Nombres de ruta explícitos de cada sección.
-  ///
   /// Ojo con GetX: `off`/`to` deduplican por nombre de ruta y ese nombre sale
   /// del `runtimeType` del closure (`_cleanRouteName` quita el prefijo
   /// "() => "). Al pasar una variable `Widget` los casos comparten el nombre
@@ -27,12 +30,29 @@ abstract final class BioNavigation {
     BioSecciones.salida: '/bio/salida',
     BioSecciones.cerco: '/bio/cerco',
     BioSecciones.fomites: '/bio/fomites',
+    BioSecciones.articulos: '/bio/articulos',
     BioSecciones.anomalias: '/bio/anomalias',
     'dashboard': '/bio/dashboard',
     'login': '/bio/login',
     'reportes': '/bio/reportes',
     'miGranja': '/bio/mi-granja',
+    BioEmpresaSecciones.almacen: '/bio/empresa/almacen',
+    BioEmpresaSecciones.consumo: '/bio/empresa/consumo',
+    BioEmpresaSecciones.relevo: '/bio/empresa/relevo',
   };
+
+  static Widget pantallaEmpresa(String seccion) {
+    switch (seccion) {
+      case BioEmpresaSecciones.almacen:
+        return const BioAlmacenHomeScreen();
+      case BioEmpresaSecciones.consumo:
+        return const BioConsumoScreen();
+      case BioEmpresaSecciones.relevo:
+        return const BioRelevoScreen();
+      default:
+        return const BioAlmacenHomeScreen();
+    }
+  }
 
   /// Tras splash o login: deja una sola ruta en el stack (evita navigator vacío).
   static void irTrasAutenticacion({required bool sesionActiva}) {
@@ -43,6 +63,8 @@ abstract final class BioNavigation {
   }
 
   static void irAlDashboardTrasLogin() {
+    // Si llegó un enlace de otra app, sigue a ese registro.
+    if (DeepLinkService.abrirPendiente()) return;
     Get.offAll(
       () => const DashboardScreen(),
       routeName: rutas['dashboard']!,
@@ -69,6 +91,8 @@ abstract final class BioNavigation {
         return const RegisterCercoScreen();
       case BioSecciones.fomites:
         return const RegisterFomitesScreen();
+      case BioSecciones.articulos:
+        return const RegisterArticulosScreen();
       case BioSecciones.anomalias:
         return RegisterGaritaScreen(
           bioseguridadInicial: BioTipos.descripcion[tipo ?? BioTipos.fisica] ??
@@ -81,7 +105,6 @@ abstract final class BioNavigation {
   }
 
   /// Navega a una sección reemplazando la pantalla actual.
-  ///
   /// Se usa `Get.off` con `routeName` explícito y `preventDuplicates: false`
   /// para poder volver a la misma sección (que la deja como estaba).
   static void ir(String seccion, {String? tipo}) {

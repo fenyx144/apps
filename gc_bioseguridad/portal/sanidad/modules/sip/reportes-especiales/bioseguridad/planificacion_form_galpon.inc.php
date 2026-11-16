@@ -14,7 +14,7 @@ declare(strict_types=1);
  */
 function bio_plan_serializar_galpones(array $codigosGalpon): string
 {
-    // En servidor: sanidad/modules/sip/reportes-especiales/bioseguridad → flutter/bioseguridad/php
+    // En servidor: sanidad/modules/sip/reportes-especiales/bioseguridad flutter/bioseguridad/php
     require_once __DIR__ . '/../../../../flutter/bioseguridad/php/bio_plan_tablas_lib.php';
     $parts = [];
     foreach ($codigosGalpon as $g) {

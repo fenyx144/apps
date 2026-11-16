@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../models/mortality_detail.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../utils/mortality_design.dart';
@@ -511,6 +512,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
         int.tryParse(r['cant_machos']?.toString() ?? '0') ?? 0;
     final cantHembras =
         int.tryParse(r['cant_hembras']?.toString() ?? '0') ?? 0;
+    final detallesCard = MortalityDetail.listFromRecord(r);
+    final cantMn = MortalityDetail.totalTipo(detallesCard, 'MN');
+    final cantMe = MortalityDetail.totalTipo(detallesCard, 'ME');
     final fechaDisplay = _fmtFecha(fecha);
     final horaDisplay = hora.length >= 5 ? hora.substring(0, 5) : hora;
 
@@ -728,6 +732,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         Text('Total: ${cantMachos + cantHembras}',
                             style: const TextStyle(
                                 fontSize: 12, fontWeight: FontWeight.w700)),
+                        if (cantMn > 0) ...[
+                          const SizedBox(width: 12),
+                          Text('M.N.: $cantMn',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant)),
+                        ],
+                        if (cantMe > 0) ...[
+                          const SizedBox(width: 12),
+                          Text('M.E.: $cantMe',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant)),
+                        ],
                       ],
                     ),
                   ],
@@ -1012,7 +1036,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             .toList()
         : <Map<String, dynamic>>[];
     // Solo mostramos bloques por registro cuando hay detalle local individual.
-    // El array 'registros' es el payload agrupado por tipo (para el servidor);
     // no representa cada mortalidad por separado.
     final items = detalleRegistros;
 

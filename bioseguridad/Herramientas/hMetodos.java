@@ -28,7 +28,6 @@ public class hMetodos {
             }else{
                 sIp= sIpPublico;
             }
-            //sIp="TU IP";
             return sIp;
         } catch (Exception e){
             return sIp;

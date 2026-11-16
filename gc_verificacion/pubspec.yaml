@@ -1,0 +1,59 @@
+name: gc_verificacion
+description: "Verificacion facial para control de ingreso"
+publish_to: 'none'
+version: 1.1.0+2
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  provider: ^6.1.5+1
+  device_info_plus: ^12.3.0
+  get: ^4.7.3
+  shared_preferences: ^2.5.4
+  http: ^1.6.0
+  uuid: ^4.5.1
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
+  crypto: ^3.0.6
+  pointycastle: ^4.0.0
+  android_id: ^0.5.2+1
+  mobile_scanner: ^7.0.1
+  path_provider: ^2.1.0
+  camera: ^0.12.0
+  google_mlkit_face_detection: ^0.13.0
+  flutter_onnxruntime: ^1.9.0
+  audioplayers: ^6.8.1
+  flutter_tts: ^4.2.0
+  vibration: ^3.1.0
+  wakelock_plus: ^1.5.2
+  screen_brightness: ^2.1.0
+  image: ^4.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo_grs.png
+    - assets/images/logo_encabezado.png
+    - assets/models/w600k_mbf.onnx
+    - assets/sounds/ok.wav
+    - assets/sounds/fail.wav
+    - assets/icon/icon.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#00000000"
+  adaptive_icon_foreground: "assets/icon/icon.png"

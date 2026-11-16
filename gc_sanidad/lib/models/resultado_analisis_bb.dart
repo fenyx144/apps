@@ -56,7 +56,7 @@ class ResultadoAnalisisBB {
   final String idAnalisis;
   final double? gmean;
   final double? cv;
-  final double? sd; // ← debe coincidir con el alias en SQL
+  final double? sd; // debe coincidir con el alias en SQL
   final int? countMuestras;
   final List<double?> nivelesS;
 

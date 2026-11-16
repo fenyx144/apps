@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../services/catalog_service.dart';
 import '../services/ingreso_presencia_service.dart';
 import '../utils/constants.dart';
 import '../utils/control_personal_resumen.dart';
@@ -68,6 +70,108 @@ String _fmtHora(String raw) {
 
 String _etiquetaPermisoIngresoGranja(bool ingresa) =>
     ingresa ? 'Ingresa a granja' : 'No ingresa a granja';
+
+List<Map<String, dynamic>> _alcoholemiaPruebasResumen(
+  Map<String, dynamic> registro,
+) {
+  final raw = registro['alcoholemia_pruebas'];
+  if (raw is List && raw.isNotEmpty) {
+    return [
+      for (final item in raw)
+        if (item is Map) Map<String, dynamic>.from(item),
+    ];
+  }
+  final uno = registro['alcoholemia'];
+  if (uno is Map) {
+    final dni = (uno['dni'] ?? '').toString().trim();
+    final grado = (uno['grado_g_l'] ?? '').toString().trim();
+    if (dni.isNotEmpty && grado.isNotEmpty) {
+      return [Map<String, dynamic>.from(uno)];
+    }
+  }
+  return const [];
+}
+
+double? _parseGradoGlResumen(dynamic v) {
+  final s = v?.toString().trim().replaceAll(',', '.') ?? '';
+  if (s.isEmpty) return null;
+  return double.tryParse(s);
+}
+
+String _estadoAlcoholemiaResumen(double? grado, double umbral) {
+  if (grado == null) return '—';
+  if (grado > umbral) return 'Supera';
+  return 'OK';
+}
+
+bool _boolResumen(dynamic v, {bool defaultValue = false}) {
+  if (v == null) return defaultValue;
+  if (v is bool) return v;
+  if (v == 1 || v == '1' || v == 'true' || v == 'S' || v == 's') return true;
+  if (v == 0 || v == '0' || v == 'false' || v == 'N' || v == 'n') return false;
+  return defaultValue;
+}
+
+List<Map<String, dynamic>> _articulosRegistroResumen(
+  Map<String, dynamic> registro,
+) {
+  final raw = registro['articulos'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
+}
+
+List<Map<String, dynamic>> _anomaliasArticulosResumen(
+  List<Map<String, dynamic>> items,
+) {
+  final out = <Map<String, dynamic>>[];
+  for (final a in items) {
+    final nombre = (a['descripcion'] ?? '').toString().trim();
+    if (nombre.isEmpty) continue;
+    final permitido = _boolResumen(a['permitido'], defaultValue: true);
+    if (!permitido) {
+      out.add({
+        'articulo': nombre,
+        'motivo': 'No permitido',
+        'anomalia': (a['anomalia_permitido'] ?? '').toString().trim(),
+        'agente': (a['agente_causal_permitido'] ?? '').toString().trim(),
+        'accion': (a['accion_permitido'] ?? '').toString().trim(),
+      });
+    }
+    if (permitido && !_boolResumen(a['desinfectado'], defaultValue: true)) {
+      out.add({
+        'articulo': nombre,
+        'motivo': 'Sin desinfección',
+        'anomalia': (a['anomalia_desinfeccion'] ?? '').toString().trim(),
+        'agente': (a['agente_causal_desinfeccion'] ?? '').toString().trim(),
+        'accion': (a['accion_desinfeccion'] ?? '').toString().trim(),
+      });
+    }
+  }
+  return out;
+}
+
+List<String> _imagenesArticulosRecord(Map<String, dynamic> record) {
+  final vistos = <String>{};
+  final out = <String>[];
+  void addPath(String? p) {
+    if (p == null || p.isEmpty || !vistos.add(p)) return;
+    if (File(p).existsSync()) out.add(p);
+  }
+
+  for (final item in (record['imagenes'] as List?) ?? []) {
+    addPath(_rutaImagen(item));
+  }
+  final reg = Map<String, dynamic>.from((record['registro'] as Map?) ?? {});
+  for (final a in _articulosRegistroResumen(reg)) {
+    for (final img in (a['imagenes'] as List?) ?? []) {
+      addPath(_rutaImagen(img));
+    }
+  }
+  return out;
+}
 
 bool _vehiculoIngresaFlag(dynamic ingresa) {
   if (ingresa == false || ingresa == 0 || ingresa == '0') return false;
@@ -155,7 +259,6 @@ String? _rutaImagen(dynamic item) {
 }
 
 /// Nombre visible de cada reporte.
-///
 /// El tipo guardado sigue siendo `garita` (es la tabla `rgarita` y la llave de
 /// los registros ya enviados); lo que cambió es el nombre que ve el usuario.
 String nombreReporte(String reporte) {
@@ -170,6 +273,8 @@ String nombreReporte(String reporte) {
       return AppStrings.menuIngreso;
     case 'salida':
       return AppStrings.menuSalida;
+    case 'articulos':
+      return AppStrings.menuArticulos;
   }
   return reporte;
 }
@@ -188,13 +293,14 @@ IconData iconoReporte(String reporte) {
       return Icons.badge_outlined;
     case 'salida':
       return Icons.logout_rounded;
+    case 'articulos':
+      return Icons.checklist_rtl_rounded;
   }
   return Icons.assignment_outlined;
 }
 
 /// DNIs declarados en un registro de Control de ingreso, con el nombre
 /// consultado cuando lo hay.
-///
 /// Acepta los formatos que existen en la app: pares `{dni, nombre}` (lo que
 /// guarda el formulario con el escáner), lista de números (registros anteriores)
 /// y texto separado por comas (reportes que vienen del backend).
@@ -227,6 +333,55 @@ class RegisterSummaryContent extends StatelessWidget {
       record['granjaNombre']?.toString() ?? '',
     );
     final reporte = record['reporte']?.toString() ?? '';
+
+    if (compact && reporte == 'articulos') {
+      final imgs = _imagenesArticulosRecord(record);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _fichaArticulosResumen(context),
+          const SizedBox(height: 14),
+          ..._bloquesArticulosResumen(context),
+          if (imgs.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _bloqueImagenesResumen(context, imgs),
+          ],
+        ],
+      );
+    }
+
+    if (reporte == 'articulos') {
+      final imgs = _imagenesArticulosRecord(record);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title.isNotEmpty) ...[
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+                color: context.textThemePrimary,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          _row(context, 'Reporte', nombreReporte(reporte)),
+          _row(context, 'Fecha', _fmtFecha(record['fecha']?.toString() ?? '')),
+          _row(context, 'Turno', record['turno']?.toString() ?? '—'),
+          _row(
+            context,
+            'Registrado por',
+            record['nombre_usuario']?.toString() ?? '—',
+          ),
+          const SizedBox(height: 8),
+          ..._bloquesArticulosResumen(context),
+          const SizedBox(height: 12),
+          _bloqueImagenesResumen(context, imgs),
+        ],
+      );
+    }
 
     if (compact && (reporte == 'ingreso' || reporte == 'salida')) {
       return Column(
@@ -444,6 +599,11 @@ class RegisterSummaryContent extends StatelessWidget {
         widgets.add(const SizedBox(height: 10));
         widgets.add(_tablaVehiculosIngresoResumen(context, vehRaw));
       }
+      final pruebas = _alcoholemiaPruebasResumen(registro);
+      if (pruebas.isNotEmpty) {
+        widgets.add(const SizedBox(height: 10));
+        widgets.add(_tablaAlcoholemiaResumen(context, pruebas));
+      }
     } else {
       final placas = _vehiculosSalidaResumen(registro);
       if (placas.isNotEmpty) {
@@ -482,6 +642,213 @@ class RegisterSummaryContent extends StatelessWidget {
             d.nombre.trim().isEmpty ? '—' : d.nombre.trim(),
             align: TextAlign.left,
             fontSize: 11,
+          ),
+        ];
+      },
+    );
+  }
+
+  Widget _fichaArticulosResumen(BuildContext context) {
+    final registro = Map<String, dynamic>.from(
+      (record['registro'] as Map?) ?? const {},
+    );
+    final fecha = _fmtFecha(record['fecha']?.toString() ?? '');
+    final turno = record['turno']?.toString() ?? '—';
+    final turnoTxt = turno == 'Dia' ? 'Día' : turno;
+    final dni = registro['dni']?.toString().trim() ?? '';
+    final nombre = registro['nombre']?.toString().trim() ?? '';
+    final persona = dni.isEmpty
+        ? (nombre.isEmpty ? '—' : nombre)
+        : (nombre.isEmpty ? dni : '$dni · $nombre');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Control de artículos',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: AppColors.primaryDark,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _resumenEtiquetaValor(context, 'Fecha', fecha)),
+            const SizedBox(width: 12),
+            Expanded(child: _resumenEtiquetaValor(context, 'Turno', turnoTxt)),
+          ],
+        ),
+        _resumenEtiquetaValor(context, 'Persona', persona, maxLines: 3),
+      ],
+    );
+  }
+
+  List<Widget> _bloquesArticulosResumen(BuildContext context) {
+    final registro = Map<String, dynamic>.from(
+      (record['registro'] as Map?) ?? const {},
+    );
+    final items = _articulosRegistroResumen(registro);
+    final anomalias = _anomaliasArticulosResumen(items);
+    return [
+      _tablaArticulosControlResumen(context, items),
+      if (anomalias.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        _tablaAnomaliasArticulosResumen(context, anomalias),
+      ],
+    ];
+  }
+
+  Widget _tablaArticulosControlResumen(
+    BuildContext context,
+    List<Map<String, dynamic>> items,
+  ) {
+    return BioTable(
+      caption: items.isEmpty ? 'Artículos' : 'Artículos (${items.length})',
+      rowHeight: 40,
+      columns: const [
+        BioColumn('Artículo', width: 100, align: TextAlign.left, flex: 2),
+        BioColumn('Perm.', width: 44, align: TextAlign.center),
+        BioColumn('Desinf.', width: 52, align: TextAlign.center),
+        BioColumn('Producto', width: 88, align: TextAlign.left, flex: 1),
+      ],
+      rowCount: items.isEmpty ? 1 : items.length,
+      rowBuilder: (context, index) {
+        if (items.isEmpty) {
+          return const [
+            BioText('—', align: TextAlign.left, fontSize: 11),
+            BioText('—', align: TextAlign.center, fontSize: 11),
+            BioText('—', align: TextAlign.center, fontSize: 11),
+            BioText('—', align: TextAlign.left, fontSize: 11),
+          ];
+        }
+        final a = items[index];
+        final nombre = (a['descripcion'] ?? '').toString().trim();
+        final permitido = _boolResumen(a['permitido'], defaultValue: true);
+        final desinfectado = _boolResumen(a['desinfectado'], defaultValue: true);
+        final producto = (a['desinfectante'] ?? '').toString().trim();
+        return [
+          BioText(
+            nombre.isEmpty ? '—' : nombre,
+            align: TextAlign.left,
+            fontSize: 11,
+            bold: true,
+          ),
+          BioText(
+            permitido ? 'Sí' : 'No',
+            align: TextAlign.center,
+            fontSize: 11,
+            color: permitido ? null : AppColors.errorDark,
+            bold: !permitido,
+          ),
+          BioText(
+            !permitido
+                ? '—'
+                : (desinfectado ? 'Sí' : 'No'),
+            align: TextAlign.center,
+            fontSize: 11,
+            color: permitido && !desinfectado ? AppColors.errorDark : null,
+            bold: permitido && !desinfectado,
+          ),
+          BioText(
+            permitido && desinfectado && producto.isNotEmpty ? producto : '—',
+            align: TextAlign.left,
+            fontSize: 11,
+          ),
+        ];
+      },
+    );
+  }
+
+  Widget _tablaAnomaliasArticulosResumen(
+    BuildContext context,
+    List<Map<String, dynamic>> filas,
+  ) {
+    return BioTable(
+      caption: 'Anomalías AGC (${filas.length})',
+      rowHeight: 44,
+      columns: const [
+        BioColumn('Artículo', width: 80, align: TextAlign.left),
+        BioColumn('Motivo', width: 68, align: TextAlign.left),
+        BioColumn('Anomalía', width: 90, align: TextAlign.left, flex: 2),
+        BioColumn('Agente', width: 80, align: TextAlign.left, flex: 1),
+        BioColumn('Acción', width: 80, align: TextAlign.left, flex: 1),
+      ],
+      rowCount: filas.length,
+      rowBuilder: (context, index) {
+        final f = filas[index];
+        final art = (f['articulo'] ?? '').toString();
+        final motivo = (f['motivo'] ?? '').toString();
+        final anomalia = (f['anomalia'] ?? '').toString();
+        final agente = (f['agente'] ?? '').toString();
+        final accion = (f['accion'] ?? '').toString();
+        return [
+          BioText(art, align: TextAlign.left, fontSize: 11, bold: true),
+          BioText(motivo, align: TextAlign.left, fontSize: 11),
+          BioText(
+            anomalia.isEmpty ? '—' : anomalia,
+            align: TextAlign.left,
+            fontSize: 11,
+          ),
+          BioText(
+            agente.isEmpty ? '—' : agente,
+            align: TextAlign.left,
+            fontSize: 11,
+          ),
+          BioText(
+            accion.isEmpty ? '—' : accion,
+            align: TextAlign.left,
+            fontSize: 11,
+          ),
+        ];
+      },
+    );
+  }
+
+  Widget _tablaAlcoholemiaResumen(
+    BuildContext context,
+    List<Map<String, dynamic>> filas,
+  ) {
+    final umbral = context.read<CatalogService>().alcoholemiaMeta.umbralGl;
+    return BioTable(
+      caption: 'Alcoholemia (${filas.length})',
+      rowHeight: 40,
+      columns: const [
+        BioColumn('DNI', width: 88, align: TextAlign.left),
+        BioColumn('Nombre', width: 100, align: TextAlign.left, flex: 2),
+        BioColumn('g/L', width: 44, align: TextAlign.right),
+        BioColumn('Resultado', width: 68, align: TextAlign.center),
+      ],
+      rowCount: filas.length,
+      rowBuilder: (context, index) {
+        final p = filas[index];
+        final dni = (p['dni'] ?? '').toString().trim();
+        final nombre = (p['nombre'] ?? '').toString().trim();
+        final gradoTxt = (p['grado_g_l'] ?? '').toString().trim();
+        final grado = _parseGradoGlResumen(p['grado_g_l']);
+        final estado = _estadoAlcoholemiaResumen(grado, umbral);
+        final supera = estado == 'Supera';
+        return [
+          BioText(dni.isEmpty ? '—' : dni, align: TextAlign.left, fontSize: 11, bold: true),
+          BioText(
+            nombre.isEmpty ? '—' : nombre,
+            align: TextAlign.left,
+            fontSize: 11,
+          ),
+          BioText(
+            gradoTxt.isEmpty ? '—' : gradoTxt,
+            align: TextAlign.right,
+            fontSize: 11,
+            bold: true,
+          ),
+          BioText(
+            estado,
+            align: TextAlign.center,
+            fontSize: 11,
+            bold: supera,
+            color: supera ? AppColors.errorDark : null,
           ),
         ];
       },
@@ -575,6 +942,7 @@ class RegisterSummaryContent extends StatelessWidget {
     if (reporte == 'ingreso') {
       final dnis = listaDnis(registro['dnis']);
       final vehiculos = _vehiculosIngresoResumen(registro);
+      final pruebasAlc = _alcoholemiaPruebasResumen(registro);
       final proceso = registro['motivo']?.toString().trim() ?? '';
       final galpon = registro['galpon']?.toString().trim() ?? '';
       return [
@@ -597,6 +965,10 @@ class RegisterSummaryContent extends StatelessWidget {
               : 'Vehículos que ingresan (${vehiculos.length})',
           vehiculos.isEmpty ? '—' : vehiculos.join('\n'),
         ),
+        if (pruebasAlc.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _tablaAlcoholemiaResumen(context, pruebasAlc),
+        ],
         _textFieldRow(context, 'Motivo de visita/ Obs.', registro['observacion']?.toString()),
       ];
     }
@@ -953,7 +1325,8 @@ class RegisterSummarySheet {
       enableDrag: true,
       builder: (sheetContext) {
         final tipo = record['reporte']?.toString() ?? '';
-        final hojaCompacta = tipo == 'ingreso' || tipo == 'salida';
+        final hojaCompacta =
+            tipo == 'ingreso' || tipo == 'salida' || tipo == 'articulos';
         return DraggableScrollableSheet(
         initialChildSize: hojaCompacta ? 0.94 : 1.0,
         minChildSize: hojaCompacta ? 0.55 : 0.5,

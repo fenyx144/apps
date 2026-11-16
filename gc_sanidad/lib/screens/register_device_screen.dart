@@ -14,7 +14,7 @@ class RegisterDeviceScreen extends StatefulWidget {
 }
 
 class _RegisterDeviceScreenState extends State<RegisterDeviceScreen>
-  //  with SingleTickerProviderStateMixin 
+  // with SingleTickerProviderStateMixin
     {
   final _formKey = GlobalKey<FormState>();
   final _descripcionController = TextEditingController();
@@ -26,12 +26,11 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen>
   String _familia = '';
   String _modelo = '';
 
-
   @override
   void initState() {
     super.initState();
     _loadDeviceInfo();
-   
+
   }
 
   @override
@@ -50,7 +49,6 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen>
           _fabricante = androidInfo.manufacturer;
           _familia = androidInfo.brand;
           _modelo = androidInfo.model;
-          //_descripcionController.text = '${androidInfo.manufacturer} ${androidInfo.model}';
         });
       } else if (Platform.isIOS) {
         final iosInfo = await deviceInfo.iosInfo;
@@ -95,7 +93,6 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen>
 
     // CASO 1: Dispositivo ya registrado y ACTIVO
     if (errorCode == 'DEVICE_ALREADY_ACTIVE') {
-      //showSuccessToast(context, 'Este dispositivo ya está registrado y activo en el sistema.');
       _handleDeviceAlreadyActive(context);
       return;
     }
@@ -103,7 +100,6 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen>
     // CASO 2: Dispositivo INACTIVO
     if (errorCode == 'DEVICE_INACTIVE') {
       showInfoToast(context, 'Este dispositivo está registrado pero ha sido desactivado.');
-      //_handleDeviceInactive(result);
       return;
     }
 
@@ -114,7 +110,6 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen>
         'Dispositivo registrado exitosamente. Ya puedes iniciar sesión.',
       );
 
-     
       if (!mounted) return;
 
       Navigator.of(context).pop();
@@ -170,7 +165,7 @@ void _handleDeviceAlreadyActive(BuildContext context) {
               'Dispositivo ya registrado',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                fontSize: 16.5, // ✅ Más pequeño para evitar desborde
+                fontSize: 16.5, // Más pequeño para evitar desborde
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -314,17 +309,17 @@ void _handleDeviceAlreadyActive(BuildContext context) {
                 ),
               ),
 
-              // Contenido principal con fondo gris claro ⭐
+              // Contenido principal con fondo gris claro
               Expanded(
-                //child: FadeTransition(
-                  //opacity: _fadeAnimation,
-                  //child: SlideTransition(
-                    //position: _slideAnimation,
+                // child: FadeTransition(
+                  // opacity: _fadeAnimation,
+                  // child: SlideTransition(
+                    // position: _slideAnimation,
                     child: Container(
                       margin: const EdgeInsets.only(top: 20),
                       decoration: BoxDecoration(
                         color: AppColors
-                            .surface, // ⭐ GRIS CLARO EN LUGAR DE BLANCO
+                            .surface, // GRIS CLARO EN LUGAR DE BLANCO
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(30),
                           topRight: Radius.circular(30),
@@ -599,8 +594,6 @@ void _handleDeviceAlreadyActive(BuildContext context) {
                         ),
                       ),
                     ),
-                  //),
-                //),
               ),
             ],
           ),

@@ -123,14 +123,14 @@ class _ImageEditorScreenState extends State<ImageEditorScreen> {
               back: 'Atrás',
               done: 'Listo',
             ),
-            
+
             emojiEditor: I18nEmojiEditor(
               bottomNavigationBarText: 'Emoji',
             ),
             stickerEditor: I18nStickerEditor(
               bottomNavigationBarText: 'Stickers',
             ),
-            
+
             various: I18nVarious(
               loadingDialogMsg: 'Cargando...',
               closeEditorWarningTitle: '¿Cerrar editor?',
@@ -153,32 +153,32 @@ class _ImageEditorScreenState extends State<ImageEditorScreen> {
               PaintMode.eraser,
             ],
           ),
-          
+
           textEditor: const TextEditorConfigs(
-            enabled: true, 
+            enabled: true,
           ),
-          
+
           cropRotateEditor: const CropRotateEditorConfigs(
-            enabled: true, 
+            enabled: true,
           ),
           tuneEditor: const TuneEditorConfigs(
-            enabled: false, 
+            enabled: false,
           ),
-          
+
           filterEditor: const FilterEditorConfigs(
             enabled: false,
           ),
-          
+
           blurEditor: const BlurEditorConfigs(
-            enabled: false, 
+            enabled: false,
           ),
-          
+
           emojiEditor: const EmojiEditorConfigs(
-            enabled: false, 
+            enabled: false,
           ),
-          
+
           stickerEditor: const StickerEditorConfigs(
-            enabled: false, 
+            enabled: false,
           ),
         ),
       ),

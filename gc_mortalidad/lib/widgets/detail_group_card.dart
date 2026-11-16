@@ -8,7 +8,6 @@ import 'photo_thumb.dart';
 import 'sexo_table.dart';
 
 /// Tarjeta compacta de un detalle (grupo Machos/Hembras de la misma sesión).
-///
 /// Usa una cuadrícula alineada con columnas Machos | Hembras y filas:
 /// Cantidad (o Suma en despacho), una fila por etapa del proceso en
 /// despacho, Causa, Observación y Fotos. En modo [readOnly] no muestra
@@ -76,6 +75,9 @@ class DetailGroupCard extends StatelessWidget {
     final fotosH = tieneH ? hembra.fotos : const <String>[];
 
     final hayCausa = causaM != null || causaH != null;
+    final tipoM = tieneM ? macho.tipoMuerte : null;
+    final tipoH = tieneH ? hembra.tipoMuerte : null;
+    final hayTipo = tipoM != null || tipoH != null;
     final hayFotos = fotosM.isNotEmpty || fotosH.isNotEmpty;
 
     // Valor de una etapa según el sexo (0 si no hay detalle o sin valor).
@@ -85,10 +87,12 @@ class DetailGroupCard extends StatelessWidget {
     // Etapas de despacho con datos en al menos un sexo.
     final etapasVisibles = isDespacho
         ? kDespachoEtapas
-            .where((e) =>
-                etapaDe(tieneM, macho, e.id) > 0 ||
-                etapaDe(tieneH, hembra, e.id) > 0)
-            .toList()
+              .where(
+                (e) =>
+                    etapaDe(tieneM, macho, e.id) > 0 ||
+                    etapaDe(tieneH, hembra, e.id) > 0,
+              )
+              .toList()
         : <DespachoEtapa>[];
 
     final maleColor = AppColors.maleDark;
@@ -102,34 +106,34 @@ class DetailGroupCard extends StatelessWidget {
 
     // Celda vacía/sin dato.
     Widget emptyCell() => Center(
-          child: Text(
-            '—',
-            style: TextStyle(
-              fontSize: 11,
-              color: isDark ? Colors.white24 : Colors.grey.shade400,
-            ),
-          ),
-        );
+      child: Text(
+        '—',
+        style: TextStyle(
+          fontSize: 11,
+          color: isDark ? Colors.white24 : Colors.grey.shade400,
+        ),
+      ),
+    );
 
     // Celda de cantidad/suma, centrada y con fondo por sexo.
     Widget cantCell(bool tiene, int cant, Color color) => Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-          decoration: BoxDecoration(
-            color: (tiene ? color : Colors.grey).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            tiene ? '$cant' : '---',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: tiene
-                  ? (isDark ? Colors.white : AppColors.textPrimary)
-                  : (isDark ? Colors.white38 : Colors.grey.shade500),
-            ),
-          ),
-        );
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+      decoration: BoxDecoration(
+        color: (tiene ? color : Colors.grey).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        tiene ? '$cant' : '---',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          color: tiene
+              ? (isDark ? Colors.white : AppColors.textPrimary)
+              : (isDark ? Colors.white38 : Colors.grey.shade500),
+        ),
+      ),
+    );
 
     // Celda numérica de una etapa: '0' si el sexo está registrado pero la
     // etapa no tiene aves; '—' si el sexo no está registrado (no aplica).
@@ -150,6 +154,30 @@ class DetailGroupCard extends StatelessWidget {
             color: valor > 0
                 ? (isDark ? Colors.white : color)
                 : (isDark ? Colors.white38 : Colors.grey.shade500),
+          ),
+        ),
+      );
+    }
+
+    Widget tipoCell(String? tipo, int cant) {
+      if (tipo == null) return emptyCell();
+      return Container(
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark ? AppColors.darkBorder : AppColors.borderLight,
+          ),
+        ),
+        child: Text(
+          '${tipo == 'ME' ? 'M.E.' : 'M.N.'} $cant',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: isDark
+                ? AppColors.darkTextSecondary
+                : AppColors.textSecondary,
           ),
         ),
       );
@@ -253,23 +281,31 @@ class DetailGroupCard extends StatelessWidget {
       );
     }
 
-    Widget labelTexto(String text) =>
-        Text(text, style: labelStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    Widget labelTexto(String text) => Text(
+      text,
+      style: labelStyle,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
 
     Widget labelEtapa(DespachoEtapa e) => Row(
-          children: [
-            Icon(e.icon, size: 13, color: isDark ? Colors.white38 : Colors.grey.shade500),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                e.nombre,
-                style: labelStyle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        );
+      children: [
+        Icon(
+          e.icon,
+          size: 13,
+          color: isDark ? Colors.white38 : Colors.grey.shade500,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            e.nombre,
+            style: labelStyle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -286,7 +322,10 @@ class DetailGroupCard extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: isDark ? 0.2 : 0.12),
                     borderRadius: BorderRadius.circular(8),
@@ -319,7 +358,10 @@ class DetailGroupCard extends StatelessWidget {
                     tooltip: 'Editar',
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
                   IconButton(
                     onPressed: onDelete,
@@ -331,7 +373,10 @@ class DetailGroupCard extends StatelessWidget {
                     tooltip: 'Eliminar',
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
                 ],
               ],
@@ -340,7 +385,9 @@ class DetailGroupCard extends StatelessWidget {
           Divider(
             height: 1,
             thickness: 1,
-            color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+            color: (isDark ? Colors.white : Colors.black).withValues(
+              alpha: 0.06,
+            ),
           ),
           // Cuerpo: cuadrícula alineada Machos | Hembras.
           Padding(
@@ -373,7 +420,11 @@ class DetailGroupCard extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.female_rounded, size: 14, color: femaleColor),
+                          Icon(
+                            Icons.female_rounded,
+                            size: 14,
+                            color: femaleColor,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'Hembras',
@@ -397,6 +448,12 @@ class DetailGroupCard extends StatelessWidget {
                     causaCell(causaM, maleColor),
                     causaCell(causaH, femaleColor),
                   ),
+                if (hayTipo)
+                  fieldRow(
+                    labelTexto('Tipo muerte'),
+                    tipoCell(tipoM, cantM),
+                    tipoCell(tipoH, cantH),
+                  ),
                 // Despacho con desglose (solo resumen al guardar): una fila
                 // por etapa con datos y al final la fila 'Suma'.
                 if (isDespacho && desgloseEtapas) ...[
@@ -404,9 +461,15 @@ class DetailGroupCard extends StatelessWidget {
                     fieldRow(
                       labelEtapa(e),
                       etapaCell(
-                          tieneM, etapaDe(tieneM, macho, e.id), maleColor),
+                        tieneM,
+                        etapaDe(tieneM, macho, e.id),
+                        maleColor,
+                      ),
                       etapaCell(
-                          tieneH, etapaDe(tieneH, hembra, e.id), femaleColor),
+                        tieneH,
+                        etapaDe(tieneH, hembra, e.id),
+                        femaleColor,
+                      ),
                     ),
                   fieldRow(
                     labelTexto('Suma'),

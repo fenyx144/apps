@@ -127,7 +127,7 @@ class CatalogDownloadService {
         final motivos = motivosResult['motivos'] as List;
         await storage.saveMotivosMortalidad(
           motivos
-              .map((m) => {'tcod_mort': m.codigo, 'tnom_mort': m.nombre})
+              .map((m) => {'tcod_mort': m.codigo, 'tnom_mort': m.nombre, 'clase': m.clase})
               .toList(),
         );
         await catalogService.loadFromPrefs();
@@ -186,7 +186,7 @@ class CatalogDownloadService {
       if (motivos.isEmpty) return false;
       await storage.saveMotivosMortalidad(
         motivos
-            .map((m) => {'tcod_mort': m.codigo, 'tnom_mort': m.nombre})
+            .map((m) => {'tcod_mort': m.codigo, 'tnom_mort': m.nombre, 'clase': m.clase})
             .toList(),
       );
       return true;

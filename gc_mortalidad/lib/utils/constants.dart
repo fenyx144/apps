@@ -88,16 +88,12 @@ class AppIcons {
 
 class AppConstants {
   static const String baseUrl = 'https://granjarinconadadelsur.com/produccionaves/app/public';
-                                //'https://granjarinconadadelsur.com/sanidad/flutter';
-                                //'http://192.168.15.38/produccionaves/app/public';
-                                //'http://10.252.29.5/sanidad/flutter';
-                                //'http://10.252.29.5/sanidad-backend-mobile/flutter';
   static const String apiToken = 'd9f7a6b3-4c8e-11ee-be56-0242ac120002';
   static const String appName = 'PROD_MORTALIDAD';
   static const String appDeveloper = 'JLSF Soft Soluciones EIRL.';
   static const String companyName = 'Granja Rinconada del Sur';
   static const String appTitle = 'MORTALIDAD';
-  static const String appVersion = '1.0.3';
+  static const String appVersion = '1.0.4';
 
   static const String keyIsLoggedIn = 'is_logged_in';
   static const String keyUserCode = 'user_code';

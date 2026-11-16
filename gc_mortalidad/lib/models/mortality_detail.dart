@@ -11,8 +11,9 @@ class MortalityDetail {
   /// Agrupa machos y hembras ingresados en la misma sesión del diálogo.
   final String? grupoId;
   /// Cantidad de aves por etapa del proceso de despacho
-  /// (columna camelCase → cantidad). Solo aplica a mortalidad tipo Despacho.
+  /// (columna camelCase cantidad). Solo aplica a mortalidad tipo Despacho.
   final Map<String, int> procesoEtapas;
+  final String? tipoMuerte;
 
   const MortalityDetail({
     required this.id,
@@ -24,6 +25,7 @@ class MortalityDetail {
     this.fotos = const [],
     this.grupoId,
     this.procesoEtapas = const {},
+    this.tipoMuerte,
   });
 
   bool get isMacho => sexo == 'M';
@@ -55,6 +57,7 @@ class MortalityDetail {
     List<String>? fotos,
     String? grupoId,
     Map<String, int>? procesoEtapas,
+    String? tipoMuerte,
   }) {
     return MortalityDetail(
       id: id ?? this.id,
@@ -66,6 +69,7 @@ class MortalityDetail {
       fotos: fotos ?? this.fotos,
       grupoId: grupoId ?? this.grupoId,
       procesoEtapas: procesoEtapas ?? this.procesoEtapas,
+      tipoMuerte: tipoMuerte ?? this.tipoMuerte,
     );
   }
 
@@ -80,6 +84,7 @@ class MortalityDetail {
         'proceso_etapas': procesoEtapas.isEmpty
             ? null
             : procesoEtapas.map((k, v) => MapEntry(k, v)),
+        'tipo_muerte': tipoMuerte,
         'fotos': fotos.map((p) => {'path': p}).toList(),
       };
 
@@ -120,7 +125,13 @@ class MortalityDetail {
       fotos: paths,
       grupoId: grupoRaw != null && grupoRaw.isNotEmpty ? grupoRaw : null,
       procesoEtapas: procesoEtapas,
+      tipoMuerte: _parseTipoMuerte(json['tipo_muerte'] ?? json['clase_muerte']),
     );
+  }
+
+  static String? _parseTipoMuerte(dynamic v) {
+    final s = (v ?? '').toString().trim().toUpperCase();
+    return s == 'ME' || s == 'MN' ? s : null;
   }
 
   static List<MortalityDetail> listFromRecord(Map<String, dynamic> record) {
@@ -177,6 +188,10 @@ class MortalityDetail {
 
   static int totalHembras(List<MortalityDetail> details) =>
       details.where((d) => d.isHembra).fold(0, (s, d) => s + d.cantidad);
+
+  static int totalTipo(List<MortalityDetail> details, String tipo) => details
+      .where((d) => d.tipoMuerte == tipo)
+      .fold(0, (s, d) => s + d.cantidad);
 
   static List<String> allPhotoPaths(List<MortalityDetail> details) {
     final paths = <String>[];

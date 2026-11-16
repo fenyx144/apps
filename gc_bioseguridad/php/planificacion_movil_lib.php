@@ -317,7 +317,7 @@ function bio_plan_proveedor_por_usuario(mysqli $conn, array $codigos): array
  * RUC del proveedor por código de usuario (clave en mayúsculas).
  *
  * El RUC sale de `san_usuario_proveedor`, la misma tabla que usa la web en
- * «Planificación de proveedor» (código de usuario → RUC asignado). No se usa
+ * «Planificación de proveedor» (código de usuario  RUC asignado). No se usa
  * `usuario.ruc` como fuente principal: en este servidor esa columna guarda la
  * planta o zona del usuario (p. ej. «LA JOYA»), no un RUC, y hacía que la app
  * mostrara el código del usuario en vez del RUC.
@@ -372,7 +372,7 @@ function bio_plan_ruc_por_usuario(mysqli $conn, array $codigos): array
     }
 
     // 2) Respaldo heredado: `usuario.ruc` solo si de verdad es un RUC de 11
-    //    dígitos (así «LA JOYA» o «LIMA» no se cuelan como RUC).
+    // dígitos (así «LA JOYA» o «LIMA» no se cuelan como RUC).
     $col = @$conn->query("SHOW COLUMNS FROM `usuario` LIKE 'ruc'");
     if (!$col || $col->num_rows === 0) {
         return [];

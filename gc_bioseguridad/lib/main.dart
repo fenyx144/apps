@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -6,7 +7,9 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/splash_screen.dart';
+import 'services/app_http_client.dart';
 import 'services/catalog_service.dart';
+import 'services/deep_link_service.dart';
 import 'services/storage_service.dart';
 import 'utils/app_theme.dart';
 import 'utils/constants.dart';
@@ -14,6 +17,9 @@ import 'utils/route_observer.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb) {
+    configureInternalHttps();
+  }
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setEnabledSystemUIMode(
     SystemUiMode.manual,
@@ -25,6 +31,8 @@ void main() async {
   // (incluido hot restart) comienza con sesión cerrada; el usuario debe
   // iniciar sesión de nuevo. Los catálogos y registros guardados se conservan.
   await prefs.setBool(AppConstants.keyIsLoggedIn, false);
+  // Enlaces gcbioseguridad://abrir?... de otras apps (ver DeepLinkService).
+  unawaited(DeepLinkService.init());
   runApp(
     MultiProvider(
       providers: [

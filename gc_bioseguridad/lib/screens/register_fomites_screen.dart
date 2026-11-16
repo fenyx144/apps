@@ -5,8 +5,10 @@ import 'package:uuid/uuid.dart';
 
 import '../services/app_version_service.dart';
 import '../services/catalog_service.dart';
+import '../services/deep_link_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
+import '../utils/record_id.dart';
 import '../utils/record_saver.dart';
 import '../utils/theme_colors.dart';
 import '../utils/toast_helper.dart';
@@ -43,7 +45,10 @@ class _DepredadorFila {
 }
 
 class RegisterFomitesScreen extends StatefulWidget {
-  const RegisterFomitesScreen({super.key});
+  const RegisterFomitesScreen({super.key, this.enlace});
+
+  /// Parámetros del enlace gcbioseguridad://abrir (ver DeepLinkService).
+  final Map<String, String>? enlace;
 
   @override
   State<RegisterFomitesScreen> createState() => _RegisterFomitesScreenState();
@@ -74,7 +79,6 @@ class _RegisterFomitesScreenState extends State<RegisterFomitesScreen> {
   String get _fechaYmd => DateFormat('yyyy-MM-dd').format(_fecha);
 
   /// Referencias que piden un dato aparte además de la etiqueta del catálogo.
-  ///
   /// Hoy solo «A la altura del galpón»: el operador indica a qué galpón o
   /// altura corresponde. Se compara sin tildes ni mayúsculas para que el
   /// catálogo pueda escribirlo de cualquiera de las dos formas.
@@ -110,9 +114,39 @@ class _RegisterFomitesScreenState extends State<RegisterFomitesScreen> {
     super.initState();
     _aplicarCatalogo(context.read<CatalogService>());
     _aplicarGranjaDeTrabajo();
+    _aplicarEnlace();
   }
 
-  /// Premarca la granja de trabajo (menú → Mi granja) con su campaña sugerida.
+/// Datos del enlace de otra app (granja, dni, nombre, hora, lat/lng, ref).
+/// La granja se premarca; el resto viaja en `registro.origen`.
+  void _aplicarEnlace() {
+    final e = widget.enlace;
+    if (e == null) return;
+    final id = DeepLinkService.uuidDe(e);
+    final storage = context.read<StorageService>();
+    if (id != null &&
+        storage.getAllRecords().any((r) => EvidenciaRecordId.of(r) == id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showWarningToast(context,
+              'Esta ronda ya tiene un registro. Al guardar se reemplazará.');
+        }
+      });
+    }
+    final sel = granjaSeleccionDe(
+      context.read<StorageService>(),
+      e['granja'] ?? '',
+      fechaYmd: _fechaYmd,
+    );
+    if (sel != null) {
+      _granja = sel.granja;
+      _granjaNombre = sel.granjaNombre;
+      _campania = sel.campania;
+      _campaniasDeGranja = sel.campanias;
+    }
+  }
+
+  /// Premarca la granja de trabajo (menú Mi granja) con su campaña sugerida.
   void _aplicarGranjaDeTrabajo() {
     final sel = granjaDeTrabajoSeleccion(
       context.read<StorageService>(),
@@ -343,7 +377,8 @@ class _RegisterFomitesScreenState extends State<RegisterFomitesScreen> {
         .toList();
 
     return {
-      'id': const Uuid().v4(),
+      // uuid del enlace (otra app) o uno nuevo.
+      'id': DeepLinkService.uuidDe(widget.enlace) ?? const Uuid().v4(),
       'reporte': 'fomites',
       'fecha': _fechaYmd,
       'granja': _granja,
@@ -359,6 +394,7 @@ class _RegisterFomitesScreenState extends State<RegisterFomitesScreen> {
         'proceso': _proceso,
         'observacion': _observacionController.text.trim(),
         'filas': filas,
+        if (widget.enlace != null) 'origen': widget.enlace,
       },
       'imagenes': imagenes,
       'synced': false,
@@ -412,11 +448,13 @@ class _RegisterFomitesScreenState extends State<RegisterFomitesScreen> {
 
     final record = _buildRecord(storage);
 
+    var enviado = false;
     final saved = await RegisterSummarySheet.show(
       context,
       record: record,
       onConfirm: () async {
         final ok = await BioRecordSaver.save(context, record);
+        enviado = ok;
         if (!mounted) return;
         if (ok) {
           showSuccessToast(context, 'Registro guardado y enviado.');
@@ -429,6 +467,19 @@ class _RegisterFomitesScreenState extends State<RegisterFomitesScreen> {
       },
     );
 
+    // Abierta por enlace (rondas): tras guardar vuelve a esa app con el
+    // resultado. Si no se puede abrir, se queda aquí como siempre.
+    final enlace = widget.enlace;
+    if (saved && mounted && enlace != null) {
+      final volvio = await DeepLinkService.volverAlOrigen(
+        enlace,
+        modulo: 'fomites',
+        uuid: record['id']?.toString() ?? '',
+        enviado: enviado,
+        fecha: record['fecha']?.toString() ?? '',
+      );
+      if (volvio) return;
+    }
     if (saved && mounted) {
       setState(() {
         for (final f in _filas) {
@@ -446,7 +497,13 @@ class _RegisterFomitesScreenState extends State<RegisterFomitesScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => DeepLinkService.conRetorno(
+        widget.enlace,
+        modulo: 'fomites',
+        child: _contenido(context),
+      );
+
+  Widget _contenido(BuildContext context) {
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: SectionAppBar(

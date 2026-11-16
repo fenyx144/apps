@@ -64,7 +64,7 @@ class _ListadoEnviosScreenState extends State<ListadoEnviosScreen> {
     try {
       final query = _searchController.text.trim();
 
-      // ✅ Construcción correcta de la URL, como en downloadCatalogos
+      // Construcción correcta de la URL, como en downloadCatalogos
       final url = Uri.parse('${AppConstants.baseUrlSanidad}/listar_envios.php')
           .replace(
             queryParameters: {
@@ -115,7 +115,7 @@ class _ListadoEnviosScreenState extends State<ListadoEnviosScreen> {
       await launchUrl(
         uri,
         mode: LaunchMode
-            .externalApplication, // ← Esto fuerza abrir en navegador externo
+            .externalApplication, // Esto fuerza abrir en navegador externo
       );
     } catch (e) {
       showErrorToast(context, 'No se pudo abrir el PDF');
@@ -330,11 +330,11 @@ class _ListadoEnviosScreenState extends State<ListadoEnviosScreen> {
       style: OutlinedButton.styleFrom(
         backgroundColor: color.withOpacity(
           0.1,
-        ), // ✅ más claro (0.1 en lugar de 0.15)
+        ), // más claro (0.1 en lugar de 0.15)
         side: BorderSide(
           color: color.withOpacity(0.3),
           width: 1,
-        ), // ✅ borde suave
+        ), // borde suave
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         padding: const EdgeInsets.symmetric(vertical: 10),
         alignment: Alignment.center,
@@ -343,7 +343,7 @@ class _ListadoEnviosScreenState extends State<ListadoEnviosScreen> {
     );
   }
 
-  // Formatear fecha
+    // Formatear fecha
   String _formatDate(String fecha) {
     try {
       if (fecha.length >= 10) {
@@ -453,7 +453,7 @@ class _ListadoEnviosScreenState extends State<ListadoEnviosScreen> {
       showErrorToast(context, 'Usuario no autenticado');
       return;
     }
-    Get.to(EnviarCorreoWidget(codigoEnvio: codigoEnvio, usuario: usuario));   
+    Get.to(EnviarCorreoWidget(codigoEnvio: codigoEnvio, usuario: usuario));
   }
 }
 
@@ -640,14 +640,14 @@ class _EnviarCorreoWidgetState extends State<EnviarCorreoWidget> {
     debugPrint('Destinatarios: ${destinatarios.join(", ")}');
 
     final streamResponse = await request.send();
-    
+
     // Obtener el código de estado HTTP
     final statusCode = streamResponse.statusCode;
     debugPrint('Status Code: $statusCode');
-    
+
     // Leer la respuesta completa como string
     final respStr = await streamResponse.stream.bytesToString();
-    
+
     // IMPRIMIR LA RESPUESTA COMPLETA ANTES DE PARSEAR
     debugPrint('=== RESPUESTA COMPLETA DEL SERVIDOR ===');
     debugPrint('Longitud: ${respStr.length} caracteres');
@@ -655,12 +655,12 @@ class _EnviarCorreoWidgetState extends State<EnviarCorreoWidget> {
     debugPrint('Respuesta completa:');
     debugPrint(respStr);
     debugPrint('=== FIN RESPUESTA ===');
-    
+
     // Verificar si la respuesta es JSON válido
     if (respStr.trim().isEmpty) {
       throw Exception('Respuesta vacía del servidor');
     }
-    
+
     // Intentar parsear como JSON
     dynamic response;
     try {
@@ -673,7 +673,7 @@ class _EnviarCorreoWidgetState extends State<EnviarCorreoWidget> {
       debugPrint(respStr);
       throw Exception('El servidor no devolvió JSON válido. Respuesta: ${respStr.substring(0, 200)}...');
     }
-    
+
     if (response['success'] == true) {
       if (!context.mounted) return;
       showSuccessToast(context, response['message'] ?? 'Correo enviado con éxito');
@@ -689,7 +689,7 @@ class _EnviarCorreoWidgetState extends State<EnviarCorreoWidget> {
     }
     debugPrint('Stack trace:');
     debugPrint(StackTrace.current.toString());
-    
+
     if (!context.mounted) return;
     showErrorToast(context, 'Error al enviar: ${e.toString()}');
   } finally {
@@ -710,7 +710,7 @@ class _EnviarCorreoWidgetState extends State<EnviarCorreoWidget> {
         appIcon: Icons.email,
         showBackButton: true,
       ),
-     
+
       body: Padding(
         padding: EdgeInsets.only(
           left: 16.0,

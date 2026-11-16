@@ -289,7 +289,6 @@ class ApiService {
   }
 
   /// Nombre de un DNI consultado en la API Factiliza (vía backend).
-  ///
   /// El token de Factiliza vive solo en el servidor, así que la app envía el
   /// documento y recibe el nombre ya armado.
   Future<Map<String, dynamic>> consultarDni(String dni) async {
@@ -330,7 +329,6 @@ class ApiService {
 
   /// Consulta informativa de la «Planificación de visitas» del portal web:
   /// ¿la placa o los DNIs estaban programados para esa granja en esa fecha?
-  ///
   /// Devuelve el bloque `data` del servidor solo cuando la planificación está
   /// disponible (`disponible == true`). Ante cualquier otra cosa (sin red,
   /// tiempo agotado, token rechazado, tablas aún no creadas en el servidor)
@@ -422,7 +420,6 @@ class ApiService {
   }
 
   /// Sube un registro de Vacuna al Agua (Decloración o Vacunación).
-  ///
   /// El backend responde 409 cuando el grupo (fecha + granja/campaña + turno
   /// [+ filtro | referencia + proceso]) ya existe; en ese caso se reintenta
   /// automáticamente como actualización.
@@ -549,7 +546,6 @@ class ApiService {
   }
 
   /// Verifica que el backend confirmó las imágenes locales que se enviaron.
-  ///
   /// `imagenes_ok` manda, también cuando el uuid ya estaba insertado: esa
   /// reenvío repara archivos que no habían llegado. Sin esa señal, un registro
   /// sin imágenes que enviar queda completo; si se enviaron, se compara la

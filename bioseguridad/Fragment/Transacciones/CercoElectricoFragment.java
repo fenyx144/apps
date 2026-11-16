@@ -53,7 +53,6 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
     String mifectra,sHora,sMinutos,sql,sEstadoDer,sEstadoIzq,sValidaReg,sId,sFecha,sCencos,sTurno,sEstadoD,sEstadoI,sEvaluador,sHoraI,sHoraF;
     String sEstado,sComponente,sDescripcion,sOtros,sDescripcionDer,sDescripcionIzq;
 
-
     /*<!-- TODO: VARIABLES G PARA MOSTRAR -->*/
 
     /*<!-- TODO: TABLA -->*/
@@ -73,15 +72,12 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
 
     /*<!-- TODO: LISTAS-ENTIDADES -->*/
 
-
     public CercoElectricoFragment() {
-        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_cerco_electrico, container, false);
     }
 
@@ -104,16 +100,11 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
         /*<!-- TODO: ASIGNAR VARIABLES -->*/
         bg.tvFecha.setText(sFechaActual);
 
-
         /*<!-- TODO: OCULTAR TABLAS -->*/
-
-
 
         buscarCencos();
 
         /*<!-- TODO: BOTONES -->*/
-        //bg.swtEstadoDer.setOnClickListener(this);
-        //bg.swtEstadoIzq.setOnClickListener(this);
         bg.swtArgolla.setOnClickListener(this);
         bg.swtBateria.setOnClickListener(this);
         bg.swtFocoTablero.setOnClickListener(this);
@@ -152,7 +143,6 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
                 mostrarTotales(sFecha, sCencos);
             }
         });
-
 
         /*<!-- TODO: GENERAR FORMATO PARA CAPTURA DE HORA -->*/
         bg.etHoraIni.setOnClickListener(new View.OnClickListener() {
@@ -199,7 +189,6 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
             }
         });
 
-
         /*<!-- TODO: CREAR CABECERA TABLA CONSUMO ALIMENTO: -->*/
 
         try {
@@ -220,7 +209,6 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
             toast.show();
         }
 
-
         /*<!-- TODO: AL INGRESAR UN DATO -->*/
 
         bg.spnTurno.addTextChangedListener(new TextWatcher() {
@@ -239,7 +227,6 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
 
             }
         });
-
 
         /*<!-- TODO: DESACTIVAR LOS CAMPOS CON SWITCHS -->*/
         bg.etArgolla.setEnabled(false);
@@ -397,7 +384,7 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
         sFecha = bg.tvFecha.getText().toString();
         sCencos = bg.etCencos.getText().toString().substring(0,6);
         sTurno = bg.spnTurno.getText().toString();
-        sEvaluador = hP.getNombreUsuario();//bg.tvNombreUsuario.getText().toString();
+        sEvaluador = hP.getNombreUsuario(); // bg.tvNombreUsuario.getText().toString();
 
         db = conn.getWritableDatabase();
         sql = "DELETE FROM " + dbE.t_RCercoElectrico+ " WHERE "+ dbE.c_rcFecha + "='" + sFecha+ "' AND "+ dbE.c_rcTurno + "='"+sTurno+"'";
@@ -405,7 +392,7 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
         db.close();
 
         db = conn.getWritableDatabase();
-        //Todo:MAXIMO REGISTRO
+        // TODO:MAXIMO REGISTRO
         try{
             sql = "SELECT MAX(ABS(" + dbE.c_rcId + "))  FROM " + dbE.t_RCercoElectrico + " WHERE " + dbE.c_rcFecha + "='" + sFecha + "';";
             Cursor cursor1 = db.rawQuery(sql,null);
@@ -420,17 +407,12 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
                 }
             }
 
-            //Todo:Validamos campos vacios de Estado:
+            // TODO:Validamos campos vacios de Estado:
 
-
-            //Todo:Agregamos campos generales a la Tabla
-
-
-
+            // TODO:Agregamos campos generales a la Tabla
 
             sHoraI = bg.etHoraIni.getText().toString();
             sHoraF = bg.etHoraFin.getText().toString();
-
 
             for (int i=1;i<=10; i++) {
                 switch (i) {
@@ -595,7 +577,7 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
             if (child instanceof TableRow) ((ViewGroup) child).removeAllViews();
         }
         db = conn.getReadableDatabase();
-        //FILTRAR DATA DE TABLA
+        // FILTRAR DATA DE TABLA
         sTurno = bg.spnTurno.getText().toString();
         try{
             sql = "SELECT " + dbE.c_rcId + "," + dbE.c_rcFecha + "," + dbE.c_rcTurno +
@@ -646,12 +628,10 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
         }
     }
 
-
     @Override
     public void onClick(View v) {
         switch (v.getId()) {
 
-              
             case R.id.swtArgolla:
                 if (bg.swtArgolla.isChecked()) {bg.swtArgolla.setText("Si");bg.etArgolla.setEnabled(true);}else{bg.swtArgolla.setText("No");bg.etArgolla.setEnabled(false);bg.etArgolla.setText("");}
                 break;
@@ -744,7 +724,5 @@ public class CercoElectricoFragment extends Fragment implements View.OnClickList
                 }
         }
     }
-
-
 
 }

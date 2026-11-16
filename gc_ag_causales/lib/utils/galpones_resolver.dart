@@ -136,7 +136,7 @@ class GalponesResolver {
     );
   }
 
-  /// Prioridad: por granja (3 díg.) → CENCO exacto → mismo prefijo con galpones.
+  /// Prioridad: por granja (3 díg.) CENCO exacto mismo prefijo con galpones.
   static List<Map<String, dynamic>> resolveOffline({
     required String granjaCodigo,
     required String campania,

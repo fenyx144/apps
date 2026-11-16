@@ -67,7 +67,6 @@ Future<CatalogService> _montar(
 }
 
 /// Métrica del catálogo con la forma que envía el servidor (`bloque` + `obs`).
-///
 /// `ok` y `falla` son las dos respuestas de la fila; el servidor las manda
 /// siempre, pero se pueden omitir para probar el respaldo.
 Map<String, Object?> _m(

@@ -38,7 +38,7 @@ class ResultadoAnalisisCuanti {
   final double? sd;
   final int? countMuestras;
   final List<double?> nivelesS; // s01–s06
-  final List<double?> nivelesT; // t01–t25 ← nuevo
+  final List<double?> nivelesT; // t01–t25 nuevo
 
   ResultadoAnalisisCuanti({
     required this.codigo,
@@ -48,7 +48,7 @@ class ResultadoAnalisisCuanti {
     this.sd,
     this.countMuestras,
     required this.nivelesS,
-    required this.nivelesT, // ← añadido
+    required this.nivelesT, // añadido
   });
 
   factory ResultadoAnalisisCuanti.fromJson(Map<String, dynamic> json) {
@@ -94,7 +94,7 @@ class ResultadoAnalisisCuanti {
 }
 // models/resultado_solicitud.dart
 class DocumentoPdf {
-  final String ruta; // ← Esta es la ruta completa: "uploads/.../archivo.pdf"
+  final String ruta; // Esta es la ruta completa: "uploads/.../archivo.pdf"
   final String nombre;
   DocumentoPdf({required this.ruta, required this.nombre});
 

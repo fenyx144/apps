@@ -11,7 +11,6 @@ class Muestra {
   int? numMachos;
   int? numHembras;
   String griSeleccion;
-  //List<String> analisisSeleccionados;
   List<AnalisisSeleccionado> analisisSeleccionados;
   List<String> paquetesSeleccionados;
   String observaciones;
@@ -42,7 +41,7 @@ class Muestra {
       if (numMachos != null) 'numMachos_$index': numMachos,
       if (numHembras != null) 'numHembras_$index': numHembras,
       if (griSeleccion.isNotEmpty) 'gri_seleccion_$index': griSeleccion,
-      //'analisis_$index': analisisSeleccionados,
+      // 'analisis_$index': analisisSeleccionados,
       'analisis_$index': analisisSeleccionados.map((a) => a.toJson()).toList(),
       'observaciones_$index': observaciones,
       'paquetesSeleccionados_$index': paquetesSeleccionados,

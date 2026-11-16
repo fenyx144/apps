@@ -29,7 +29,6 @@ public class eProcesos {
         this._descripcion = _descripcion;
     }
 
-
     @Override
     public String toString() {
         return _descripcion;

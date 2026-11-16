@@ -166,7 +166,7 @@ error_log("Total de items a actualizar: " . count($items));
 
 foreach ($items as $itemIndex => $item) {
     error_log("Procesando item #" . ($itemIndex + 1) . " para actualización");
-    
+
     // === CABECERA ===
     $granja = $item['granja'] ?? '';
     $campania = $item['campania'] ?? '';
@@ -177,23 +177,23 @@ foreach ($items as $itemIndex => $item) {
     $tcencos = $item['tcencos'] ?? '';
     $diagnosticoPresuntivo = $item['diagnostico_presuntivo'] ?? '';
     // NOTA: NO tocar tfecreghorainicio y tfecreghorafin en actualizaciones (solo se colocan al momento de registrar)
-    
+
     // === CAMPOS ADICIONALES ===
     $tuser = $item['tuser'] ?? 'app_movil';
     $tidandroid = $item['tidandroid'] ?? 'app_movil';
     $tuser_trans = $item['tuser_trans'] ?? $tuser;
     $tdate_trans = $item['tdate_trans'] ?? date('Y-m-d');
     $ttime_trans = $item['ttime_trans'] ?? date('H:i:s');
-    
+
     // Validar y formatear fecha de transacción
     if (empty($tdate_trans)) {
         $tdate_trans = date('Y-m-d');
     }
-   
+
     // Validar y formatear tiempo de transacción
     if (empty($ttime_trans)) {
         $ttime_trans = date('H:i:s');
-    } 
+    }
     // Formatear fectra
     if (!empty($fectra)) {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fectra)) {
@@ -207,7 +207,7 @@ foreach ($items as $itemIndex => $item) {
     } else {
         $fectra = date('Y-m-d');
     }
-    
+
     // === AUTOMÁTICOS ===
     $tdate = date('Y-m-d');
     $ttime = date('H:i:s');
@@ -215,7 +215,7 @@ foreach ($items as $itemIndex => $item) {
 
     // === REGISTROS DEL ITEM ===
     $registros = $item['registros'] ?? [];
-    
+
     if (empty($registros) || !is_array($registros)) {
         error_log("Item #" . ($itemIndex + 1) . " sin registros válidos");
         continue;
@@ -234,9 +234,9 @@ foreach ($items as $itemIndex => $item) {
     // Procesar evidencias ANTES del loop de actualización para tenerlas disponibles
     $evidenciasMetadata = $item['evidencias_metadata'] ?? [];
     $rutasEvidenciasPorNivel = [];
-    
+
     error_log("Procesando evidencias para item #" . ($itemIndex + 1) . ". Total metadata: " . count($evidenciasMetadata));
-    
+
     // Log de archivos recibidos para debugging
     if (!empty($_FILES)) {
         error_log("=== ARCHIVOS RECIBIDOS EN \$_FILES (ACTUALIZACIÓN) ===");
@@ -249,34 +249,34 @@ foreach ($items as $itemIndex => $item) {
         }
         error_log("=== FIN ARCHIVOS ===");
     }
-    
+
     foreach ($evidenciasMetadata as $evidenciaKey => $evidenciaInfo) {
         $sistema = $evidenciaInfo['sistema'] ?? '';
         $nivel = $evidenciaInfo['nivel'] ?? '';
         $cantidad = isset($evidenciaInfo['cantidad']) ? (int)$evidenciaInfo['cantidad'] : 0;
-        
+
         $normalizedEvidenciaKey = str_replace(' ', '_', $evidenciaKey);
-        
+
         $rutasNivel = [];
-        
+
         if ($cantidad == 0) {
             $rutasEvidenciasPorNivel[$nivel] = '';
             continue;
         }
-        
+
         for ($i = 0; $i < $cantidad; $i++) {
             $fileKey = 'evidencia_' . $normalizedEvidenciaKey . '_' . $i;
-            
+
             // Intentar también con variaciones del nombre de la clave
             $fileFound = false;
             $actualFileKey = $fileKey;
-            
+
             if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]['error'] === UPLOAD_ERR_OK) {
                 $fileFound = true;
             } else {
                 foreach ($_FILES as $key => $val) {
-                    if (strpos($key, 'evidencia_') === 0 && 
-                        strpos($key, $evidenciaKey) !== false && 
+                    if (strpos($key, 'evidencia_') === 0 &&
+                        strpos($key, $evidenciaKey) !== false &&
                         strpos($key, '_' . $i) !== false) {
                         $actualFileKey = $key;
                         $fileFound = true;
@@ -285,20 +285,20 @@ foreach ($items as $itemIndex => $item) {
                     }
                 }
             }
-            
+
             if ($fileFound && isset($_FILES[$actualFileKey]) && $_FILES[$actualFileKey]['error'] === UPLOAD_ERR_OK) {
                 $file = $_FILES[$actualFileKey];
-                
+
                 $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
                 if (empty($extension)) $extension = 'jpg';
-                $nombreArchivo = $granja . '_' . $galpon . '_' . $numreg . '_' . 
-                                str_replace('-', '', $fectra) . '_' . 
-                                strtolower(str_replace(' ', '_', $nivel)) . '_' . 
+                $nombreArchivo = $granja . '_' . $galpon . '_' . $numreg . '_' .
+                                str_replace('-', '', $fectra) . '_' .
+                                strtolower(str_replace(' ', '_', $nivel)) . '_' .
                                 $i . '_' . uniqid() . '.' . $extension;
-                
+
                 $rutaFisica = $carpetaNecropsias . $nombreArchivo;
                 $rutaBD = $rutaRelativaBD . $nombreArchivo;
-                
+
                 if (move_uploaded_file($file['tmp_name'], $rutaFisica)) {
                     $rutasNivel[] = $rutaBD;
                     $imagenesGuardadas++;
@@ -313,36 +313,36 @@ foreach ($items as $itemIndex => $item) {
                 $imagenesErrores[] = "Archivo no encontrado o con error ($fileKey): $errorCode";
             }
         }
-        
+
         if (!empty($rutasNivel)) {
             $rutasComas = implode(',', $rutasNivel);
             $rutasEvidenciasPorNivel[$nivel] = $rutasComas;
-        } 
+        }
     }
-    
+
     // === ACTUALIZAR CADA REGISTRO ===
     error_log("Item #" . ($itemIndex + 1) . " tiene " . count($registros) . " registros");
-    
+
     foreach ($registros as $regIndex => $reg) {
         // Validar campos requeridos
         if (!isset($reg['tuuid']) || !isset($reg['tsistema']) || !isset($reg['tnivel']) || !isset($reg['tparametro'])) {
             error_log("✗ Registro #" . ($regIndex + 1) . " inválido (faltan campos requeridos)");
-            error_log("  Campos presentes: tuuid=" . (isset($reg['tuuid']) ? 'SÍ' : 'NO') . 
-                     ", tsistema=" . (isset($reg['tsistema']) ? 'SÍ' : 'NO') . 
-                     ", tnivel=" . (isset($reg['tnivel']) ? 'SÍ' : 'NO') . 
+            error_log("  Campos presentes: tuuid=" . (isset($reg['tuuid']) ? 'SÍ' : 'NO') .
+                     ", tsistema=" . (isset($reg['tsistema']) ? 'SÍ' : 'NO') .
+                     ", tnivel=" . (isset($reg['tnivel']) ? 'SÍ' : 'NO') .
                      ", tparametro=" . (isset($reg['tparametro']) ? 'SÍ' : 'NO'));
             $errores++;
             continue;
         }
-        
+
         $tuuidRegistro = $reg['tuuid'] ?? '';
-        
+
         if (empty($tuuidRegistro)) {
             error_log("✗ Registro #" . ($regIndex + 1) . " sin tuuid - no se puede actualizar");
             $errores++;
             continue;
         }
-        
+
         error_log("Procesando registro #" . ($regIndex + 1) . " con UUID: $tuuidRegistro");
 
         // Verificar que el registro existe
@@ -362,7 +362,7 @@ foreach ($items as $itemIndex => $item) {
             $noEncontrados++;
             continue;
         }
-        
+
         error_log("✓ Registro encontrado: UUID=$tuuidRegistro, Sistema={$reg['tsistema']}, Nivel={$reg['tnivel']}");
 
         $obs = $reg['tobservacion'] ?? '';
@@ -388,7 +388,6 @@ foreach ($items as $itemIndex => $item) {
                 $tcodsistema = 0;
         }
 
-      
         // Obtener evidencia del nivel si existe
         $tnivelKey = $reg['tnivel'] ?? '';
         $evidenciaActual = '';
@@ -407,14 +406,14 @@ foreach ($items as $itemIndex => $item) {
         if (array_key_exists($tnivelKey, $rutasEvidenciasPorNivel)) {
             $evidencia = $rutasEvidenciasPorNivel[$tnivelKey];
         }
-        
+
         $porcentaje1 = isset($reg['tporcentaje1']) ? (double)$reg['tporcentaje1'] : 0.0;
         $porcentaje2 = isset($reg['tporcentaje2']) ? (double)$reg['tporcentaje2'] : 0.0;
         $porcentaje3 = isset($reg['tporcentaje3']) ? (double)$reg['tporcentaje3'] : 0.0;
         $porcentaje4 = isset($reg['tporcentaje4']) ? (double)$reg['tporcentaje4'] : 0.0;
         $porcentaje5 = isset($reg['tporcentaje5']) ? (double)$reg['tporcentaje5'] : 0.0;
         $porcentajeTotal = isset($reg['tporcentajetotal']) ? (double)$reg['tporcentajetotal'] : 0.0;
-        
+
         // Validar fechas
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fectra)) {
             $fectra = date('Y-m-d');
@@ -422,7 +421,7 @@ foreach ($items as $itemIndex => $item) {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tdate_trans)) {
             $tdate_trans = date('Y-m-d');
         }
-        
+
         $tsistema = (string)($reg['tsistema'] ?? '');
         $tnivel = (string)($reg['tnivel'] ?? '');
         $tparametro = (string)($reg['tparametro'] ?? '');
@@ -430,43 +429,43 @@ foreach ($items as $itemIndex => $item) {
         // Ejecutar actualización
         $stmtUpdate->bind_param(
             "ssssssssississsddddddsssssssss",
-            $tuser,              // 1. tuser: s
-            $tdate,              // 2. tdate: s
-            $ttime,              // 3. ttime: s
-            $tcencos,            // 4. tcencos: s
-            $granja,             // 5. tgranja: s
-            $campania,           // 6. tcampania: s
-            $edad,               // 7. tedad: s
-            $galpon,             // 8. tgalpon: s
-            $numreg,             // 9. tnumreg: i
-            $fectra,             // 10. tfectra: s
-            $diareg,             // 11. diareg: s
-            $tcodsistema,        // 12. tcodsistema: i
-            $tsistema,           // 13. tsistema: s
-            $tnivel,             // 14. tnivel: s
-            $tparametro,         // 15. tparametro: s
-            $porcentaje1,        // 16. tporcentaje1: d
-            $porcentaje2,        // 17. tporcentaje2: d
-            $porcentaje3,        // 18. tporcentaje3: d
-            $porcentaje4,        // 19. tporcentaje4: d
-            $porcentaje5,        // 20. tporcentaje5: d
-            $porcentajeTotal,    // 21. tporcentajetotal: d
-            $obs,                // 22. tobservacion: s
-            $evidencia,          // 23. evidencia: s
-            $tobs,               // 24. tobs: s
-            $tuser_trans,        // 25. tuser_trans: s
-            $tdate_trans,        // 26. tdate_trans: s
-            $ttime_trans,        // 27. ttime_trans: s
-            $tidandroid,         // 28. tidandroid: s
+            $tuser, // 1. tuser: s
+            $tdate, // 2. tdate: s
+            $ttime, // 3. ttime: s
+            $tcencos, // 4. tcencos: s
+            $granja, // 5. tgranja: s
+            $campania, // 6. tcampania: s
+            $edad, // 7. tedad: s
+            $galpon, // 8. tgalpon: s
+            $numreg, // 9. tnumreg: i
+            $fectra, // 10. tfectra: s
+            $diareg, // 11. diareg: s
+            $tcodsistema, // 12. tcodsistema: i
+            $tsistema, // 13. tsistema: s
+            $tnivel, // 14. tnivel: s
+            $tparametro, // 15. tparametro: s
+            $porcentaje1, // 16. tporcentaje1: d
+            $porcentaje2, // 17. tporcentaje2: d
+            $porcentaje3, // 18. tporcentaje3: d
+            $porcentaje4, // 19. tporcentaje4: d
+            $porcentaje5, // 20. tporcentaje5: d
+            $porcentajeTotal, // 21. tporcentajetotal: d
+            $obs, // 22. tobservacion: s
+            $evidencia, // 23. evidencia: s
+            $tobs, // 24. tobs: s
+            $tuser_trans, // 25. tuser_trans: s
+            $tdate_trans, // 26. tdate_trans: s
+            $ttime_trans, // 27. ttime_trans: s
+            $tidandroid, // 28. tidandroid: s
             $diagnosticoPresuntivo, // 29. diagnostico_presuntivo: s
-            $tuuidRegistro       // 30. tuuid (WHERE): s
+            $tuuidRegistro // 30. tuuid (WHERE): s
         );
 
         if ($stmtUpdate->execute()) {
             $affectedRows = $stmtUpdate->affected_rows;
             if ($affectedRows > 0) {
                 $actualizados++;
-            } 
+            }
         } else {
             $errores++;
             $errorMsg = "✗ Error al actualizar registro con UUID $tuuidRegistro: " . $stmtUpdate->error;
@@ -484,15 +483,15 @@ $conn->close();
 
 echo json_encode([
     "success" => $actualizados > 0,
-    "message" => $actualizados > 0 
-        ? "Registros actualizados correctamente. Actualizados: $actualizados" . 
+    "message" => $actualizados > 0
+        ? "Registros actualizados correctamente. Actualizados: $actualizados" .
           ($noEncontrados > 0 ? ", No encontrados: $noEncontrados" : "") .
           ($errores > 0 ? ", Errores: $errores" : "")
-        : ($noEncontrados > 0 
-            ? "No se encontraron registros para actualizar ($noEncontrados registros no encontrados). " 
+        : ($noEncontrados > 0
+            ? "No se encontraron registros para actualizar ($noEncontrados registros no encontrados). "
             : "") .
-          ($errores > 0 
-            ? "Errores al actualizar: $errores. " 
+          ($errores > 0
+            ? "Errores al actualizar: $errores. "
             : "") .
           ($actualizados == 0 && $noEncontrados == 0 && $errores == 0
             ? "No se procesaron registros. Verifique los logs para más detalles."

@@ -38,7 +38,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
 
   /// Ítems animados del menú: dashboard + las secciones de los tres tipos de
   /// bioseguridad + reportes + «Mi granja» + «Acerca de» + «Cerrar sesión».
-  ///
   /// El orden de los índices sigue el de `build`: 0 el dashboard, 1..N las
   /// secciones, y los cuatro últimos reportes, «Mi granja», «Acerca de» y
   /// «Cerrar sesión».
@@ -806,7 +805,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   }
 
   /// Encabezado de un bloque del menú.
-  ///
   /// Con [destacado] el ícono va dentro de una caja con el degradado de la
   /// marca y el texto crece: «Bioseguridad» agrupa Física, Química y Biológica,
   /// así que tiene que leerse como el encabezado de esos tres y no como un
@@ -873,7 +871,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   }
 
   /// Un grupo plegable: encabezado tocable y, si está abierto, sus secciones.
-  ///
   /// Los grupos vienen plegados salvo el del tipo activo, para que el menú no
   /// sea una lista larguísima: física aporta las cuatro secciones y química y
   /// biológica una cada una. Los tres grupos comparten «Anomalías»; el ítem viaja
@@ -964,7 +961,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   }
 
   /// `true` si [ruta] es la pantalla en la que está parado el usuario.
-  ///
   /// La comparación usa la ruta completa, que en Anomalías incluye el tipo
   /// (`/bio/anomalias/quimica`): sin eso, las tres «Anomalías» quedarían
   /// resaltadas a la vez.
@@ -972,7 +968,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
       ruta != null && Get.currentRoute == ruta;
 
   /// Grupos de bioseguridad con los que abre el menú.
-  ///
   /// Se deduce de la ruta actual para que el grupo en el que está parado el
   /// usuario aparezca desplegado; si no se reconoce, se abre física, que es el
   /// único con varias secciones.
@@ -1039,7 +1034,6 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   }
 
   /// Navega a una sección desde el drawer (equivale a «ir y reiniciar»).
-  ///
   /// La tabla de rutas y de pantallas vive en [BioNavigation], que es la misma
   /// que usa el resto de la app.
   void _goAndReset(BuildContext drawerContext, String route, {String? tipo}) {
@@ -1188,14 +1182,12 @@ class _SyncCloud extends StatelessWidget {
 }
 
 /// Encabezado plegable de un grupo de bioseguridad.
-///
 /// La flecha apunta hacia abajo con el grupo abierto y hacia la derecha con el
 /// grupo plegado, como un acordeón.
-///
 /// Va con sangría respecto a «Bioseguridad» para que se lea como uno de sus
 /// tres bloques (Física, Química, Biológica) y no como un ítem del mismo nivel.
 /// La izquierda coincide con el carril de la barrita de las secciones de
-/// adentro, así que la jerarquía se ve de un vistazo: Bioseguridad → grupo →
+/// adentro, así que la jerarquía se ve de un vistazo: Bioseguridad grupo
 /// sección.
 class _EncabezadoGrupo extends StatelessWidget {
   const _EncabezadoGrupo({
@@ -1255,7 +1247,6 @@ class _EncabezadoGrupo extends StatelessWidget {
 }
 
 /// Fila del menú.
-///
 /// Sin tarjeta ni borde: la jerarquía la marcan la sangría y el tamaño del ícono,
 /// y entre hermanos del mismo nivel va una línea fina. La fila de la sección
 /// activa se resalta con un tinte, la barrita izquierda y el texto en azul.
@@ -1304,7 +1295,6 @@ class _DrawerItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = context.isAppDark;
 
-    // Geometría por nivel. `izquierda` es el sangrado absoluto del contenido;
     // `textoX` es dónde arranca el texto y, por lo tanto, la sangría con la que
     // se alinea la línea divisoria.
     final izquierda = indent ? (subIndent ? 52.0 : 38.0) : 16.0;

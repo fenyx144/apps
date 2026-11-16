@@ -89,13 +89,11 @@ public class BaseDatosImportacionFragment extends Fragment {
     ArrayList<eCencos>cencosList;
 
     public BaseDatosImportacionFragment() {
-        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_base_datos_importacion, container, false);
     }
 
@@ -126,7 +124,6 @@ public class BaseDatosImportacionFragment extends Fragment {
 
         requestQueue= Volley.newRequestQueue(getContext());
         progressDialog = new ProgressDialog(getContext());
-
 
         /*<!-- TODO: CAPTURA DE POSICION EXCLUYENDO LA PRIMERA  -->*/
         bg.spnCencos.setOnItemClickListener(new AdapterView.OnItemClickListener() {

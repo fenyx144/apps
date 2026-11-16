@@ -74,7 +74,6 @@ class _RegisterFomitesScreenState extends State<RegisterFomitesScreen> {
   String get _fechaYmd => DateFormat('yyyy-MM-dd').format(_fecha);
 
   /// Referencias que piden un dato aparte además de la etiqueta del catálogo.
-  ///
   /// Hoy solo «A la altura del galpón»: el operador indica a qué galpón o
   /// altura corresponde. Se compara sin tildes ni mayúsculas para que el
   /// catálogo pueda escribirlo de cualquiera de las dos formas.
@@ -112,7 +111,7 @@ class _RegisterFomitesScreenState extends State<RegisterFomitesScreen> {
     _aplicarGranjaDeTrabajo();
   }
 
-  /// Premarca la granja de trabajo (menú → Mi granja) con su campaña sugerida.
+  /// Premarca la granja de trabajo (menú Mi granja) con su campaña sugerida.
   void _aplicarGranjaDeTrabajo() {
     final sel = granjaDeTrabajoSeleccion(
       context.read<StorageService>(),

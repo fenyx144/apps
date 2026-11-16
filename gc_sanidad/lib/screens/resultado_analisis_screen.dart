@@ -102,7 +102,7 @@ class _ResultadoAnalisisScreenState extends State<ResultadoAnalisisScreen> {
                                   MaterialPageRoute(
                                     builder: (context) => ResultadoSolicitudScreen(
                                       codEnvio: grupo.codEnvio,
-                                      posSolicitud: grupo.posSolicitud,                                    
+                                      posSolicitud: grupo.posSolicitud,
                                     ),
                                   ),
                                 );

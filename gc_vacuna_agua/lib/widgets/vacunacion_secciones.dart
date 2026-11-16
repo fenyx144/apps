@@ -1,10 +1,8 @@
 /// Secciones 5 a 8 del «Formato vacuna al agua».
-///
 /// Van en su propio archivo porque son cuatro bloques con estado propio y la
 /// pantalla de Vacunación ya carga las secciones 1 a 4. Todas reciben los
 /// galpones elegidos en «Información de vacuna» y, cuando el formato los pide
 /// como columnas, dibujan una columna por galpón.
-///
 /// Lo que se carga acá viaja al backend como filas del detalle paramétrico
 /// (`san_fact_vacunaagua_det`): cada sección se registra en el
 /// [VacunacionDetalleController] que le pasa la pantalla y entrega sus filas en
@@ -21,7 +19,6 @@ import 'bio_form_fields.dart';
 import 'bio_table.dart';
 
 /// Recolector del detalle de las secciones 5 a 8.
-///
 /// Cada sección se registra al montarse y se da de baja al desmontarse, así que
 /// [filas] devuelve solo lo que está en pantalla y en el orden en que se
 /// dibujan. Es la forma de que la pantalla arme el `detalle` del payload sin
@@ -111,8 +108,7 @@ int? _minutosDe(String hora) {
   return h * 60 + m;
 }
 
-/// Duración en `hh:mm` (p. ej. 90 minutos → «01:30»).
-///
+/// Duración en `hh:mm` (p. ej. 90 minutos «01:30»).
 /// El tiempo de vacunación se lee así en el formato de campo: una fracción de
 /// hora («1.5 h») obliga a traducir mentalmente cuántos minutos son.
 String _hhmm(int minutos) {
@@ -123,7 +119,6 @@ String _hhmm(int minutos) {
 
 /// Deja un controlador de texto por cada galpón vigente y libera los de los
 /// galpones que salieron de la selección.
-///
 /// Se comparte entre las secciones que guardan un valor por galpón (tiempo de
 /// sedeó y solución vacunal).
 Map<String, TextEditingController> _sincronizarPorGalpon(
@@ -282,7 +277,6 @@ class _TiempoSedeoSectionState extends State<TiempoSedeoSection> {
 }
 
 /// Sección 6: verificación del sistema de bebederos.
-///
 /// Dos bloques (llaves de la mesa de control y líneas del galpón) con un sí/no
 /// por ítem, igual que el equipo de vacunación.
 class VerificacionBebederosSection extends StatefulWidget {
@@ -461,7 +455,6 @@ class _VerificacionBebederosSectionState
 }
 
 /// Sección 7: preparación de solución vacunal.
-///
 /// Descripción contra galpones: lecturas del medidor, litros, marcador y
 /// temperaturas a mano, y la cantidad de agua y el tiempo de vacunación
 /// calculados a partir de lo cargado.
@@ -579,7 +572,6 @@ class _PreparacionSolucionSectionState
   }
 
   /// Un renglón por dato cargado de cada galpón.
-  ///
   /// Se incluyen también los renglones calculados (cantidad de agua y tiempo de
   /// vacunación) para que el registro guardado sea la foto de lo que se vio en
   /// pantalla: si después cambia la fórmula, lo ya registrado no se mueve. La
@@ -765,7 +757,6 @@ class _PreparacionSolucionSectionState
 }
 
 /// Sección 8: evaluación de la eficiencia de vacunación.
-///
 /// Un renglón por galpón. La cantidad total, los pollos sin vacuna y la
 /// eficiencia se calculan; el resto se escribe.
 class EvaluacionEficienciaSection extends StatefulWidget {
@@ -873,7 +864,6 @@ class _EvaluacionEficienciaSectionState
   /// Un renglón por dato de cada galpón, en el mismo orden que las columnas de
   /// la tabla. `grupo` es el encabezado agrupado (Pollos evaluados, Pollos con
   /// vacuna, Pollos sin vacuna) y queda vacío en las columnas sueltas.
-  ///
   /// Igual que en la solución vacunal, los renglones calculados (cantidad
   /// total, pollos sin vacuna y eficiencia) se guardan tal como se vieron.
   List<Map<String, dynamic>> _detalleFilas() {

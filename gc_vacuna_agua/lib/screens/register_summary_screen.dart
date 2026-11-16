@@ -54,7 +54,6 @@ String? _rutaImagen(dynamic item) {
 }
 
 /// Nombre visible de cada reporte.
-///
 /// El tipo guardado sigue siendo `garita` (es la tabla `rgarita` y la llave de
 /// los registros ya enviados); lo que cambió es el nombre que ve el usuario.
 String nombreReporte(String reporte) {
@@ -369,7 +368,6 @@ class RegisterSummaryContent extends StatelessWidget {
   }
 
   /// Duración de vacunación siempre en `hh:mm`.
-  ///
   /// El registro nuevo la guarda como texto (`01:30`). Si llegó como fracción
   /// de hora (`1.5`), se traduce a minutos para mostrarla igual.
   String _tiempoHhmm(Map<String, dynamic> fila) {

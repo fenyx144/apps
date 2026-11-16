@@ -53,15 +53,12 @@ public class ReporteFomitesFragment extends Fragment {
     SQLiteDatabase db;
     String querys;
 
-
     public ReporteFomitesFragment() {
-        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_reporte_fomites, container, false);
     }
 
@@ -110,7 +107,6 @@ public class ReporteFomitesFragment extends Fragment {
         mostrarTotales(sFecha, sCencos);
 
     }
-
 
     private void buscarCencos() {
         db=conn.getReadableDatabase();
@@ -191,6 +187,5 @@ public class ReporteFomitesFragment extends Fragment {
             toast.show();
         }
     }
-
 
 }

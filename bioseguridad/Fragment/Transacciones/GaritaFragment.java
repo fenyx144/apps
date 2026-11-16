@@ -55,7 +55,6 @@ public class GaritaFragment extends Fragment {
     String sHora,sMinutos,miDate,miTime;
     String sDescripcion,sAgenteCausal,sValidaReg,sFecha,sId,sCencos,sColaborador,sTurno,sFiltro,sAnomalia;
 
-
     /*<!-- TODO: VARIABLES G PARA MOSTRAR -->*/
 
     /*<!-- TODO: TABLA -->*/
@@ -81,16 +80,12 @@ public class GaritaFragment extends Fragment {
     ArrayList<String> listaRegEliminar;
     ArrayList<eRegEliminar>regEliminarList;
 
-
-
     public GaritaFragment() {
-        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_garita, container, false);
     }
 
@@ -133,14 +128,11 @@ public class GaritaFragment extends Fragment {
             toast.show();
         }
 
-
-
         buscarCencos();
         buscarAnomalias();
 
         /*<!-- TODO: CARGA DE DATA SPINNER ARRAY -->*/
         List<String> listt = new ArrayList<>();
-        //listt.add("Seleccione");
         listt.add("Dia");
         listt.add("Noche");
         ArrayAdapter<String> adaptert = new ArrayAdapter<String>(getContext(), R.layout.items_list, listt);
@@ -148,7 +140,6 @@ public class GaritaFragment extends Fragment {
         bg.spnTurno.setAdapter(adaptert);
 
         List<String> listf = new ArrayList<>();
-        //listf.add("Seleccione");
         listf.add("1");
         listf.add("2");
         listf.add("3");
@@ -178,8 +169,6 @@ public class GaritaFragment extends Fragment {
                 bg.btnEliminar.setEnabled(true);
             }
         });
-
-
 
         bg.spnAnomalia.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -286,10 +275,6 @@ public class GaritaFragment extends Fragment {
             }
         });
 
-
-
-
-
         /*<!-- TODO: CLICK AL BOTON AGREGAR -->*/
 
         bg.btnAgregar.setOnClickListener(new View.OnClickListener() {
@@ -298,7 +283,6 @@ public class GaritaFragment extends Fragment {
 
                 sFecha = bg.tvFecha.getText().toString();
                 sCencos = bg.etCencos.getText().toString().substring(0, 6);
-
 
                     Boolean bValidaCampos = true;
                     if (iPosiTur==-1) {
@@ -335,12 +319,10 @@ public class GaritaFragment extends Fragment {
 
                 if (bg.etDescripcion.getText().toString().equals("")) {
                     bValidaCampos = false;
-                    //bg.tvDescripcion.setError("Ingrese la descripción!");
                     bg.etDescripcion.setError("Ingrese la descripción!");
                 }
                 if (bg.etAgenteCausal.getText().toString().equals("")) {
                     bValidaCampos = false;
-                    //bg.tvAgenteCausal.setError("Ingrese el Agente Causal!");
                     bg.etAgenteCausal.setError("Ingrese el Agente Causal!");
                 }
 
@@ -358,8 +340,7 @@ public class GaritaFragment extends Fragment {
             public void onClick(View view) {
                 bg.btnEliminar.setEnabled(false);
 
-
-                androidx.appcompat.app.AlertDialog.Builder dialogo1 = new AlertDialog.Builder(view.getContext());//this
+                androidx.appcompat.app.AlertDialog.Builder dialogo1 = new AlertDialog.Builder(view.getContext()); // this
                 dialogo1.setTitle("Eliminar");
                 dialogo1.setMessage("¿ Desea Eliminar dicho registro ?");
                 dialogo1.setCancelable(false);
@@ -370,7 +351,7 @@ public class GaritaFragment extends Fragment {
                             toast = Toast.makeText(getActivity().getApplicationContext(), "Item Seleccionado No valido", Toast.LENGTH_SHORT);
                             toast.show();
                         } else {
-                            //Eliminar Registro
+                            // Eliminar Registro
                             String slFecha=bg.tvFecha.getText().toString();
                             String slCencos=bg.etCencos.getText().toString().substring(0,6);
                             String slId=regEliminarList.get(iPosEli).get_id();
@@ -379,19 +360,16 @@ public class GaritaFragment extends Fragment {
                             toast = Toast.makeText(getActivity().getApplicationContext(), rMensaje, Toast.LENGTH_SHORT);
                             toast.show();
 
-
                             sFecha = bg.tvFecha.getText().toString();
                             sCencos = bg.etCencos.getText().toString().substring(0, 6);
                             mostrarTotales(sFecha, sCencos);
                             listaItems(sFecha, sCencos);
-
 
                         }
                     }
                 });
                 dialogo1.setNegativeButton("Cancelar", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialogo1, int id) {
-                        //cancelar();
                     }
                 });
                 dialogo1.show();
@@ -402,10 +380,6 @@ public class GaritaFragment extends Fragment {
 
     private void inicializarCampos() {
 
-        //bg.spnTurno.setText("");
-        //bg.spnNumFiltro.setText("");
-        //bg.spnAnomalia.setText("");
-        //bg.etHora.setText("00:00");
         bg.etDescripcion.setText("");
         bg.etAgenteCausal.setText("");
     }
@@ -444,7 +418,6 @@ public class GaritaFragment extends Fragment {
             Cursor cursor = db.rawQuery(querys,null);
             if (cursor!=null) {
                 listaAnomalias = new ArrayList<String>();
-                //listaAnomalias.add("Seleccione");
                 if (cursor.getCount()>0) {
                     while (cursor.moveToNext()) {
                         anomalias = new eAnomalias();
@@ -474,7 +447,7 @@ public class GaritaFragment extends Fragment {
     private void guardarDatos(){
         db = conn.getWritableDatabase();
 
-        //Todo:MAXIMO REGISTRO
+        // TODO:MAXIMO REGISTRO
         try{
             querys = "SELECT MAX(ABS(" + dbE.c_rgId + "))  FROM " + dbE.t_RGarita + " WHERE " + dbE.c_rgFecha + "='" + bg.tvFecha.getText().toString() + "';";
             Cursor cursor1 = db.rawQuery(querys,null);
@@ -489,20 +462,18 @@ public class GaritaFragment extends Fragment {
                 }
             }
 
-            //Todo:Validamos campos vacios del fragment:
+            // TODO:Validamos campos vacios del fragment:
 
             sDescripcion = bg.etDescripcion.getText().toString();
             sAgenteCausal = bg.etAgenteCausal.getText().toString();
 
-
-
-            //Todo:Agregamos campos generales a la Tabla
+            // TODO:Agregamos campos generales a la Tabla
             sFecha = bg.tvFecha.getText().toString();
-            sColaborador = hP.getNombreUsuario();//bg.tvNombreUsuario.getText().toString();
+            sColaborador = hP.getNombreUsuario(); // bg.tvNombreUsuario.getText().toString();
             sCencos = bg.etCencos.getText().toString().substring(0,6);
             sTurno = bg.spnTurno.getText().toString();
             sFiltro = bg.spnNumFiltro.getText().toString();
-            sAnomalia = bg.spnAnomalia.getText().toString();//anomaliasList.get(iPosiAn).get_descripcion();
+            sAnomalia = bg.spnAnomalia.getText().toString(); // anomaliasList.get(iPosiAn).get_descripcion();
             sHora = bg.etHora.getText().toString();
 
             String CodUser=hP.getCodigoUsuario();
@@ -529,7 +500,6 @@ public class GaritaFragment extends Fragment {
                     db.close();
                 }
 
-
         }catch (Exception e){
             Toast toast = Toast.makeText(getActivity().getApplicationContext(),e.getMessage() ,Toast.LENGTH_SHORT);
             toast.show();
@@ -543,7 +513,7 @@ public class GaritaFragment extends Fragment {
             if (child instanceof TableRow) ((ViewGroup) child).removeAllViews();
         }
         db = conn.getReadableDatabase();
-        //PARA FILTRAR TABLA
+        // PARA FILTRAR TABLA
         sTurno = bg.spnTurno.getText().toString();
         sFiltro = bg.spnNumFiltro.getText().toString();
         iPosEli=-1;
@@ -595,7 +565,7 @@ public class GaritaFragment extends Fragment {
     private void listaItems(String xFecha,String xCencos){
 
         db = conn.getReadableDatabase();
-        //PARA FILTRAR TABLA
+        // PARA FILTRAR TABLA
         sTurno = bg.spnTurno.getText().toString();
         sFiltro = bg.spnNumFiltro.getText().toString();
 

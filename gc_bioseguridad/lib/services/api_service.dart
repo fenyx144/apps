@@ -12,8 +12,13 @@ import 'app_version_service.dart';
 import 'storage_service.dart';
 import '../utils/galpones_resolver.dart';
 import '../utils/record_id.dart';
+import 'app_http_client.dart';
 
 class ApiService {
+  ApiService({http.Client? client}) : _http = client ?? createAppHttpClient();
+
+  final http.Client _http;
+
   Map<String, String> get _headers => {
         'Authorization': 'Bearer ${AppConstants.apiToken}',
         'Content-Type': 'application/json; charset=utf-8',
@@ -45,7 +50,7 @@ class ApiService {
         'app': AppConstants.appName,
         if (avisoDesde != null) 'version_warning_desde': avisoDesde,
       });
-      final response = await http
+      final response = await _http
           .post(url, headers: _headers, body: body)
           .timeout(const Duration(seconds: 8));
       if (kDebugMode) {
@@ -64,6 +69,14 @@ class ApiService {
       // Detalle real solo en consola; al usuario se le muestra 'Sin conexion'
       // si tampoco hay catalogo offline.
       debugPrint('[login] error al contactar servidor: $e\n$st');
+      final err = e.toString();
+      if (err.contains('HandshakeException') || err.contains('CERTIFICATE_VERIFY_FAILED')) {
+        return {
+          'success': false,
+          'message': 'Certificado HTTPS del servidor no confiable. Reinicie la app tras actualizar.',
+          'errorCode': 'TLS_ERROR',
+        };
+      }
       return {
         'success': false,
         'message': 'Error de conexión',
@@ -96,7 +109,7 @@ class ApiService {
         'app': AppConstants.appName,
         if (avisoDesde != null) 'version_warning_desde': avisoDesde,
       });
-      final response = await http
+      final response = await _http
           .post(url, headers: _headers, body: body)
           .timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -119,7 +132,7 @@ class ApiService {
       if (tablas != null && tablas.isNotEmpty) {
         url = url.replace(queryParameters: {'tablas': tablas.join(',')});
       }
-      final response = await http
+      final response = await _http
           .get(url, headers: _headers)
           .timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -143,7 +156,7 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.catalogosBioEndpoint}',
       );
-      final response = await http
+      final response = await _http
           .get(url, headers: _headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
@@ -190,7 +203,7 @@ class ApiService {
     for (final url in candidates) {
       try {
         debugPrint('ApiService: descargando CENCOS/galpones $url');
-        final response = await http
+        final response = await _http
             .get(url, headers: _headers)
             .timeout(const Duration(seconds: 15));
         if (response.statusCode != 200) {
@@ -248,7 +261,7 @@ class ApiService {
         if (versionWarningDesde != null && versionWarningDesde.isNotEmpty)
           'version_warning_desde': versionWarningDesde,
       });
-      final response = await http
+      final response = await _http
           .get(url, headers: _headers)
           .timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) {
@@ -282,7 +295,7 @@ class ApiService {
         if (usuario.isNotEmpty) 'usuario': usuario,
       });
       debugPrint('ApiService: descargando proyección $url');
-      final response = await http
+      final response = await _http
           .get(url, headers: _headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
@@ -303,7 +316,6 @@ class ApiService {
   }
 
   /// Nombre de un DNI consultado en la API Factiliza (vía backend).
-  ///
   /// El token de Factiliza vive solo en el servidor, así que la app envía el
   /// documento y recibe el nombre ya armado.
   Future<Map<String, dynamic>> consultarDni(String dni) =>
@@ -323,7 +335,7 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.consultarDniEndpoint}',
       );
-      final response = await http
+      final response = await _http
           .post(
             url,
             headers: _headers,
@@ -356,7 +368,6 @@ class ApiService {
   }
 
   /// Razón social de un RUC consultada en la API Factiliza (vía backend).
-  ///
   /// Es la misma consulta que hace la web al elegir un proveedor: la app manda
   /// los 11 dígitos y recibe la razón social ya resuelta, sin conocer el token.
   Future<Map<String, dynamic>> consultarRuc(String ruc) async {
@@ -369,7 +380,7 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.consultarRucEndpoint}',
       );
-      final response = await http
+      final response = await _http
           .post(url, headers: _headers, body: jsonEncode({'ruc': limpio}))
           // Corto a propósito: es una consulta puntual mientras el guardia
           // espera, y sin respuesta el RUC se acepta igual, sin razón social.
@@ -403,7 +414,7 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.proveedoresPlanificacionEndpoint}',
       );
-      final response = await http
+      final response = await _http
           .get(url, headers: _headers)
           .timeout(const Duration(seconds: 20));
       final decoded = jsonDecode(response.body);
@@ -459,7 +470,7 @@ class ApiService {
         '${AppConstants.buscarProveedorCcteEndpoint}',
       );
       debugPrint('[proveedor/ccte] POST $url q="$texto"');
-      final response = await http
+      final response = await _http
           .post(
             url,
             headers: _headers,
@@ -536,7 +547,6 @@ class ApiService {
 
   /// Consulta informativa de la «Planificación de visitas» del portal web:
   /// ¿la placa o los DNIs estaban programados para esa granja en esa fecha?
-  ///
   /// Devuelve el bloque `data` del servidor solo cuando la planificación está
   /// disponible (`disponible == true`). Ante cualquier otra cosa (sin red,
   /// tiempo agotado, token rechazado, tablas aún no creadas en el servidor)
@@ -553,7 +563,7 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.consultarPlanificacionEndpoint}',
       );
-      final response = await http
+      final response = await _http
           .post(
             url,
             headers: _headers,
@@ -579,7 +589,6 @@ class ApiService {
   /// Consulta informativa del «Estatus Sanitario Granja» del portal web: ¿la
   /// granja del registro está en situación especial y alguno de los DNIs viene
   /// de otra granja que sí lo está?
-  ///
   /// Devuelve el bloque `data` solo cuando el servidor tiene las tablas del
   /// estatus (`disponible == true`). Ante cualquier otra cosa (sin red, tiempo
   /// agotado, token rechazado, tablas aún no creadas) devuelve `null` y la
@@ -596,7 +605,7 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.consultarEstatusSanitarioEndpoint}',
       );
-      final response = await http
+      final response = await _http
           .post(
             url,
             headers: _headers,
@@ -632,7 +641,7 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.descargarAvisosIngresoEndpoint}',
       );
-      final response = await http
+      final response = await _http
           .post(
             url,
             headers: _headers,
@@ -650,7 +659,7 @@ class ApiService {
     }
   }
 
-  /// Descarga la nómina DNI → proveedor (personal de cada proveedor e
+  /// Descarga la nómina DNI proveedor (personal de cada proveedor e
   /// historial reciente). `null` ante cualquier falla.
   Future<Map<String, dynamic>?> descargarNominaProveedores() async {
     try {
@@ -658,7 +667,7 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.descargarNominaProveedoresEndpoint}',
       );
-      final response = await http
+      final response = await _http
           .post(url, headers: _headers, body: jsonEncode(const {}))
           .timeout(const Duration(seconds: 25));
       if (response.statusCode != 200) return null;
@@ -684,7 +693,7 @@ class ApiService {
         '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
         '${AppConstants.descargarPlanificacionEndpoint}',
       );
-      final response = await http
+      final response = await _http
           .post(
             url,
             headers: _headers,
@@ -724,7 +733,6 @@ class ApiService {
   }
 
   /// Sube un registro de bioseguridad (Garita, Cerco Eléctrico o Fómites).
-  ///
   /// El backend responde 409 cuando el grupo (fecha + granja/campaña + turno
   /// [+ filtro | referencia + proceso]) ya existe; en ese caso se reintenta
   /// automáticamente como actualización.
@@ -793,7 +801,7 @@ class ApiService {
         }
       }
 
-      final streamed = await request.send().timeout(timeout);
+      final streamed = await _http.send(request).timeout(timeout);
       final body = await streamed.stream.bytesToString().timeout(timeout);
       final decoded = jsonDecode(body);
       if (decoded is Map && decoded['success'] == true) {
@@ -836,7 +844,6 @@ class ApiService {
   }
 
   /// Verifica que el backend confirmó las imágenes locales que se enviaron.
-  ///
   /// El registro ya existía (`ya_existia`): es idempotencia por id, cuenta como
   /// subida completa. Si el backend responde `imagenes_ok`, manda ese dato. Si
   /// no, se compara cuántos archivos confirmó contra los enviados (el backend

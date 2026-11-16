@@ -12,7 +12,6 @@ const String bioSinCatalogoMsg =
     'Faltan catálogos. Descárguelos desde el menú lateral y vuelva a intentar.';
 
 /// Texto del aviso cuando todavía no se descargó la planificación de visitas.
-///
 /// Va junto con los catálogos (misma nube del menú lateral), así que el aviso
 /// es el mismo viaje para el vigilante. Se muestra al tocar el atajo de las
 /// planificadas del día; en pantalla el mismo dato va en el paréntesis del
@@ -22,7 +21,6 @@ const String bioSinPlanificacionMsg =
     '(nube Descargar).';
 
 /// Comprueba que el catálogo tenga opciones antes de abrir un selector.
-///
 /// Sin descarga (o con una tabla que el servidor todavía no envía) la lista
 /// viene vacía. En vez de abrir un selector en blanco —o, peor, inventar
 /// opciones en la app— se avisa de dónde sale el catálogo. Devuelve `true`
@@ -146,7 +144,6 @@ Future<T?> showBioOptionsSheet<T>({
 }
 
 /// Área de texto multilínea con etiqueta y contador.
-///
 /// El ícono no se pone como `prefixIcon` de Material: ese se centra en el alto
 /// del cuadro, así que en un campo de varias líneas se hunde hacia el medio en
 /// lugar de quedar junto a la primera línea. Acá se dibuja encima del campo con
@@ -296,7 +293,6 @@ class BioTextArea extends StatelessWidget {
 
 /// Normaliza lo que el usuario escribió a `HH:mm`, o `null` si no es una hora
 /// válida.
-///
 /// Acepta las formas que la gente usa en campo: `0630`, `06:30`, `6:30`, `18`.
 String? bioParseHora(String texto) {
   final t = texto.trim();
@@ -319,7 +315,6 @@ int bioHora12(int hora24) {
 }
 
 /// Convierte una hora del reloj (1..12) y su meridiano a una hora de 24.
-///
 /// Las 12 de la mañana son las 00: el reloj no tiene cero, así que la hora 12
 /// vuelve a empezar en cada meridiano.
 int bioHora24(int hora12, bool esPm) {
@@ -328,7 +323,6 @@ int bioHora24(int hora12, bool esPm) {
 }
 
 /// Pide una hora con tres listas al estilo Cupertino (hora, minutos y AM/PM).
-///
 /// Las listas eligen sobre doce horas más el meridiano, que es como se lee un
 /// reloj de aguja, pero el valor que sale de acá siempre es de 24 (`HH:mm`),
 /// que es lo que esperan la base y el backend.
@@ -343,7 +337,6 @@ Future<String?> showBioHoraDialog(
 }
 
 /// Alto de una fila de las listas del reloj.
-///
 /// Más alto que el de otras listas de la app a propósito: la hora se elige de
 /// un vistazo y con los números chicos se erraba la fila. Lo usan las tres
 /// ruedas y el recuadro que marca la fila elegida, así que tiene que ser uno
@@ -365,7 +358,6 @@ class _BioHoraDialog extends StatefulWidget {
 }
 
 /// Diálogo de hora: tres listas al estilo Cupertino (hora, minutos y AM/PM).
-///
 /// Las listas eligen sobre doce horas más el meridiano, que es como se lee un
 /// reloj de aguja; el valor que devuelve el diálogo sigue siendo de 24
 /// (`HH:mm`), que es lo que esperan la base y el backend. La conversión vive en
@@ -463,7 +455,6 @@ class _BioHoraDialogState extends State<_BioHoraDialog> {
   }
 
   /// Ancho de las tres listas.
-  ///
   /// Se estira hasta [_kAnchoListasHora], que es donde las ruedas se ven
   /// cómodas, pero nunca más allá de lo que entra en la pantalla: los márgenes
   /// del diálogo se descuentan o en un teléfono chico las listas se salen.
@@ -474,7 +465,6 @@ class _BioHoraDialogState extends State<_BioHoraDialog> {
   }
 
   /// Las tres listas del reloj: hora, minutos y AM/PM.
-  ///
   /// Las ruedas se reparten el ancho en vez de tener uno fijo: así el mismo
   /// diálogo sirve en un teléfono grande y en uno chico sin recortar nada.
   Widget _listas() {
@@ -827,7 +817,6 @@ class BioInfoBanner extends StatelessWidget {
 }
 
 /// Aviso de «faltan catálogos» para la cabecera de un formulario.
-///
 /// Se dibuja solo mientras no haya descarga, así no ocupa lugar en un equipo
 /// que ya bajó el catálogo. Usa `watch`, de modo que al descargar desde el menú
 /// lateral el aviso desaparece sin reabrir la pantalla.

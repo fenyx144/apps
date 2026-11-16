@@ -11,7 +11,6 @@ import '../widgets/bio_scan_guide.dart';
 import '../widgets/section_app_bar.dart';
 
 /// Pantalla del escáner de **códigos del DNI** (barras / QR / PDF417).
-///
 /// La placa del vehículo no lleva código de barras: se ingresa con
 /// [PlacaInputDialog]. Este escáner solo aplica al documento de identidad.
 class DniScannerScreen extends StatefulWidget {

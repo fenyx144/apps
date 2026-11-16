@@ -15,8 +15,7 @@ class PlacaYoloHit {
 }
 
 /// Detección de la placa con YOLO (TFLite) antes del OCR con ML Kit.
-///
-/// Modelo: [assetPath] (export Ultralytics → LiteRT/TFLite). Si falla la carga,
+/// Modelo: [assetPath] (export Ultralytics LiteRT/TFLite). Si falla la carga,
 /// la pantalla de cámara sigue con el recorte del marco guía.
 class PlacaYoloDetector {
   PlacaYoloDetector._();

@@ -38,7 +38,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _hasAttemptedValidation = false;
 
   /// ¿Hay red para intentar el login en línea?
-  ///
   /// Con un tope corto: en una red lenta o cautiva el `lookup` podía quedarse
   /// esperando y el vigilante veía el cargando sin fin. Ante la duda se dice
   /// «no hay red» y el login sigue por el camino offline.
@@ -69,7 +68,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// ¿Hay algo en el equipo para validar usuario/clave sin servidor?
-  ///
   /// Puede ser el hash del último login en línea o el catálogo de usuarios
   /// descargado (password_hex / libtri). Sin ninguno de los dos, en offline no
   /// hay forma de saber si la clave es correcta.
@@ -95,9 +93,13 @@ class _LoginScreenState extends State<LoginScreen> {
       case 'USER_NOT_FOUND':
         return 'El usuario no existe. Verifique el código ingresado.';
       case 'WRONG_PASSWORD':
-        return 'Contraseña incorrecta.';
+        return 'Contraseña incorrecta. Si es empresa tercero: usuario de 6 caracteres y clave = RUC (11 dígitos).';
+      case 'DEVICE_NOT_REGISTERED':
+        return 'Registre este dispositivo en la app antes de iniciar sesión.';
       case 'INVALID_TOKEN':
         return 'Error de conexión con el servidor. Inténtelo más tarde.';
+      case 'TLS_ERROR':
+        return result['message']?.toString() ?? 'Error de certificado HTTPS del servidor.';
       default:
         final msg = result['message']?.toString().trim() ?? '';
         if (msg.isNotEmpty) return msg;
@@ -342,6 +344,11 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
             ),
           );
+        } else if (code == 'TLS_ERROR') {
+          await dismissLoadingDialog(close);
+          if (mounted) {
+            showErrorToast(context, _mensajeErrorLoginOnline(result));
+          }
         } else if (code == 'CONNECTIVITY') {
           await dismissLoadingDialog(close);
           if (!mounted) return;
@@ -355,9 +362,17 @@ class _LoginScreenState extends State<LoginScreen> {
           showErrorToast(context, _mensajeErrorLoginOnline(result));
         }
       }
-    } catch (_) {
+    } catch (e) {
       await dismissLoadingDialog(close);
       if (!mounted) return;
+      final err = e.toString();
+      if (err.contains('HandshakeException') || err.contains('CERTIFICATE_VERIFY_FAILED')) {
+        showErrorToast(
+          context,
+          'No se pudo conectar por HTTPS (certificado del servidor). Intente en red interna o contacte a sistemas.',
+        );
+        return;
+      }
       await _attemptOfflineLogin(
         sinConexion: true,
         mostrarCarga: false,

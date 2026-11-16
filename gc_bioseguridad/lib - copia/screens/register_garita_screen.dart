@@ -27,7 +27,6 @@ class RegisterGaritaScreen extends StatefulWidget {
   });
 
   /// Tipo de bioseguridad precargado («Bioseguridad quimica», etc.).
-  ///
   /// Anomalías existe en los tres grupos del drawer: al entrar por química o
   /// biológica el formulario abre con ese tipo elegido.
   final String? bioseguridadInicial;
@@ -75,7 +74,7 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
     _aplicarGranjaDeTrabajo();
   }
 
-  /// Premarca la granja de trabajo (menú → Mi granja) con su campaña sugerida.
+  /// Premarca la granja de trabajo (menú Mi granja) con su campaña sugerida.
   void _aplicarGranjaDeTrabajo() {
     final sel = granjaDeTrabajoSeleccion(
       context.read<StorageService>(),

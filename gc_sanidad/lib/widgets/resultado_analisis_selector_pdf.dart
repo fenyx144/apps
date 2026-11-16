@@ -114,7 +114,7 @@ class _ResultadoAnalisisSelectorState extends State<ResultadoAnalisisSelector> {
             onChanged: widget.onObsChanged,
           ),
           const SizedBox(height: 12),*/
-          // 👇 PDF Viewer integrado
+          // PDF Viewer integrado
           PdfViewer(
             codEnvio: widget.codEnvio,
             posSolicitud: widget.posSolicitud,

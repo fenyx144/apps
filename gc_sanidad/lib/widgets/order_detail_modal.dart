@@ -51,7 +51,7 @@ class _OrderDetailModalState extends State<OrderDetailModal> {
     if (pickedFile != null) {
       try {
         debugPrint('Foto tomada, path original: ${pickedFile.path}');
-        
+
         // Verificar que el archivo original existe
         final originalFile = File(pickedFile.path);
         if (!await originalFile.exists()) {
@@ -65,7 +65,7 @@ class _OrderDetailModalState extends State<OrderDetailModal> {
         final tempDir = await getTemporaryDirectory();
         final String fileName = 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg';
         final newPath = '${tempDir.path}/$fileName';
-        
+
         debugPrint('Comprimiendo imagen a: $newPath');
 
         // Comprimir la imagen de la cámara (igual que la galería)
@@ -80,7 +80,7 @@ class _OrderDetailModalState extends State<OrderDetailModal> {
           if (await compressedFileObj.exists()) {
             final fileSize = await compressedFileObj.length();
             debugPrint('Imagen comprimida exitosamente: ${compressedFile.path} (${fileSize} bytes)');
-            
+
             setState(() {
               _selectedImages.add(XFile(compressedFile.path, name: fileName));
             });
@@ -157,8 +157,6 @@ Future<void> _removeImage(int index) async {
   });
 }
 
-  
-
   // === Envío ===
   Future<void> _recepcionarOrden() async {
     if (_tipoReceptor == null || _tipoReceptor!.isEmpty) {
@@ -179,27 +177,27 @@ Future<void> _removeImage(int index) async {
       request.fields['obs'] = _observaciones;
       request.fields['tipoReceptor'] = _tipoReceptor!;
       request.fields['usuario'] = userName;
-      
+
       // Validar y agregar imágenes
       debugPrint('Preparando ${_selectedImages.length} imágenes para enviar');
-      
+
       for (var image in _selectedImages) {
         final file = File(image.path);
-        
+
         debugPrint('Verificando imagen: ${image.name} - Path: ${image.path}');
-        
+
         // Verificar que el archivo existe y tiene tamaño válido
         if (await file.exists()) {
           final fileSize = await file.length();
           debugPrint('Archivo existe, tamaño: $fileSize bytes');
-          
+
           if (fileSize == 0) {
             debugPrint('ADVERTENCIA: Archivo vacío: ${image.path}');
             continue;
           }
-          
+
           try {
-           
+
             final multipartFile = await http.MultipartFile.fromPath(
               'evidencias[]',
               image.path,
@@ -221,10 +219,10 @@ Future<void> _removeImage(int index) async {
           }
         }
       }
-      
+
       debugPrint('Total de imágenes a enviar: ${request.files.length}');
       debugPrint('Campos del request: ${request.fields}');
-      
+
       // Verificar que hay imágenes antes de enviar
       if (request.files.isEmpty && _selectedImages.isNotEmpty) {
         if (mounted) {
@@ -253,7 +251,7 @@ Future<void> _removeImage(int index) async {
         };
         await storageService.saveForm(AppStrings.formTypeTracking, localData);
         if (mounted) {
-          
+
           showSuccessToast(context, 'Orden recepcionada correctamente');
           Navigator.of(context).pop(true);
         }
@@ -295,8 +293,8 @@ Future<void> _removeImage(int index) async {
                 // Detectar cuando el scroll está en la parte superior (pixels <= 0) y se intenta deslizar hacia abajo
                 if (notification is ScrollUpdateNotification) {
                   final metrics = notification.metrics;
-                  if (metrics.pixels <= 0 && 
-                      notification.scrollDelta != null && 
+                  if (metrics.pixels <= 0 &&
+                      notification.scrollDelta != null &&
                       notification.scrollDelta! > 0) {
                     // Si está en la parte superior y se desliza hacia abajo, cerrar
                     Navigator.of(context).pop(false);

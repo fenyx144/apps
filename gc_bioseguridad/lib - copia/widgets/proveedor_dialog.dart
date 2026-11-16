@@ -26,7 +26,6 @@ class ProveedorCcteItem {
 }
 
 /// Proveedor que llega a la granja.
-///
 /// Se identifica por [ruc] (11 dígitos, con razón social consultada en
 /// [nombre]) o solo por [nombre] escrito a mano cuando no hay RUC.
 class ProveedorSeleccion {

@@ -44,8 +44,6 @@ class StorageService with ChangeNotifier {
     return _prefs.getString(AppConstants.keyDeviceId);
   }
 
- 
-
   Future<void> setDeviceId(String id) async {
     await _prefs.setString(AppConstants.keyDeviceId, id);
   }
@@ -68,23 +66,22 @@ class StorageService with ChangeNotifier {
     required String userCode,
     required String userName,
     required String deviceId,
-   
+
   }) async {
     await setLoggedIn(true);
     await setUserCode(userCode);
     await setUserName(userName);
     await setDeviceId(deviceId);
     await setDeviceAuthorized(true);
-    
+
     // IMPORTANTE: Notificar cambios y asegurar persistencia
     notifyListeners();
-    
+
     // Verificar que se guardó correctamente (debug)
     final savedCode = _prefs.getString(AppConstants.keyUserCode);
     debugPrint('DEBUG saveLoginSession - userCode guardado: $savedCode, esperado: $userCode');
   }
 
-  
   Future<void> saveForm(String tabla, Map<String, dynamic> data) async {
     // Obtener lista actual
     final List<dynamic>? currentList = _prefs.getStringList(tabla);
@@ -113,7 +110,7 @@ class StorageService with ChangeNotifier {
           return !synced;
         })
         .toList();
-    
+
     // Log para debugging
     debugPrint('📋 getRecordsPendientes - Total registros: ${allRecords.length}, Pendientes: ${pendingRecords.length}');
     for (var record in pendingRecords) {
@@ -132,7 +129,7 @@ class StorageService with ChangeNotifier {
         debugPrint('     ⚠️ evidencias_completas: NO presente o vacío');
       }
     }
-    
+
     return pendingRecords;
   }
 
@@ -192,10 +189,10 @@ class StorageService with ChangeNotifier {
 
     bool found = false;
     int foundIndex = -1;
-    
+
     for (int i = 0; i < records.length; i++) {
       final record = records[i];
-      
+
       // Intentar primero con tuuid (más confiable)
       if (targetUuid != null && targetUuid.isNotEmpty) {
         final recordUuid = record['tuuid']?.toString();
@@ -205,7 +202,7 @@ class StorageService with ChangeNotifier {
           break;
         }
       }
-      
+
       // Fallback: usar campos clave
       final recordNumreg = record['numreg']?.toString() ?? '';
       final recordFectra = record['fectra']?.toString() ?? '';
@@ -222,20 +219,20 @@ class StorageService with ChangeNotifier {
         break;
       }
     }
-    
+
     if (found && foundIndex >= 0) {
       // CRÍTICO: Crear un nuevo mapa completo en lugar de modificar el existente
       // Esto evita problemas de referencias compartidas
       final recordAntes = records[foundIndex];
       final syncedAntes = recordAntes['synced'];
       final guardadoBackendAntes = recordAntes['guardado_backend'];
-      
+
       // Crear un nuevo mapa copiando todos los campos del registro original
       final updatedRecord = Map<String, dynamic>.from(recordAntes);
-      
+
       // Actualizar los campos necesarios
       updatedRecord['synced'] = true;
-      
+
       // CRÍTICO: Preservar guardado_backend del targetRecord si viene actualizado,
       // de lo contrario establecerlo en true (porque se está sincronizando)
       if (targetRecord['guardado_backend'] != null) {
@@ -250,37 +247,37 @@ class StorageService with ChangeNotifier {
       if (codigoNec.isNotEmpty) {
         updatedRecord['codigoNecropsia'] = codigoNec;
       }
-      
+
       // Reemplazar el registro completo en la lista
       records[foundIndex] = updatedRecord;
-      
+
       debugPrint('   ✓ Registro encontrado y actualizado');
       debugPrint('   ✓ synced cambiado de $syncedAntes a ${updatedRecord['synced']}');
       debugPrint('   ✓ guardado_backend cambiado de $guardadoBackendAntes a ${updatedRecord['guardado_backend']}');
     }
 
     if (found) {
-      // Guardar de vuelta en SharedPreferences
+    // Guardar de vuelta en SharedPreferences
       final List<String> updatedRecords = records
           .map((r) => jsonEncode(r))
           .toList();
       await _prefs.setStringList(tabla, updatedRecords);
-      
+
       // Verificar que se guardó correctamente
       final recordGuardado = records.firstWhere(
         (r) => (targetUuid != null && targetUuid.isNotEmpty && r['tuuid']?.toString() == targetUuid) ||
-               (r['numreg']?.toString() == targetNumreg && 
+               (r['numreg']?.toString() == targetNumreg &&
                 r['fectra']?.toString() == targetFectra &&
                 r['granja']?.toString() == targetGranja &&
                 r['galpon']?.toString() == targetGalpon),
         orElse: () => {},
       );
-      
+
       debugPrint('💾 markRecordAsSynced - Registro guardado en storage:');
       debugPrint('   - tuuid: ${recordGuardado['tuuid']}');
       debugPrint('   - synced final: ${recordGuardado['synced']} (tipo: ${recordGuardado['synced'].runtimeType})');
       debugPrint('   - guardado_backend final: ${recordGuardado['guardado_backend']}');
-      
+
       notifyListeners();
     } else {
       debugPrint('❌ markRecordAsSynced - Registro NO encontrado para marcar como sincronizado');
@@ -411,11 +408,11 @@ class StorageService with ChangeNotifier {
       // Guardar CENCOS
       final cencosJson = jsonEncode(cencos);
       await _prefs.setString('cencos_data', cencosJson);
-      
+
       // Guardar galpones agrupados por CENCO
       final galponesJson = jsonEncode(galponesPorCenco);
       await _prefs.setString('galpones_por_cenco', galponesJson);
-      
+
       debugPrint('💾 CENCOS y galpones guardados localmente');
       debugPrint('   - CENCOS: ${cencos.length}');
       debugPrint('   - CENCOS con galpones: ${galponesPorCenco.length}');
@@ -710,7 +707,7 @@ class StorageService with ChangeNotifier {
     bool found = false;
     for (int i = 0; i < records.length; i++) {
       final record = records[i];
-      
+
       // Intentar primero con tuuid (más confiable)
       if (targetUuid != null && targetUuid.isNotEmpty) {
         final recordUuid = record['tuuid']?.toString();
@@ -729,7 +726,7 @@ class StorageService with ChangeNotifier {
           break;
         }
       }
-      
+
       // Fallback: usar campos clave (numreg, fectra, granja, galpon)
       final recordNumreg = record['numreg']?.toString() ?? '';
       final recordFectra = record['fectra']?.toString() ?? '';
@@ -741,7 +738,7 @@ class StorageService with ChangeNotifier {
           recordFectra == targetFectra &&
           recordGranja == targetGranja &&
           recordGalpon == targetGalpon) {
-        // Reemplazar el registro con el actualizado (preserva todos los campos incluyendo guardado_backend y evidencias_completas)
+          // Reemplazar el registro con el actualizado (preserva todos los campos incluyendo guardado_backend y evidencias_completas)
         records[i] = Map<String, dynamic>.from(updatedRecord);
         debugPrint('   ✓ Registro encontrado por campos clave y actualizado');
         debugPrint('   ✓ guardado_backend preservado: ${records[i]['guardado_backend']}');
@@ -757,27 +754,27 @@ class StorageService with ChangeNotifier {
     }
 
     if (found) {
-      // Guardar de vuelta en SharedPreferences
+    // Guardar de vuelta en SharedPreferences
       final List<String> updatedRecords = records
           .map((r) => jsonEncode(r))
           .toList();
       await _prefs.setStringList(tabla, updatedRecords);
-      
+
       // Verificar que el flag se preservó correctamente
       final updatedRecordInList = records.firstWhere(
         (r) => (targetUuid != null && targetUuid.isNotEmpty && r['tuuid']?.toString() == targetUuid) ||
-               (r['numreg']?.toString() == targetNumreg && 
+               (r['numreg']?.toString() == targetNumreg &&
                 r['fectra']?.toString() == targetFectra &&
                 r['granja']?.toString() == targetGranja &&
                 r['galpon']?.toString() == targetGalpon),
         orElse: () => {},
       );
-      
+
       debugPrint('💾 updateRecord - Registro guardado en storage:');
       debugPrint('   - tuuid: ${updatedRecordInList['tuuid']}');
       debugPrint('   - guardado_backend final: ${updatedRecordInList['guardado_backend']}');
       debugPrint('   - synced final: ${updatedRecordInList['synced']}');
-      
+
       notifyListeners();
       return true;
     }

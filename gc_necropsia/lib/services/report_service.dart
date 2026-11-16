@@ -379,7 +379,7 @@ class ReportService {
     buffer.write(_escapeHtml(cabecera['tedad']?.toString() ?? ''));
     buffer.write(' días</td>');
     buffer.write('</tr>');
-    
+
     // Fila de Inicio y Fin de Registro (ambos en la misma fila)
     buffer.write('<tr>');
     buffer.write(
@@ -456,17 +456,15 @@ class ReportService {
         // Puedes tomar la primera o concatenar si varían
         String observacionNivel = '';
         if (items.isNotEmpty) {
-      
+
           observacionNivel = items[0]['tobservacion']?.toString() ?? '';
 
-         
         }
 
         for (int i = 0; i < items.length; i++) {
           final item = items[i];
           buffer.write('<tr>');
 
-       
           if (i == 0) {
             // Nivel
             buffer.write(
@@ -526,7 +524,7 @@ class ReportService {
 
     // Sección de Diagnóstico Presuntivo al final
     final diagnosticoPresuntivo = cabecera['diagnostico_presuntivo']?.toString() ?? '';
-    
+
     buffer.write('<table class="diagnostico-section" style="width: 100%; border-collapse: collapse; margin-top: 20px; page-break-inside: avoid;">');
     buffer.write('<tr>');
     buffer.write('<td class="diagnostico-title" style="background-color: #e6f2ff; font-weight: bold; text-align: center; padding: 5px; border: 1px solid #cbd5e1; page-break-inside: avoid;">');
@@ -547,7 +545,6 @@ class ReportService {
     buffer.write('</body></html>');
     return buffer.toString();
   }
-
 
   Future<void> generateReportPDF({
     required Map<String, dynamic> cabecera,
@@ -616,8 +613,7 @@ class ReportService {
     }
 
     final buffer = StringBuffer();
-    
-   
+
     final now = DateTime.now();
     final fechaHora = DateFormat('dd/MM/yyyy HH:mm').format(now);
 
@@ -864,13 +860,10 @@ class ReportService {
       }
       final nivelKey = '${sistemaKey}_$nivel';
 
-     
-
       final imagenesNivel =
           evidenciasCompletas[nivelKey] as List<dynamic>? ?? [];
-     
 
-      if (imagenesNivel.isNotEmpty) {    
+      if (imagenesNivel.isNotEmpty) {
         for (var imagenItem in imagenesNivel) {
           if (imagenItem is Map<String, dynamic>) {
             final path = imagenItem['path']?.toString() ?? '';
@@ -878,23 +871,22 @@ class ReportService {
               final file = File(path);
               if (file.existsSync()) {
                 imagePaths.add(path);
-                
+
               } else {
-              
+
               }
             }
           } else if (imagenItem is String) {
-       
+
             final file = File(imagenItem);
             if (file.existsSync()) {
               imagePaths.add(imagenItem);
-         
+
             }
           }
         }
       }
 
-     
       if (imagePaths.isEmpty &&
           reg['evidencia'] != null &&
           reg['evidencia'] is String) {
@@ -902,20 +894,19 @@ class ReportService {
         for (var pathStr in paths) {
           final trimmedPath = pathStr.trim();
           if (trimmedPath.isNotEmpty) {
-       
+
             if (!trimmedPath.contains('uploads/') &&
                 !trimmedPath.startsWith('http')) {
               final file = File(trimmedPath);
               if (file.existsSync()) {
                 imagePaths.add(trimmedPath);
-               
-              } 
-            } 
+
+              }
+            }
           }
         }
       }
 
-     
       String imgHtml = 'Sin evidencia';
       if (imagePaths.isNotEmpty) {
         final imgRows = <String>[];
@@ -924,13 +915,13 @@ class ReportService {
           if (base64 != null) {
             // Cada imagen en su propia fila (columna vertical)
             imgRows.add('<tr><td><img src="data:image/jpeg;base64,$base64"></td></tr>');
-          } 
+          }
         }
         if (imgRows.isNotEmpty) {
           // Tabla con cada imagen en una fila separada
           imgHtml = '<table class="img-box">${imgRows.join('')}</table>';
         }
-      } 
+      }
 
           String porcHtml = '';
       final porcentajesNivel = porcentajes[nivel] ?? {};
@@ -976,10 +967,10 @@ class ReportService {
 
     // Sección de Diagnóstico Presuntivo en nueva página
     final diagnosticoPresuntivo = cabecera['diagnostico_presuntivo']?.toString() ?? '';
-    
+
     // Salto de página antes de la sección de diagnóstico
     buffer.write('<div style="page-break-before: always;"></div>');
-    
+
     // Siempre mostrar la sección, con "No se registró diagnóstico" si está vacío
     buffer.write('<div class="diagnostico-section">');
     buffer.write('<div class="diagnostico-title">DIAGNÓSTICO PRESUNTIVO</div>');
@@ -1023,13 +1014,13 @@ class ReportService {
     try {
       // Formato esperado: YYYY-MM-DD HH:MM:SS o HH:MM:SS (para compatibilidad)
       String dateTimeStr = dateTimeString.trim();
-      
+
       // Si solo tiene hora (HH:MM:SS), usar la fecha actual
       if (dateTimeStr.contains(':') && !dateTimeStr.contains('-')) {
         final now = DateTime.now();
         dateTimeStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} $dateTimeStr';
       }
-      
+
       final dateTime = DateTime.parse(dateTimeStr);
       final day = dateTime.day.toString().padLeft(2, '0');
       final month = dateTime.month.toString().padLeft(2, '0');

@@ -27,14 +27,12 @@ import com.rinconadadelsur.sistemas.bioseguridad.databinding.FragmentReporteGari
 
 import org.jetbrains.annotations.NotNull;
 
-
 public class ReporteCercoFragment extends Fragment {
 
     private FragmentReporteCercoBinding bg;
 
     /*<!-- TODO: VARIABLES G -->*/
     String mifectra,sql,sFecha,sColaborador,sTurno,sComponente,sDescripcion,sCencos,sEstadoD,sDescripcionDer,sEstadoI,sDescripcionIzq,sHoraI,sHoraF;
-
 
     /*<!-- TODO: VARIABLES CABECERA -->*/
     String sFechaActual,sNombreUsuario,sSerieDispositivo,sDoc,sSerie,sNumero;
@@ -54,15 +52,12 @@ public class ReporteCercoFragment extends Fragment {
     SQLiteDatabase db;
     String querys;
 
-
     public ReporteCercoFragment() {
-        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_reporte_cerco, container, false);
     }
 
@@ -111,7 +106,6 @@ public class ReporteCercoFragment extends Fragment {
         mostrarTotales(sFecha, sCencos);
 
     }
-
 
     private void buscarCencos() {
         db=conn.getReadableDatabase();

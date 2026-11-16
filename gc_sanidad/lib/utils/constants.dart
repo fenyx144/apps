@@ -5,7 +5,7 @@ class AppColors {
   static const Color primary = Color(0xFF1A2B56); // Azul profundo
   static const Color accent = Color(
     0xFF4A90E2,
-  ); // Azul vibrante → para acentos y bordes activos
+  ); // Azul vibrante para acentos y bordes activos
   static const Color surface = Colors.white; // Fondo de tarjetas
   static const Color background = Color(0xFFF5F9FD); // Fondo suave
   static const Color primaryLight = Color(0xFF2D3E50); // Azul marino medio
@@ -129,14 +129,14 @@ class AppColors {
 
 class AppConstants {
   // API Configuration
-  static const String baseUrl = //'https://granjarinconadadelsur.com/sanidad';
+  static const String baseUrl = // 'https://granjarinconadadelsur.com/sanidad';
       'http://10.94.219.131/sanidad';
   static const String baseUrlSanidad = // 'https://granjarinconadadelsur.com/sanidad/flutter';
       'http://10.94.219.131/sanidad/flutter';
 
   static const String dashboardBasePath =
       '/modules/laboratorio/muestras/dashboard';
-  
+
   static const String apiToken = 'd9f7a6b3-4c8e-11ee-be56-0242ac120002';
 
   // App Info

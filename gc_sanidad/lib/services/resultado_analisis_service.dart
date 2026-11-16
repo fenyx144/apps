@@ -24,7 +24,6 @@ class ResultadoAnalisisService {
         );
 
     final response = await http.get(url);
-    // debugPrint(response.body.toString());
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
 

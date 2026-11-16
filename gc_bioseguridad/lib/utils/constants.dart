@@ -134,9 +134,8 @@ class AppColors {
 }
 
 class AppConstants {
-  static const String baseUrl = 'https://granjarinconadadelsur.com/sanidad/flutter';
-                                //'http://192.168.15.84/sanidad/flutter';
-                              //'http://192.168.1.163/sanidad/flutter';
+  static const String baseUrl = //'https://granjarinconadadelsur.com/sanidad/flutter';
+      'https://10.169.34.5/sanidad/flutter';
 
   /// Carpeta PHP de esta app (módulo móvil de bioseguridad).
   static const String seguimientoPath = '/bioseguridad';
@@ -168,6 +167,26 @@ class AppConstants {
   static const String actualizarBioEndpoint = '/actualizar_bioseguridad_movil.php';
   static const String consultarDniEndpoint = '/consultar_dni_bioseguridad_movil.php';
   static const String consultarRucEndpoint = '/consultar_ruc_bioseguridad_movil.php';
+
+  /// URL REST almacén: mismo árbol que los PHP móviles
+  /// (`baseUrl` + [seguimientoPath] + `/api/public`). Override si el deploy es distinto.
+  static const String bioEmpresaApiBaseOverride = '';
+
+  static String get bioEmpresaApiBase {
+    final override = bioEmpresaApiBaseOverride.trim();
+    if (override.isNotEmpty) {
+      return override.endsWith('/')
+          ? override.substring(0, override.length - 1)
+          : override;
+    }
+    final base = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    return '$base$seguimientoPath/api/public';
+  }
+
+  /// Bloque Almacén en el drawer (GRS y terceros).
+  static const bool mostrarModuloEmpresaBio = true;
   static const String buscarProveedorCcteEndpoint =
       '/buscar_proveedor_ccte_bioseguridad_movil.php';
   static const String proveedoresPlanificacionEndpoint =
@@ -200,7 +219,7 @@ class AppConstants {
   /// descargado para trabajar sin señal (JSON).
   static const String keyAvisosIngreso = 'bio_avisos_ingreso';
 
-  /// Nómina DNI → proveedor (personal registrado por cada proveedor e
+  /// Nómina DNI proveedor (personal registrado por cada proveedor e
   /// historial reciente) para proponer el proveedor sin planificación (JSON).
   static const String keyNominaProveedores = 'bio_nomina_proveedores';
 
@@ -246,6 +265,7 @@ class AppStrings {
   static const String menuInstalaciones = 'Anomalías';
   static const String menuCerco = 'Cerco eléctrico';
   static const String menuFomites = 'Fómites';
+  static const String menuArticulos = 'Control de artículos';
   static const String menuReportes = 'Reportes';
   static const String menuCerrarSesion = 'Cerrar sesión';
   static const String menuMiGranja = 'Mis granjas';
@@ -299,7 +319,6 @@ class BioTipos {
 }
 
 /// De dónde viene quien entra a la granja: de un área de GRS o de un proveedor.
-///
 /// Son las dos listas de `get_catalogos_bioseguridad_movil.php`
 /// (`bio_areaproveedor_catalogo()`), y el valor se guarda tal cual en
 /// `san_fact_ingresogranja_cab.areaProveedor` para que el reporte web no tenga que
@@ -323,6 +342,7 @@ class BioSecciones {
   static const String salida = 'salida';
   static const String cerco = 'cerco';
   static const String fomites = 'fomites';
+  static const String articulos = 'articulos';
   static const String anomalias = 'anomalias';
 }
 
@@ -370,7 +390,6 @@ class BioNavTipo {
   final String id;
 
   /// Etiqueta corta del grupo («Física»).
-  ///
   /// El rótulo «BIOSEGURIDAD» ya lo dibuja el drawer sobre los tres grupos, así
   /// que repetir «Bioseguridad» en cada uno era redundante (y el nombre completo
   /// apenas cabía con el texto de accesibilidad al 200%).
@@ -383,8 +402,27 @@ class BioNavTipo {
   BioNavSeccion get primera => secciones.first;
 }
 
+/// Pantallas del módulo empresa (tercero) embebido en esta app.
+class BioEmpresaSecciones {
+  static const String almacen = 'bio_empresa_almacen';
+  static const String consumo = 'bio_empresa_consumo';
+  static const String relevo = 'bio_empresa_relevo';
+}
+
+const List<BioNavSeccion> bioEmpresaNavSecciones = [
+  BioNavSeccion(
+    id: BioEmpresaSecciones.consumo,
+    label: 'Registrar consumo',
+    icon: Icons.output_rounded,
+  ),
+  BioNavSeccion(
+    id: BioEmpresaSecciones.relevo,
+    label: 'Relevo de turno',
+    icon: Icons.swap_horiz_rounded,
+  ),
+];
+
 /// Grupos del drawer por tipo de bioseguridad, en orden.
-///
 /// Control de personal, cerco y fómites solo existen en bioseguridad física; en
 /// química y biológica lo único que se registra son anomalías.
 const List<BioNavTipo> bioNavTipos = [
@@ -415,6 +453,11 @@ const List<BioNavTipo> bioNavTipos = [
         label: AppStrings.menuFomites,
         // Huella de animal (antes era el ícono de una rata).
         icon: Icons.pets,
+      ),
+      BioNavSeccion(
+        id: BioSecciones.articulos,
+        label: AppStrings.menuArticulos,
+        icon: Icons.checklist_rtl_rounded,
       ),
       BioNavSeccion(
         id: BioSecciones.anomalias,

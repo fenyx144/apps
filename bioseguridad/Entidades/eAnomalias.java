@@ -28,7 +28,6 @@ public class eAnomalias {
         this._descripcion = _descripcion;
     }
 
-
     @Override
     public String toString() {
         return _descripcion;

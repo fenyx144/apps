@@ -530,7 +530,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             barTouchData: BarTouchData(
               enabled: true,
               touchTooltipData: BarTouchTooltipData(
-               
+
                 getTooltipItem: (group, groupIndex, rod, rodIndex) {
                   final valorEntero = rod.toY.toInt();
                   return BarTooltipItem(
@@ -562,7 +562,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       } else if (r['galpon'] != null && r['galpon'].toString().isNotEmpty) {
         tipo = 'Galpón ${r['galpon']}';
       }
-      
+
       final tipoTruncado = tipo.length > 16
           ? '${tipo.substring(0, 16)}...'
           : tipo;

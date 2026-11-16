@@ -4,7 +4,6 @@ import 'api_service.dart';
 import 'plan_visitas_service.dart';
 
 /// Granja con estatus sanitario vigente de la que viene una persona.
-///
 /// La produce el portal web (módulo «Estatus Sanitario Granja»): mientras esa
 /// granja esté en sospecha o confirmado, quien haya ingresado a ella lleva la
 /// etiqueta de situación especial al entrar a otra granja.
@@ -46,7 +45,7 @@ class EstatusOrigen {
   final bool ingresa;
 
   /// Nombre legible sin el tramo de campaña que a veces trae el servidor
-  /// («Granja C=190» → «Granja»).
+  /// («Granja C=190» «Granja»).
   static String sinCampaniaEnNombre(String raw) {
     final t = raw.trim();
     if (t.isEmpty) return t;
@@ -93,7 +92,6 @@ class EstatusOrigen {
   String get fechaFinCorta => _fechaCorta(fechaFin);
 
   /// Días transcurridos desde el ingreso hasta [hoy].
-  ///
   /// `null` cuando la fecha no se entiende. Un ingreso de hoy da `0`, y una
   /// fecha futura (reloj corrido) también: el aviso nunca muestra días
   /// negativos.
@@ -156,7 +154,6 @@ class EstatusDni {
   }
 
   /// La frase del diálogo para un origen concreto:
-  ///
   /// «Juan Pérez ingresó el día 28/09/2026 a la granja 621 SANTA TERESA, la cual
   /// se encuentra en situación especial de Sospecha.»
   String situacionDe(String sujeto, EstatusOrigen o) =>
@@ -179,7 +176,6 @@ class EstatusDni {
   }
 
   /// «Esta persona ingresó hace 3 días a una granja en situación especial».
-  ///
   /// El «hace …» sale del ingreso ([EstatusOrigen.haceTexto]): «hoy» si fue el
   /// mismo día y, si no hay fecha entendible, se omite. Con varias granjas se
   /// toma el ingreso más reciente, que es el contacto que ocurrió hace menos.
@@ -303,7 +299,6 @@ class EstatusConsulta {
 }
 
 /// Consulta al portal web del estatus sanitario de la granja y de los DNIs.
-///
 /// Es solo informativa: la app muestra la etiqueta de situación especial y
 /// guarda el ingreso igual. Si no hay red, el servidor no tiene las tablas o la
 /// respuesta no se entiende, devuelve `null` y la pantalla queda en estado
