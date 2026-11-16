@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -919,11 +920,13 @@ class ApiService {
   Future<Map<String, dynamic>> verificarRostro({
     required List<int> jpeg,
   }) async {
+    final url = Uri.parse(
+      '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
+      '${AppConstants.verificarRostroEndpoint}',
+    );
+    final reloj = Stopwatch()..start();
+    debugPrint('[BioVerif] POST $url bytes=${jpeg.length}');
     try {
-      final url = Uri.parse(
-        '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
-        '${AppConstants.verificarRostroEndpoint}',
-      );
       final response = await _http
           .post(
             url,
@@ -931,17 +934,24 @@ class ApiService {
             body: jsonEncode({'foto': base64Encode(jpeg)}),
           )
           .timeout(const Duration(seconds: 90));
+      debugPrint(
+        '[BioVerif] POST $url → ${response.statusCode} ${reloj.elapsedMilliseconds}ms',
+      );
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) {
         return {'success': false, 'message': 'Respuesta inválida'};
       }
       final data = decoded['data'];
       return {
-        'success': decoded['success'] == true,
+        'success': decoded['success'] == true && response.statusCode == 200,
         'message': decoded['message']?.toString() ?? '',
         'data': data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
       };
+    } on TimeoutException {
+      debugPrint('[BioVerif] POST $url → timeout ${reloj.elapsedMilliseconds}ms');
+      return {'success': false, 'message': 'timeout'};
     } catch (e) {
+      debugPrint('[BioVerif] POST $url → error ${reloj.elapsedMilliseconds}ms $e');
       return {'success': false, 'message': e.toString()};
     }
   }

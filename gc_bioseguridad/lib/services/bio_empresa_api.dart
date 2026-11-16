@@ -171,12 +171,9 @@ class BioEmpresaApi {
   /// Bytes de `foto_ruta` (`storage/personal/...`). No persiste el archivo.
   Future<Uint8List?> descargarArchivo(String ruta) async {
     final limpia = ruta.trim();
-    if (limpia.isEmpty) return null;
-    final url = limpia.startsWith('http')
-        ? Uri.parse(limpia)
-        : Uri.parse(
-            '${AppConstants.bioEmpresaApiBase}/${limpia.replaceFirst(RegExp(r'^/'), '')}',
-          );
+    if (limpia.isEmpty || limpia.contains('storage/personal')) return null;
+    if (!limpia.startsWith('http')) return null;
+    final url = Uri.parse(limpia);
     try {
       final res = await _client
           .get(url, headers: await _headers())

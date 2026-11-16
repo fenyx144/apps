@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 
 ob_start();
+require_once __DIR__ . '/php7_compat.php';
 require_once __DIR__ . '/auth_movil.php';
 bio_cors_headers();
 date_default_timezone_set('America/Lima');
@@ -108,13 +109,24 @@ function bio_foto_archivo(string $ruta): ?string
     if (is_file($ruta)) {
         return $ruta;
     }
-    $rel = ltrim($ruta, '/');
+    $rel = str_replace('\\', '/', $ruta);
+    $marca = 'storage/personal/';
+    $pos = stripos($rel, $marca);
+    if ($pos !== false) {
+        $rel = substr($rel, $pos);
+    }
+    $rel = ltrim($rel, '/');
     $candidatos = [
-        __DIR__ . '/api/public/' . $rel,
-        __DIR__ . '/../api/public/' . $rel,
-        dirname(__DIR__, 2) . '/portalbioseguridad/api/public/' . $rel,
-        dirname(__DIR__, 3) . '/portalbioseguridad/api/public/' . $rel,
+        'C:/xampp/htdocs/bioseguridad/api/public/' . $rel,
+        'C:/xampp/htdocs/sanidad/bioseguridad/api/public/' . $rel,
     ];
+    if (!empty($_SERVER['DOCUMENT_ROOT'])) {
+        $doc = rtrim(str_replace('\\', '/', (string) $_SERVER['DOCUMENT_ROOT']), '/');
+        $candidatos[] = $doc . '/bioseguridad/api/public/' . $rel;
+        $candidatos[] = dirname($doc) . '/bioseguridad/api/public/' . $rel;
+    }
+    $candidatos[] = __DIR__ . '/api/public/' . $rel;
+    $candidatos[] = dirname(__DIR__) . '/bioseguridad/api/public/' . $rel;
     foreach ($candidatos as $c) {
         if (is_file($c)) {
             return $c;

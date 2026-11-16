@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/php7_compat.php';
+
 /**
  * Consulta informativa de la «Planificación de visitas» (portal web,
  * Bioseguridad física) para el control de ingreso de la app.
@@ -478,7 +480,7 @@ function bio_plan_listado_portal(
                 ),
                 'UTF-8'
             );
-            if (!str_contains($blob, $q)) {
+            if (strpos($blob, $q) === false) {
                 continue;
             }
         }

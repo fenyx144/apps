@@ -13,6 +13,7 @@ declare(strict_types=1);
  */
 
 ob_start();
+require_once __DIR__ . '/php7_compat.php';
 require_once __DIR__ . '/auth_movil.php';
 bio_cors_headers();
 date_default_timezone_set('America/Lima');
@@ -217,6 +218,26 @@ function bio_ver_galeria(mysqli $conn): array
     return $out;
 }
 
+/** Carpetas donde XAMPP guarda las fotos del portal, no la URL pública de flutter. */
+function bio_ver_raices_foto(): array
+{
+    $roots = [
+        'C:/xampp/htdocs/bioseguridad/api/public',
+        'C:/xampp/htdocs/sanidad/bioseguridad/api/public',
+    ];
+    if (!empty($_SERVER['DOCUMENT_ROOT'])) {
+        $doc = rtrim(str_replace('\\', '/', (string) $_SERVER['DOCUMENT_ROOT']), '/');
+        $roots[] = $doc . '/bioseguridad/api/public';
+        $roots[] = dirname($doc) . '/bioseguridad/api/public';
+        $roots[] = $doc . '/api/public';
+    }
+    $roots[] = __DIR__ . '/api/public';
+    $roots[] = dirname(__DIR__) . '/api/public';
+    $roots[] = dirname(__DIR__) . '/bioseguridad/api/public';
+
+    return $roots;
+}
+
 function bio_ver_col(mysqli $conn, string $tabla): ?string
 {
     $r = @$conn->query('SHOW COLUMNS FROM `' . str_replace('`', '', $tabla) . '`');
@@ -266,13 +287,15 @@ function bio_ver_archivo(string $ruta): ?string
     if (is_file($ruta)) {
         return $ruta;
     }
-    $rel = ltrim($ruta, '/');
-    foreach ([
-        __DIR__ . '/api/public/' . $rel,
-        __DIR__ . '/../api/public/' . $rel,
-        dirname(__DIR__, 2) . '/portalbioseguridad/api/public/' . $rel,
-        dirname(__DIR__, 3) . '/portalbioseguridad/api/public/' . $rel,
-    ] as $c) {
+    $rel = str_replace('\\', '/', $ruta);
+    $marca = 'storage/personal/';
+    $pos = stripos($rel, $marca);
+    if ($pos !== false) {
+        $rel = substr($rel, $pos);
+    }
+    $rel = ltrim($rel, '/');
+    foreach (bio_ver_raices_foto() as $root) {
+        $c = rtrim(str_replace('\\', '/', $root), '/') . '/' . $rel;
         if (is_file($c)) {
             return $c;
         }
@@ -425,10 +448,10 @@ function bio_ver_python_fijo(): ?string
 function bio_ver_ruta_absoluta(string $path): bool
 {
     if (PHP_OS_FAMILY === 'Windows') {
-        return (bool) preg_match('/^[A-Za-z]:[\\\\\\/]/', $path) || str_starts_with($path, '\\\\');
+        return (bool) preg_match('/^[A-Za-z]:[\\\\\\/]/', $path) || substr($path, 0, 2) === '\\\\';
     }
 
-    return str_starts_with($path, '/');
+    return isset($path[0]) && $path[0] === '/';
 }
 
 /** Primera ruta de `where` que no sea el alias de la Microsoft Store. */

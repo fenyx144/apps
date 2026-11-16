@@ -10,6 +10,7 @@ import '../services/rostro_detector.dart';
 import '../utils/constants.dart';
 import '../utils/documento_scan_flow.dart';
 import '../utils/yuv_converter.dart';
+import '../widgets/scan_overlay.dart';
 
 class VerificacionFacialResult {
   const VerificacionFacialResult({
@@ -34,25 +35,32 @@ class VerificacionFacialScreen extends StatefulWidget {
       _VerificacionFacialScreenState();
 }
 
-class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
+class _VerificacionFacialScreenState extends State<VerificacionFacialScreen>
+    with SingleTickerProviderStateMixin {
   final _dniCtrl = TextEditingController();
   final _detector = RostroDetector();
+  late final AnimationController _scan;
   CameraController? _cam;
   bool _ocupado = false;
   bool _manual = false;
+  bool _enviando = false;
   int _giro = 0;
   bool _espejo = true;
   int _rostros = 0;
-  String _estado = 'Buscando';
 
   @override
   void initState() {
     super.initState();
+    _scan = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat();
     _abrirCamara();
   }
 
   @override
   void dispose() {
+    _scan.dispose();
     _dniCtrl.dispose();
     final cam = _cam;
     _cam = null;
@@ -62,6 +70,8 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
   }
 
   Future<void> _abrirCamara() async {
+    _enviando = false;
+    await _cerrarCamara();
     try {
       await _detector.inicializar();
       final cams = await availableCameras();
@@ -88,20 +98,20 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
       setState(() {
         _cam = cam;
         _manual = false;
-        _estado = 'Buscando';
+        _enviando = false;
       });
       await cam.startImageStream(_onFrame);
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _manual = true;
-        _estado = 'Sin cámara';
+        _enviando = false;
       });
     }
   }
 
   Future<void> _onFrame(CameraImage img) async {
-    if (_ocupado || _manual || _cam == null) return;
+    if (_ocupado || _manual || _enviando || _cam == null) return;
     _ocupado = true;
     try {
       final caras = await _detector.detectar(
@@ -111,11 +121,9 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
         giro: _giro,
         espejo: _espejo,
       );
-      if (!mounted || _cam == null || _manual) return;
+      if (!mounted || _cam == null || _manual || _enviando) return;
       if (caras.length != 1) {
         _rostros = 0;
-        final texto = caras.isEmpty ? 'Buscando' : 'Una sola persona';
-        if (texto != _estado) setState(() => _estado = texto);
         return;
       }
       _rostros++;
@@ -131,15 +139,25 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
         giro: _giro,
         espejo: _espejo,
       );
-      final jpeg = _jpeg(reg.rgb, reg.ancho, reg.alto);
-      await _cerrarCamara();
-      if (!mounted) return;
-      setState(() => _estado = 'Enviando');
-      await _enviar(jpeg);
-    } catch (_) {
-      if (mounted && _estado != 'Reintentando') {
-        setState(() => _estado = 'Reintentando');
-      }
+      final rgb = Uint8List.fromList(reg.rgb);
+      final ancho = reg.ancho;
+      final alto = reg.alto;
+      _enviando = true;
+      if (mounted) setState(() {});
+      final cam = _cam;
+      unawaited(Future<void>(() async {
+        if (cam != null && cam.value.isStreamingImages) {
+          try {
+            await cam.stopImageStream();
+          } catch (_) {}
+        }
+        if (!mounted) return;
+        final jpeg = _jpeg(rgb, ancho, alto);
+        await _enviar(jpeg);
+      }));
+    } catch (e) {
+      debugPrint('[BioVerif] captura error $e');
+      if (mounted) _aDniManual();
     } finally {
       _ocupado = false;
     }
@@ -171,36 +189,50 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
     }
   }
 
+  void _aDniManual() {
+    if (!mounted) return;
+    setState(() {
+      _enviando = false;
+      _manual = true;
+    });
+    unawaited(_cerrarCamara());
+  }
+
   Future<void> _enviar(Uint8List jpeg) async {
     if (jpeg.length < 32) {
-      setState(() {
-        _manual = true;
-        _estado = 'No coincide';
-      });
+      debugPrint('[BioVerif] foto vacía, DNI manual');
+      _aDniManual();
       return;
     }
-    final res = await ApiService().verificarRostro(jpeg: jpeg);
-    if (!mounted) return;
-    final data = res['data'];
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
-    if (res['success'] == true && map['verificado'] == true) {
-      final dni = (map['dni'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
-      if (dni.isNotEmpty) {
-        Navigator.of(context).pop(
-          VerificacionFacialResult(
-            dni: dni,
-            nombre: (map['nombre'] ?? '').toString().trim(),
-            empresa: (map['empresa'] ?? '').toString().trim(),
-            verificado: true,
-          ),
-        );
-        return;
+    try {
+      final res = await ApiService()
+          .verificarRostro(jpeg: jpeg)
+          .timeout(const Duration(seconds: 90));
+      if (!mounted) return;
+      final data = res['data'];
+      final map =
+          data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+      if (res['success'] == true && map['verificado'] == true) {
+        final dni = (map['dni'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+        if (dni.isNotEmpty) {
+          Navigator.of(context).pop(
+            VerificacionFacialResult(
+              dni: dni,
+              nombre: (map['nombre'] ?? '').toString().trim(),
+              empresa: (map['empresa'] ?? '').toString().trim(),
+              verificado: true,
+            ),
+          );
+          return;
+        }
       }
+      debugPrint('[BioVerif] sin coincidencia ${res['message']}');
+    } on TimeoutException {
+      debugPrint('[BioVerif] timeout en pantalla');
+    } catch (e) {
+      debugPrint('[BioVerif] error en pantalla $e');
     }
-    setState(() {
-      _manual = true;
-      _estado = 'No coincide';
-    });
+    _aDniManual();
   }
 
   Future<void> _escanear() async {
@@ -231,36 +263,34 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
         backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
       ),
-      body: _manual || cam == null || !cam.value.isInitialized
+      body: _manual
           ? _dniManual()
-          : Stack(
-              fit: StackFit.expand,
-              children: [
-                FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: cam.value.previewSize?.height ?? 1,
-                    height: cam.value.previewSize?.width ?? 1,
-                    child: CameraPreview(cam),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        _estado,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
+          : cam != null && cam.value.isInitialized
+              ? Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: cam.value.previewSize?.height ?? 1,
+                        height: cam.value.previewSize?.width ?? 1,
+                        child: CameraPreview(cam),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: AnimatedBuilder(
+                        animation: _scan,
+                        builder: (context, _) => ScanOverlay(
+                          scanT: _scan.value,
+                          progreso: _enviando ? _scan.value : 0,
+                          color: AppColors.primaryLight,
+                          activo: true,
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ],
-            ),
+                  ],
+                )
+              : const ColoredBox(color: Colors.black),
     );
   }
 
@@ -270,8 +300,6 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(_estado, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
