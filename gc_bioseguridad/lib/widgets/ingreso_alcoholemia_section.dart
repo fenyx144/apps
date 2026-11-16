@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/catalog_service.dart';
+import '../utils/anomalia_contexto.dart';
 import 'bio_form_fields.dart';
 import 'evidencia_select_field.dart';
 import 'image_slot_row.dart';
@@ -14,6 +15,7 @@ class AlcoholemiaPruebaFila {
   String gradoGl = '';
   String agenteCausal = '';
   String anomalia = '';
+  String efecto = '';
   String accion = '';
   final List<String?> fotos = [null, null, null];
 }
@@ -28,21 +30,6 @@ typedef AlcoholemiaIngresoData = AlcoholemiaIngresoState;
 
 double? _parseGrado(String raw) =>
     double.tryParse(raw.trim().replaceAll(',', '.'));
-
-/// Texto breve para AGC cuando supera el umbral.
-String alcoholemiaTextoAnomalia({
-  required String dni,
-  required String nombre,
-  required double gradoGl,
-  required double umbral,
-}) {
-  final g = gradoGl.toStringAsFixed(3);
-  final u = umbral.toStringAsFixed(3);
-  final quien = nombre.isNotEmpty
-      ? nombre
-      : (dni.isNotEmpty ? 'DNI $dni' : 'Persona evaluada');
-  return '$g g/L supera umbral $u g/L · $quien';
-}
 
 class IngresoAlcoholemiaSection extends StatefulWidget {
   const IngresoAlcoholemiaSection({
@@ -133,7 +120,7 @@ class _IngresoAlcoholemiaSectionState extends State<IngresoAlcoholemiaSection> {
   @override
   Widget build(BuildContext context) {
     return BioFormSection(
-      title: 'ALCOHOLEMIA (OPCIONAL)',
+      title: 'ALCOHOLEMIA',
       icon: Icons.local_bar_outlined,
       children: [
         SwitchListTile(
@@ -204,8 +191,6 @@ class _FilaAlcoholemiaTile extends StatefulWidget {
 class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
   late final TextEditingController _valor;
   late final TextEditingController _grado;
-  late final TextEditingController _agente;
-  late final TextEditingController _anomalia;
   late final TextEditingController _accion;
   bool _syncLecturaGrado = true;
 
@@ -214,8 +199,6 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
     super.initState();
     _valor = TextEditingController(text: widget.fila.valorAparato);
     _grado = TextEditingController(text: widget.fila.gradoGl);
-    _agente = TextEditingController(text: widget.fila.agenteCausal);
-    _anomalia = TextEditingController(text: widget.fila.anomalia);
     _accion = TextEditingController(text: widget.fila.accion);
     WidgetsBinding.instance.addPostFrameCallback((_) => _aplicarDefaults());
   }
@@ -228,8 +211,6 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
   void dispose() {
     _valor.dispose();
     _grado.dispose();
-    _agente.dispose();
-    _anomalia.dispose();
     _accion.dispose();
     super.dispose();
   }
@@ -247,25 +228,25 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
     final g = _gradoNum;
     if (g != null && _superaUmbral(umbral)) {
       final meta = context.read<CatalogService>().alcoholemiaMeta;
-      if (widget.fila.agenteCausal.isEmpty) {
-        widget.fila.agenteCausal = meta.agenteCausalDef;
-        _agente.text = meta.agenteCausalDef;
-      }
-      if (widget.fila.accion.isEmpty) {
-        widget.fila.accion = meta.accionDef;
-        _accion.text = meta.accionDef;
-      }
-      final txt = alcoholemiaTextoAnomalia(
+      final ctx = AnomaliaContexto.alcoholemia(
         dni: widget.fila.dni,
         nombre: widget.fila.nombre,
         gradoGl: g,
         umbral: umbral,
+        agenteDef: meta.agenteCausalDef,
+        accionDef: meta.accionDef,
       );
-      widget.fila.anomalia = txt;
-      if (_anomalia.text != txt) _anomalia.text = txt;
+      widget.fila.agenteCausal = ctx.agenteCausal;
+      widget.fila.anomalia = ctx.anomalia;
+      widget.fila.efecto = ctx.efecto;
+      if (widget.fila.accion.trim().isEmpty) {
+        widget.fila.accion = ctx.accion;
+        if (_accion.text != ctx.accion) _accion.text = ctx.accion;
+      }
     } else if (g != null) {
       widget.fila.anomalia = '';
-      if (_anomalia.text.isNotEmpty) _anomalia.clear();
+      widget.fila.efecto = '';
+      widget.fila.agenteCausal = '';
     }
   }
 
@@ -387,10 +368,9 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                 ],
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Grado (g/L)',
-                  helperText: 'Umbral: ${meta.umbralGl} g/L',
-                  border: const OutlineInputBorder(),
+                  border: OutlineInputBorder(),
                   isDense: true,
                 ),
                 onChanged: _onGradoChanged,
@@ -401,44 +381,14 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
         if (supera) ...[
           const SizedBox(height: 10),
           TextField(
-            controller: _anomalia,
-            decoration: const InputDecoration(
-              labelText: 'Anomalía',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
-            ),
-            minLines: 3,
-            maxLines: 5,
-            onChanged: (v) {
-              widget.fila.anomalia = v;
-              widget.onChanged();
-            },
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _agente,
-            decoration: const InputDecoration(
-              labelText: 'Agente causal',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
-            ),
-            minLines: 3,
-            maxLines: 4,
-            onChanged: (v) {
-              widget.fila.agenteCausal = v;
-              widget.onChanged();
-            },
-          ),
-          const SizedBox(height: 8),
-          TextField(
             controller: _accion,
             decoration: const InputDecoration(
               labelText: 'Acción',
               border: OutlineInputBorder(),
-              alignLabelWithHint: true,
+              isDense: true,
             ),
-            minLines: 3,
-            maxLines: 4,
+            minLines: 2,
+            maxLines: 3,
             onChanged: (v) {
               widget.fila.accion = v;
               widget.onChanged();
@@ -446,7 +396,7 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Evidencia alcoholemia',
+            'Foto',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
           ImageSlotRow(

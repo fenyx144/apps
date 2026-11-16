@@ -46,6 +46,7 @@ import '../widgets/orden_edad_dialog.dart';
 import '../widgets/planificadas_sheet.dart';
 import '../widgets/situacion_dialog.dart';
 import 'register_summary_screen.dart';
+import 'verificacion_facial_screen.dart';
 
 /// Control de ingreso: cuántas personas entran a la granja, en qué vehículo,
 /// de qué proveedor y con qué proceso vienen. Los DNIs son opcionales porque en
@@ -2109,6 +2110,31 @@ class _RegisterControlIngresoScreenState
     _consultarEstatusSanitario();
   }
 
+  Future<void> _identificarPorRostro() async {
+    final r = await Navigator.of(context).push<VerificacionFacialResult>(
+      MaterialPageRoute(builder: (_) => const VerificacionFacialScreen()),
+    );
+    if (r == null || !mounted) return;
+    if (!await _evaluarPresenciaTrasEscaneo(dni: r.dni)) return;
+    if (!mounted) return;
+    await _agregarDniEscaneado(r.dni);
+    if (!mounted) return;
+    final i = _dnis.indexWhere(
+      (d) =>
+          DocumentoPersona.normalizar(d.dni) ==
+          DocumentoPersona.normalizar(r.dni),
+    );
+    if (i < 0) return;
+    final fila = _dnis[i];
+    if (fila.nombre.trim().isEmpty && r.nombre.trim().isNotEmpty) {
+      setState(() {
+        fila.nombre = r.nombre.trim();
+        fila.estado = _DniEstado.ok;
+        fila.consultado = fila.dni;
+      });
+    }
+  }
+
   /// Abre el escáner y agrega una fila nueva con el documento leído.
   Future<void> _escanearNuevoDni() async {
     final dni = await escanearDocumentoPersona(context);
@@ -2235,6 +2261,7 @@ class _RegisterControlIngresoScreenState
           'umbral_g_l': umbral,
           'agente_causal': f.agenteCausal,
           'anomalia': f.anomalia,
+          'efecto': f.efecto,
           'accion': f.accion,
         });
       } catch (_) {}
@@ -2258,6 +2285,7 @@ class _RegisterControlIngresoScreenState
         'grado_g_l': f.gradoGl,
         'agente_causal': f.agenteCausal,
         'anomalia': f.anomalia,
+        'efecto': f.efecto,
         'accion': f.accion,
         'imagenes': fotos,
       });
@@ -2821,6 +2849,15 @@ class _RegisterControlIngresoScreenState
       title: '1. Identificar',
       icon: Icons.qr_code_scanner_rounded,
       children: [
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _identificarPorRostro,
+            icon: const Icon(Icons.face_retouching_natural),
+            label: const Text('Verificación facial'),
+          ),
+        ),
+        const SizedBox(height: _sepCampo),
         BioScanTiles(
           onScanDni: _escanearNuevoDni,
           onScanPlaca: _escanearPlacaNueva,
@@ -3571,9 +3608,7 @@ class _RegisterControlIngresoScreenState
             paths: _imagenes,
             onChanged: (i, path) => setState(() => _imagenes[i] = path),
           ),
-          const SizedBox(height: _sepCampo),
         ],
-        _buildAlcoholemiaIngreso(),
       ],
     );
   }
@@ -3609,6 +3644,10 @@ class _RegisterControlIngresoScreenState
               const BioCatalogoAviso(),
               _avisoConfigurarMisGranjas(context),
               _buildFaseIdentificar(context),
+              if (_dnisIngreso.any((d) => DocumentoPersona.esCompleto(d.dni))) ...[
+                const SizedBox(height: _sepBloque),
+                _buildAlcoholemiaIngreso(),
+              ],
               if (_hayRegresos) ...[
                 const SizedBox(height: _sepBloque),
                 _buildSeccionRegreso(context),

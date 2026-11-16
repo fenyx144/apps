@@ -10,6 +10,10 @@ import 'screens/splash_screen.dart';
 import 'services/app_http_client.dart';
 import 'services/catalog_service.dart';
 import 'services/deep_link_service.dart';
+import 'services/face_engine.dart';
+import 'services/nomina_store.dart';
+import 'services/rostro_detector.dart';
+import 'services/rostro_embedder.dart';
 import 'services/storage_service.dart';
 import 'utils/app_theme.dart';
 import 'utils/constants.dart';
@@ -47,6 +51,14 @@ void main() async {
             return catalog;
           },
           lazy: false,
+        ),
+        ChangeNotifierProvider(create: (_) => NominaStore()),
+        Provider(
+          create: (ctx) => FaceEngine(
+            detector: RostroDetector(),
+            embedder: OnnxRostroEmbedder(),
+            nominas: ctx.read<NominaStore>(),
+          ),
         ),
       ],
       child: const BioseguridadApp(),

@@ -44,6 +44,7 @@ class AlcoholemiaApiService {
     required String accion,
     String? anomalia,
     String? agenteCausal,
+    String? efecto,
     String? fotoPath,
     String usuario = '',
   }) async {
@@ -59,6 +60,7 @@ class AlcoholemiaApiService {
       if (anomalia != null && anomalia.trim().isNotEmpty) 'anomalia': anomalia,
       if (agenteCausal != null && agenteCausal.trim().isNotEmpty)
         'agente_causal': agenteCausal,
+      if (efecto != null && efecto.trim().isNotEmpty) 'efecto': efecto,
       if (fotoPath != null) 'foto_path_local': fotoPath,
     };
     try {

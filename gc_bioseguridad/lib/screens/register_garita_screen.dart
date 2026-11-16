@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../services/app_version_service.dart';
 import '../services/catalog_service.dart';
 import '../services/storage_service.dart';
+import '../utils/anomalia_contexto.dart';
 import '../utils/constants.dart';
 import '../utils/record_saver.dart';
 import '../utils/theme_colors.dart';
@@ -40,8 +41,7 @@ class RegisterGaritaScreen extends StatefulWidget {
 }
 
 class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
-  final _descripcionController = TextEditingController();
-  final _agenteCausalController = TextEditingController();
+  final _accionController = TextEditingController();
 
   /// Fecha del registro (solo lectura, siempre el día de hoy).
   final DateTime _fecha = DateTime.now();
@@ -89,8 +89,7 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
 
   @override
   void dispose() {
-    _descripcionController.dispose();
-    _agenteCausalController.dispose();
+    _accionController.dispose();
     super.dispose();
   }
 
@@ -167,6 +166,11 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
         .map((p) => {'path': p})
         .toList();
 
+    final accion = _accionController.text.trim();
+    final ctx = AnomaliaContexto.punto(
+      instalacion: _instalacion,
+      bioseguridad: _bioseguridad,
+    );
     return {
       'id': const Uuid().v4(),
       'reporte': 'garita',
@@ -184,8 +188,14 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
         // garita se envía 1 como relleno; el campo no se muestra al usuario.
         'numfiltro': _esGarita ? _filtro : 1,
         'hora': _hora24(),
-        'descripcion': _descripcionController.text.trim(),
-        'agentecausal': _agenteCausalController.text.trim(),
+        'anomalia': ctx.anomalia,
+        'agentecausal': ctx.agenteCausal,
+        'efecto': ctx.efecto,
+        'accion': accion,
+        'descripcion': componerDetalleGarita(
+          efecto: ctx.efecto,
+          accion: accion,
+        ),
       },
       'imagenes': imagenes,
       'synced': false,
@@ -213,9 +223,8 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
       showErrorToast(context, 'Seleccione el tipo de bioseguridad.');
       return;
     }
-    if (_descripcionController.text.trim().isEmpty &&
-        _agenteCausalController.text.trim().isEmpty) {
-      showErrorToast(context, 'Ingrese la descripción o el agente causal.');
+    if (_accionController.text.trim().isEmpty) {
+      showErrorToast(context, 'Indique la acción.');
       return;
     }
 
@@ -258,8 +267,7 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
 
     if (saved && mounted) {
       setState(() {
-        _descripcionController.clear();
-        _agenteCausalController.clear();
+        _accionController.clear();
         _imagenes
           ..clear()
           ..addAll([null, null, null]);
@@ -378,26 +386,15 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
             ),
             const SizedBox(height: 20),
             BioFormSection(
-              // «Detalle de anomalía» repetía el nombre del campo de adentro y
-              // dejaba afuera el agente causal, que es el otro dato del bloque.
-              title: 'DESCRIPCIÓN DE LA ANOMALÍA',
+              title: 'ACCIÓN',
               icon: Icons.edit_note_rounded,
               children: [
                 BioTextArea(
-                  label: 'Detalle de anomalía',
-                  controller: _descripcionController,
-                  hint: 'Detalle de lo observado',
+                  label: 'Acción',
+                  controller: _accionController,
                   icon: Icons.edit_rounded,
                   maxLength: 200,
-                ),
-                const SizedBox(height: 12),
-                BioTextArea(
-                  label: 'Agente causal',
-                  controller: _agenteCausalController,
-                  hint: 'Agente causal identificado',
-                  icon: Icons.edit_rounded,
-                  maxLength: 200,
-                  textCapitalization: TextCapitalization.none,
+                  minLines: 2,
                 ),
               ],
             ),

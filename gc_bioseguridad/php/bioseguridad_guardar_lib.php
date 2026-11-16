@@ -105,10 +105,15 @@ function bio_procesar_guardado(mysqli $conn, array $data, bool $esActualizacion)
             // numfiltro es NOT NULL y parte de la PK: se guarda un relleno.
             $numfiltro = 1;
         }
+        $accion = trim((string) ($registro['accion'] ?? ''));
+        $efecto = trim((string) ($registro['efecto'] ?? ''));
         $descripcion = trim((string) ($registro['descripcion'] ?? ''));
+        if ($descripcion === '' && $accion !== '') {
+            $descripcion = $efecto !== '' ? ($efecto . ' | ' . $accion) : $accion;
+        }
         $agentecausal = trim((string) ($registro['agentecausal'] ?? ''));
         if ($descripcion === '' && $agentecausal === '') {
-            return bio_resp(400, false, 'Ingrese la descripción o el agente causal.', 'MISSING_CONTENIDO');
+            return bio_resp(400, false, 'Ingrese la acción.', 'MISSING_CONTENIDO');
         }
         $ctx['instalacion'] = $instalacion;
         $ctx['bioseguridad'] = $bioseguridad;

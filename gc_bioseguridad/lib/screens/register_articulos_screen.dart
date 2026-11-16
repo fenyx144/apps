@@ -9,7 +9,7 @@ import '../services/alcoholemia_api_service.dart';
 import '../services/api_service.dart';
 import '../services/catalog_service.dart' show ArticuloIngresoCatalogo, CatalogService;
 import '../services/storage_service.dart';
-import '../utils/constants.dart';
+import '../utils/anomalia_contexto.dart';
 import '../utils/documento_persona.dart';
 import '../utils/documento_scan_flow.dart';
 import '../utils/record_saver.dart';
@@ -31,26 +31,6 @@ const _desinfectantes = <String>[
   'Otro',
 ];
 
-String _anomaliaArticuloNoPermitido(String nombre) =>
-    'Ingreso con artículo no permitido: $nombre.';
-
-String _agenteArticuloNoPermitido(String nombre, {String nota = ''}) {
-  if (nota.trim().isNotEmpty) return nota.trim();
-  return 'Artículo no autorizado según política de ingreso ($nombre).';
-}
-
-const _accionArticuloNoPermitido =
-    'Registrar anomalía y retener o rechazar el artículo según procedimiento.';
-
-String _anomaliaSinDesinfeccion(String nombre) =>
-    'Artículo sin desinfección al ingreso: $nombre.';
-
-const _agenteSinDesinfeccion =
-    'Falta de desinfección de material en control de ingreso.';
-
-const _accionSinDesinfeccion =
-    'Registrar anomalía y aplicar desinfección o restricción según procedimiento.';
-
 class _LineaArticulo {
   _LineaArticulo();
 
@@ -60,11 +40,13 @@ class _LineaArticulo {
   String desinfectante = _desinfectantes.first;
   String codigo = '';
   String notaCatalogo = '';
-  final anomaliaPermCtrl = TextEditingController();
-  final agentePermCtrl = TextEditingController();
+  String anomaliaPerm = '';
+  String agentePerm = '';
+  String efectoPerm = '';
   final accionPermCtrl = TextEditingController();
-  final anomaliaDesCtrl = TextEditingController();
-  final agenteDesCtrl = TextEditingController();
+  String anomaliaDes = '';
+  String agenteDes = '';
+  String efectoDes = '';
   final accionDesCtrl = TextEditingController();
   final List<String?> fotos = [null, null, null];
 
@@ -72,7 +54,7 @@ class _LineaArticulo {
 
   bool get tieneAnomalia => !permitido || (permitido && !desinfectado);
 
-  bool get fotosObligatorias => permitido && desinfectado;
+  bool get fotosObligatorias => true;
 
   void aplicarCatalogo(ArticuloIngresoCatalogo a) {
     codigo = a.codigo;
@@ -81,38 +63,28 @@ class _LineaArticulo {
   }
 
   void rellenarAgcNoPermitido() {
-    final n = nombre.isEmpty ? 'artículo' : nombre;
-    if (anomaliaPermCtrl.text.trim().isEmpty) {
-      anomaliaPermCtrl.text = _anomaliaArticuloNoPermitido(n);
-    }
-    if (agentePermCtrl.text.trim().isEmpty) {
-      agentePermCtrl.text = _agenteArticuloNoPermitido(n, nota: notaCatalogo);
-    }
+    final ctx = AnomaliaContexto.articuloNoPermitido(nombre, nota: notaCatalogo);
+    anomaliaPerm = ctx.anomalia;
+    agentePerm = ctx.agenteCausal;
+    efectoPerm = ctx.efecto;
     if (accionPermCtrl.text.trim().isEmpty) {
-      accionPermCtrl.text = _accionArticuloNoPermitido;
+      accionPermCtrl.text = ctx.accion;
     }
   }
 
   void rellenarAgcSinDesinfeccion() {
-    final n = nombre.isEmpty ? 'artículo' : nombre;
-    if (anomaliaDesCtrl.text.trim().isEmpty) {
-      anomaliaDesCtrl.text = _anomaliaSinDesinfeccion(n);
-    }
-    if (agenteDesCtrl.text.trim().isEmpty) {
-      agenteDesCtrl.text = _agenteSinDesinfeccion;
-    }
+    final ctx = AnomaliaContexto.articuloSinDesinfeccion(nombre);
+    anomaliaDes = ctx.anomalia;
+    agenteDes = ctx.agenteCausal;
+    efectoDes = ctx.efecto;
     if (accionDesCtrl.text.trim().isEmpty) {
-      accionDesCtrl.text = _accionSinDesinfeccion;
+      accionDesCtrl.text = ctx.accion;
     }
   }
 
   void dispose() {
     nombreCtrl.dispose();
-    anomaliaPermCtrl.dispose();
-    agentePermCtrl.dispose();
     accionPermCtrl.dispose();
-    anomaliaDesCtrl.dispose();
-    agenteDesCtrl.dispose();
     accionDesCtrl.dispose();
   }
 }
@@ -321,8 +293,9 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
         'descripcion': l.nombre,
         'permitido': l.permitido,
         if (!l.permitido) ...{
-          'anomalia_permitido': l.anomaliaPermCtrl.text.trim(),
-          'agente_causal_permitido': l.agentePermCtrl.text.trim(),
+          'anomalia_permitido': l.anomaliaPerm,
+          'agente_causal_permitido': l.agentePerm,
+          'efecto_permitido': l.efectoPerm,
           'accion_permitido': l.accionPermCtrl.text.trim(),
         },
         if (l.permitido) ...{
@@ -330,8 +303,9 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
           if (l.desinfectado && l.desinfectante.isNotEmpty)
             'desinfectante': l.desinfectante,
           if (!l.desinfectado) ...{
-            'anomalia_desinfeccion': l.anomaliaDesCtrl.text.trim(),
-            'agente_causal_desinfeccion': l.agenteDesCtrl.text.trim(),
+            'anomalia_desinfeccion': l.anomaliaDes,
+            'agente_causal_desinfeccion': l.agenteDes,
+            'efecto_desinfeccion': l.efectoDes,
             'accion_desinfeccion': l.accionDesCtrl.text.trim(),
           },
         },
@@ -371,34 +345,21 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
       return;
     }
     for (final l in items) {
-      if (l.fotosObligatorias &&
-          !l.fotos.any((p) => p != null && p.isNotEmpty)) {
+      if (!l.permitido) l.rellenarAgcNoPermitido();
+      if (l.permitido && !l.desinfectado) l.rellenarAgcSinDesinfeccion();
+      if (!l.fotos.any((p) => p != null && p.isNotEmpty)) {
         showErrorToast(context, 'Adjunte foto: «${l.nombre}».');
         return;
       }
-      if (!l.permitido) {
-        if (l.anomaliaPermCtrl.text.trim().isEmpty ||
-            l.agentePermCtrl.text.trim().isEmpty ||
-            l.accionPermCtrl.text.trim().isEmpty) {
-          showErrorToast(
-            context,
-            'Complete anomalía, agente y acción (no permitido): «${l.nombre}».',
-          );
-          return;
-        }
+      if (!l.permitido && l.accionPermCtrl.text.trim().isEmpty) {
+        showErrorToast(context, 'Indique la acción: «${l.nombre}».');
+        return;
       }
       if (l.permitido) {
-        if (!l.desinfectado) {
-          if (l.anomaliaDesCtrl.text.trim().isEmpty ||
-              l.agenteDesCtrl.text.trim().isEmpty ||
-              l.accionDesCtrl.text.trim().isEmpty) {
-            showErrorToast(
-              context,
-              'Complete anomalía, agente y acción (sin desinfección): «${l.nombre}».',
-            );
-            return;
-          }
-        } else if (l.desinfectante.trim().isEmpty) {
+        if (!l.desinfectado && l.accionDesCtrl.text.trim().isEmpty) {
+          showErrorToast(context, 'Indique la acción: «${l.nombre}».');
+          return;
+        } else if (l.desinfectado && l.desinfectante.trim().isEmpty) {
           showErrorToast(
             context,
             'Indique el desinfectante usado: «${l.nombre}».',
@@ -435,8 +396,9 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
                 nombre: _nombre.trim(),
                 articulo: l.nombre,
                 accion: l.accionPermCtrl.text.trim(),
-                anomalia: l.anomaliaPermCtrl.text.trim(),
-                agenteCausal: l.agentePermCtrl.text.trim(),
+                anomalia: l.anomaliaPerm,
+                agenteCausal: l.agentePerm,
+                efecto: l.efectoPerm,
                 fotoPath: fotoPath,
                 usuario: usuario,
               );
@@ -454,8 +416,9 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
                 nombre: _nombre.trim(),
                 articulo: '${l.nombre} (desinfección)',
                 accion: l.accionDesCtrl.text.trim(),
-                anomalia: l.anomaliaDesCtrl.text.trim(),
-                agenteCausal: l.agenteDesCtrl.text.trim(),
+                anomalia: l.anomaliaDes,
+                agenteCausal: l.agenteDes,
+                efecto: l.efectoDes,
                 fotoPath: fotoPath,
                 usuario: usuario,
               );
@@ -581,16 +544,12 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
                   title: 'ARTÍCULOS',
                   icon: Icons.inventory_2_outlined,
                   children: [
-                    if (catalogo.isEmpty)
-                      const Text(
-                        'Descargue catálogos para sugerencias de nombre y referencia.',
-                      )
-                    else
+                    if (catalogo.isNotEmpty)
                       Align(
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
                           onPressed: () => _mostrarArticulosPermitidos(permitidos),
-                          icon: const Icon(Icons.help_outline, size: 20),
+                          icon: const Icon(Icons.list_alt_rounded, size: 20),
                           label: Text(
                             permitidos.isEmpty
                                 ? 'Ver catálogo de artículos'
@@ -708,7 +667,6 @@ class _ArticuloLineaTile extends StatelessWidget {
               focusNode: focus,
               decoration: const InputDecoration(
                 labelText: 'Nombre del artículo',
-                hintText: 'Escriba o elija del catálogo',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -747,39 +705,7 @@ class _ArticuloLineaTile extends StatelessWidget {
           onChanged: _alCambiarPermitido,
         ),
         if (!linea.permitido) ...[
-          const SizedBox(height: 4),
-          Text(
-            'No permitido — anomalía AGC',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: context.textThemeSecondary,
-            ),
-          ),
           const SizedBox(height: 6),
-          TextField(
-            controller: linea.anomaliaPermCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Anomalía',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
-              isDense: true,
-            ),
-            minLines: 2,
-            maxLines: 4,
-            onChanged: (_) => onChanged(),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: linea.agentePermCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Agente causal',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            onChanged: (_) => onChanged(),
-          ),
-          const SizedBox(height: 8),
           TextField(
             controller: linea.accionPermCtrl,
             decoration: const InputDecoration(
@@ -832,39 +758,7 @@ class _ArticuloLineaTile extends StatelessWidget {
               },
             ),
           ] else ...[
-            const SizedBox(height: 4),
-            Text(
-              'Sin desinfección — anomalía AGC',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: context.textThemeSecondary,
-              ),
-            ),
             const SizedBox(height: 6),
-            TextField(
-              controller: linea.anomaliaDesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Anomalía',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-                isDense: true,
-              ),
-              minLines: 2,
-              maxLines: 4,
-              onChanged: (_) => onChanged(),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: linea.agenteDesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Agente causal',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (_) => onChanged(),
-            ),
-            const SizedBox(height: 8),
             TextField(
               controller: linea.accionDesCtrl,
               decoration: const InputDecoration(
@@ -880,7 +774,7 @@ class _ArticuloLineaTile extends StatelessWidget {
         ],
         const SizedBox(height: 10),
         Text(
-          linea.tieneAnomalia ? 'Fotos (opcional)' : 'Fotos',
+          'Foto',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,

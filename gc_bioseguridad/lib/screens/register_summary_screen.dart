@@ -930,11 +930,10 @@ class RegisterSummaryContent extends StatelessWidget {
         if (instalacion.isEmpty || instalacion == 'Garita')
           _row(context, 'Filtro', 'N° ${registro['numfiltro'] ?? '—'}'),
         _row(context, 'Hora', _fmtHora(registro['hora']?.toString() ?? '')),
-        _textFieldRow(context, 'Detalle de anomalía', registro['descripcion']?.toString()),
         _textFieldRow(
           context,
-          'Agente causal',
-          registro['agentecausal']?.toString(),
+          'Acción',
+          (registro['accion'] ?? registro['descripcion'])?.toString(),
         ),
       ];
     }

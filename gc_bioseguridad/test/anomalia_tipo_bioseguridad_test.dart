@@ -134,11 +134,7 @@ void main() {
     expect(tipo, lessThan(instalacion));
   });
 
-  testWidgets('la sección del detalle nombra la anomalía y su agente causal', (
-    tester,
-  ) async {
-    // «Detalle de anomalía» repetía el nombre del campo de adentro y dejaba
-    // afuera el agente causal, que es el otro dato del bloque.
+  testWidgets('el registro de anomalía solo pide la acción', (tester) async {
     await _montar(
       tester,
       prefs: {
@@ -147,8 +143,9 @@ void main() {
       },
     );
 
-    expect(find.text('DESCRIPCIÓN DE LA ANOMALÍA'), findsOneWidget);
-    expect(find.text('Detalle de anomalía'), findsOneWidget);
-    expect(find.text('Agente causal'), findsOneWidget);
+    expect(find.text('ACCIÓN'), findsOneWidget);
+    expect(find.text('Acción'), findsOneWidget);
+    expect(find.text('Detalle de anomalía'), findsNothing);
+    expect(find.text('Agente causal'), findsNothing);
   });
 }

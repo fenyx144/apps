@@ -115,6 +115,55 @@ class BioEmpresaApi {
     return data;
   }
 
+  /// Personal activo del portal (`bio_personal`), con `foto_ruta` del alta.
+  Future<List<Map<String, dynamic>>> listarPersonalActivo() async {
+    final out = <Map<String, dynamic>>[];
+    var page = 1;
+    while (page <= 40) {
+      final data = await get(
+        '/personal',
+        query: {
+          'estado': 'ACTIVO',
+          'page': '$page',
+          'per_page': '500',
+        },
+      );
+      final payload = data['data'];
+      if (payload is! Map) break;
+      final items = payload['items'];
+      if (items is! List || items.isEmpty) break;
+      for (final e in items) {
+        if (e is Map) out.add(Map<String, dynamic>.from(e));
+      }
+      final total = int.tryParse('${payload['total']}') ?? out.length;
+      if (out.length >= total) break;
+      page++;
+    }
+    return out;
+  }
+
+  /// Bytes de `foto_ruta` (`storage/personal/...`). No persiste el archivo.
+  Future<Uint8List?> descargarArchivo(String ruta) async {
+    final limpia = ruta.trim();
+    if (limpia.isEmpty) return null;
+    final url = limpia.startsWith('http')
+        ? Uri.parse(limpia)
+        : Uri.parse(
+            '${AppConstants.bioEmpresaApiBase}/${limpia.replaceFirst(RegExp(r'^/'), '')}',
+          );
+    try {
+      final res = await _client
+          .get(url, headers: await _headers())
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200 || res.bodyBytes.length < 32) return null;
+      final tipo = (res.headers['content-type'] ?? '').toLowerCase();
+      if (tipo.contains('json') || tipo.contains('text/')) return null;
+      return res.bodyBytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// ¿Hay login local en la app? (no implica que la API responda).
   Future<bool> appConSesion() async {
     final prefs = await SharedPreferences.getInstance();
