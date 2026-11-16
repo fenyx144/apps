@@ -316,17 +316,27 @@ function bio_ver_embed(array $imagenes): ?array
     if ($arc === null || $yunet === null || $py === null) {
         return null;
     }
-    $cmd = escapeshellarg($py) . ' ' . escapeshellarg(__DIR__ . '/rostro_embed.py')
-        . ' --arcface ' . escapeshellarg($arc)
-        . ' --yunet ' . escapeshellarg($yunet);
+    $cmd = bio_ver_cmd($py, __DIR__ . '/rostro_embed.py', $arc, $yunet);
     $spec = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $proc = proc_open($cmd, $spec, $pipes);
+    // bypass_shell en Windows: CreateProcess recibe el comando ya entre comillas
+    // y el pipe 0 es el stdin de python. Con cmd.exe /c ese JSON no llega.
+    $opts = ['bypass_shell' => PHP_OS_FAMILY === 'Windows'];
+    $proc = proc_open($cmd, $spec, $pipes, null, null, $opts);
     if (!is_resource($proc)) {
         return null;
     }
-    fwrite($pipes[0], json_encode(['imagenes' => $imagenes], JSON_UNESCAPED_UNICODE));
+    $payload = json_encode(['imagenes' => $imagenes], JSON_UNESCAPED_UNICODE);
+    if (!is_string($payload)) {
+        fclose($pipes[0]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($proc);
+        return null;
+    }
+    stream_set_blocking($pipes[0], true);
+    fwrite($pipes[0], $payload);
     fclose($pipes[0]);
-    $stdout = stream_get_contents($pipes[1]);
+    $stdout = bio_ver_leer_pipe($pipes[1], $pipes[2], $proc);
     fclose($pipes[1]);
     fclose($pipes[2]);
     proc_close($proc);
@@ -362,16 +372,123 @@ function bio_ver_modelo(string $nombre): ?string
 
 function bio_ver_python(): ?string
 {
+    $fijo = bio_ver_python_fijo();
+    if ($fijo !== null) {
+        return $fijo;
+    }
+    if (PHP_OS_FAMILY === 'Windows') {
+        foreach (['python', 'py'] as $bin) {
+            $path = bio_ver_where($bin);
+            if ($path !== null) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
     foreach (['python3', 'python'] as $bin) {
         $out = [];
         $code = 1;
-        @exec('command -v ' . escapeshellarg($bin), $out, $code);
-        if ($code === 0 && !empty($out[0]) && is_executable($out[0])) {
-            return $out[0];
+        @exec('command -v ' . escapeshellarg($bin) . ' 2>/dev/null', $out, $code);
+        $path = ($code === 0 && !empty($out[0])) ? trim((string) $out[0]) : '';
+        if ($path !== '' && is_file($path)) {
+            return $path;
         }
     }
 
     return null;
+}
+
+/** Ruta absoluta en la constante BIO_PYTHON o en la variable de entorno homónima. */
+function bio_ver_python_fijo(): ?string
+{
+    $raw = '';
+    if (defined('BIO_PYTHON')) {
+        $raw = trim((string) BIO_PYTHON);
+    }
+    if ($raw === '') {
+        $env = getenv('BIO_PYTHON');
+        if (is_string($env)) {
+            $raw = trim($env);
+        }
+    }
+    if ($raw === '' || !bio_ver_ruta_absoluta($raw) || !is_file($raw)) {
+        return null;
+    }
+    if (PHP_OS_FAMILY === 'Windows' && stripos($raw, '\\WindowsApps\\') !== false) {
+        return null;
+    }
+
+    return $raw;
+}
+
+function bio_ver_ruta_absoluta(string $path): bool
+{
+    if (PHP_OS_FAMILY === 'Windows') {
+        return (bool) preg_match('/^[A-Za-z]:[\\\\\\/]/', $path) || str_starts_with($path, '\\\\');
+    }
+
+    return str_starts_with($path, '/');
+}
+
+/** Primera ruta de `where` que no sea el alias de la Microsoft Store. */
+function bio_ver_where(string $bin): ?string
+{
+    $out = [];
+    $code = 1;
+    @exec('where ' . $bin . ' 2>NUL', $out, $code);
+    if ($code !== 0) {
+        return null;
+    }
+    foreach ($out as $line) {
+        $path = trim((string) $line);
+        if ($path === '' || stripos($path, '\\WindowsApps\\') !== false) {
+            continue;
+        }
+        if (is_file($path)) {
+            return $path;
+        }
+    }
+
+    return null;
+}
+
+function bio_ver_quote(string $arg): string
+{
+    if (PHP_OS_FAMILY === 'Windows') {
+        return '"' . str_replace('"', '', $arg) . '"';
+    }
+
+    return escapeshellarg($arg);
+}
+
+function bio_ver_cmd(string $py, string $script, string $arc, string $yunet): string
+{
+    // Cada ruta entre comillas dobles, que es lo que cmd y CreateProcess aceptan.
+    return bio_ver_quote($py) . ' ' . bio_ver_quote($script)
+        . ' --arcface ' . bio_ver_quote($arc)
+        . ' --yunet ' . bio_ver_quote($yunet);
+}
+
+/** Lee stdout sin dejar el buffer de stderr lleno (eso cuelga el pipe en Windows). */
+function bio_ver_leer_pipe($stdoutPipe, $stderrPipe, $proc): string
+{
+    stream_set_blocking($stdoutPipe, false);
+    stream_set_blocking($stderrPipe, false);
+    $stdout = '';
+    while (true) {
+        $stdout .= (string) stream_get_contents($stdoutPipe);
+        stream_get_contents($stderrPipe);
+        $status = proc_get_status($proc);
+        if (empty($status['running'])) {
+            $stdout .= (string) stream_get_contents($stdoutPipe);
+            stream_get_contents($stderrPipe);
+            break;
+        }
+        usleep(20000);
+    }
+
+    return $stdout;
 }
 
 /** @param array{dni:string,nombre:string,empresa:string,hash?:string} $p */
