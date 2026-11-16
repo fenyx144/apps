@@ -8,6 +8,7 @@ import 'app_version_service.dart';
 import 'avisos_ingreso_offline_service.dart';
 import 'bio_empresa_api.dart';
 import 'catalog_service.dart';
+import 'nomina_facial_sync.dart';
 import 'nomina_proveedor_service.dart';
 import 'plan_visitas_service.dart';
 import 'proveedor_plan_catalog_service.dart';
@@ -101,10 +102,10 @@ class CatalogSyncService {
           cencosOk = storage.hasCencosGalponesLocal();
         }
       } else {
-        errors.add(gal['message']?.toString() ?? 'Error CENCOS/galpones');
+        errors.add('granjas');
       }
     } catch (e) {
-      errors.add('CENCOS/galpones: Error de conexión');
+      errors.add('granjas');
     }
     if (cencosOk) {
       await storage.setLastDownloadDate();
@@ -128,21 +129,18 @@ class CatalogSyncService {
         );
         proyeccionOk = true;
       } else {
-        errors.add(proy['message']?.toString() ?? 'Error proyección');
+        errors.add('proyección');
       }
     } catch (e) {
-      errors.add('Proyección: Error de conexión');
+      errors.add('proyección');
     }
     if (proyeccionOk) {
       await storage.setLastDownloadDate();
     }
 
-    // 3. Catálogo g_app (versión mínima — cache offline)
     try {
       await syncAppInfo(storage: storage);
-    } catch (e) {
-      errors.add('Versión app: Error de conexión');
-    }
+    } catch (_) {}
 
     // 4. usuarios/conempre
     if (includeUsuariosConempre) {
@@ -156,10 +154,10 @@ class CatalogSyncService {
           if (usuarios is List) usuariosCount = usuarios.length;
           await storage.setLastDownloadDate();
         } else {
-          errors.add('Usuarios/conempre: no se pudieron descargar');
+          errors.add('usuarios');
         }
       } catch (e) {
-        errors.add('Usuarios/conempre: Error de conexión');
+        errors.add('usuarios');
       }
     }
 
@@ -184,10 +182,10 @@ class CatalogSyncService {
         } catch (_) {}
         await storage.setLastDownloadDate();
       } else {
-        errors.add('Catálogos de bioseguridad: no se pudieron descargar');
+        errors.add(catalog.falloBio ?? 'bioseguridad');
       }
     } catch (e) {
-      errors.add('Catálogos de bioseguridad: Error de conexión');
+      errors.add('bioseguridad');
     }
 
     // 6. Catálogo de proveedores que planifican (lista pequeña, offline).
@@ -211,6 +209,14 @@ class CatalogSyncService {
     try {
       await NominaProveedorService(api: _api).descargar(storage);
     } catch (_) {}
+
+    // 10. Personal de granja (bio_personal + proveedores) para la tranquera.
+    try {
+      final okPersonal = await NominaFacialSync(api: _api).descargarLista(storage);
+      if (!okPersonal) errors.add('personal');
+    } catch (_) {
+      errors.add('personal');
+    }
 
     return CatalogSyncResult(
       hadInternet: true,

@@ -57,6 +57,13 @@ class StorageService with ChangeNotifier {
 
   String? getLoginEnom() => _prefs.getString(AppConstants.keyLoginEnom);
 
+  String getPersonalReferenciaJson() =>
+      _prefs.getString(AppConstants.keyPersonalReferencia) ?? '';
+
+  Future<void> savePersonalReferenciaJson(String json) async {
+    await _prefs.setString(AppConstants.keyPersonalReferencia, json);
+  }
+
   Future<void> clearAll() async {
     await _prefs.clear();
     _lastDownloadDateCache = null;

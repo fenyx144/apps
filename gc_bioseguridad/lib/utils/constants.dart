@@ -163,6 +163,9 @@ class AppConstants {
   static const String registerDeviceEndpoint = '/registrardispositivo.php';
   static const String downloadEndpoint = '/download.php';
   static const String catalogosBioEndpoint = '/get_catalogos_bioseguridad_movil.php';
+  static const String personalReferenciaEndpoint = '/get_personal_referencia_movil.php';
+  static const String fotoPersonalEndpoint = '/foto_personal_bioseguridad_movil.php';
+  static const String keyPersonalReferencia = 'bio_personal_referencia';
   static const String guardarBioEndpoint = '/guardar_bioseguridad_movil.php';
   static const String actualizarBioEndpoint = '/actualizar_bioseguridad_movil.php';
   static const String consultarDniEndpoint = '/consultar_dni_bioseguridad_movil.php';

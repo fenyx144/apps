@@ -882,4 +882,56 @@ class ApiService {
   /// Id del registro (UUID local) usado para deduplicar en la app.
   static String recordId(Map<String, dynamic> record) =>
       EvidenciaRecordId.of(record);
+
+  /// Personal activo (bio_personal + proveedores), sin filtrar por el usuario logueado.
+  Future<Map<String, dynamic>> downloadPersonalReferencia() async {
+    try {
+      final url = Uri.parse(
+        '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
+        '${AppConstants.personalReferenciaEndpoint}',
+      );
+      final response = await _http
+          .get(url, headers: _headers)
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200) {
+        return {'success': false, 'message': 'HTTP ${response.statusCode}'};
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map && decoded['success'] == true && decoded['data'] is Map) {
+        return {
+          'success': true,
+          'data': Map<String, dynamic>.from(decoded['data'] as Map),
+        };
+      }
+      return {
+        'success': false,
+        'message': decoded is Map
+            ? (decoded['message']?.toString() ?? 'personal')
+            : 'personal',
+      };
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// Foto ya registrada de un DNI. Null si no hay archivo.
+  Future<Uint8List?> downloadFotoPersonal(String dni) async {
+    try {
+      final url = Uri.parse(
+        '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
+        '${AppConstants.fotoPersonalEndpoint}',
+      ).replace(queryParameters: {'dni': dni});
+      final response = await _http
+          .get(url, headers: _headers)
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200 || response.bodyBytes.length < 32) {
+        return null;
+      }
+      final tipo = (response.headers['content-type'] ?? '').toLowerCase();
+      if (tipo.contains('json') || tipo.contains('text/')) return null;
+      return response.bodyBytes;
+    } catch (_) {
+      return null;
+    }
+  }
 }

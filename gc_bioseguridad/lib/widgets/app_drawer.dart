@@ -152,24 +152,23 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
           hostContext,
           '${AppStrings.sinConexion} Se usarán los datos guardados.',
         );
-      } else if (result.cencosOk && result.catalogosOk && result.bioCatalogosOk) {
+      } else if (result.errorMessage == null &&
+          result.cencosOk &&
+          result.catalogosOk &&
+          result.bioCatalogosOk) {
         showSuccessToast(hostContext, AppStrings.descargaExitosa);
       } else if (result.cencosOk || result.catalogosOk || result.bioCatalogosOk) {
-        // Se dice exactamente qué no se actualizó: antes, si fallaban los
-        // catálogos de bioseguridad (los STD del tablero de cerco), salía
-        // «descarga exitosa» y el equipo se quedaba con los valores viejos.
-        final faltan = <String>[
-          if (!result.cencosOk) 'granjas/campañas',
-          if (!result.catalogosOk) 'usuarios/conempre',
-          if (!result.bioCatalogosOk) 'catálogos de bioseguridad',
-        ].join(', ');
-        showWarningToast(hostContext, 'No se actualizaron: $faltan.');
+        showWarningToast(
+          hostContext,
+          'Falló: ${result.errorMessage ?? 'catálogos'}',
+        );
       } else {
+        final detalle = result.errorMessage?.trim() ?? '';
         showErrorToast(
           hostContext,
-          result.errorMessage?.isNotEmpty == true
-              ? 'No se pudo descargar: ${result.errorMessage}'
-              : 'No se pudo descargar. Verifique conexión e intente de nuevo.',
+          detalle.isEmpty
+              ? 'No se pudieron descargar los catálogos'
+              : 'No se pudieron descargar los catálogos: $detalle',
         );
       }
     } catch (e) {

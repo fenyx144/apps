@@ -9,6 +9,7 @@ import '../services/nomina_facial_sync.dart';
 import '../services/nomina_store.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
+import '../utils/documento_scan_flow.dart';
 import '../utils/face_constants.dart';
 import '../utils/yuv_converter.dart';
 
@@ -19,8 +20,8 @@ class VerificacionFacialResult {
   final String nombre;
 }
 
-/// Escaneo facial de ingreso. Devuelve la persona o `null` si se cancela
-/// o se elige identificar por documento.
+/// Identifica a cualquier persona de la nómina: lista, DNI o rostro
+/// contra la foto ya registrada. Sin foto, sigue solo con el documento.
 class VerificacionFacialScreen extends StatefulWidget {
   const VerificacionFacialScreen({super.key});
 
@@ -30,6 +31,12 @@ class VerificacionFacialScreen extends StatefulWidget {
 }
 
 class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
+  final _busqueda = TextEditingController();
+  List<PersonaReferencia> _todos = const [];
+  String _q = '';
+  bool _cargando = true;
+  PersonaReferencia? _cara;
+
   CameraController? _cam;
   FaceEngine? _engine;
   bool _listo = false;
@@ -38,45 +45,110 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
   int _fallos = 0;
   int _giro = 0;
   bool _espejo = true;
-  String _estado = 'Iniciando';
-  bool _sincronizando = false;
+  String _estado = '';
 
   @override
   void initState() {
     super.initState();
-    _arrancar();
+    _cargar();
   }
 
   @override
   void dispose() {
+    _busqueda.dispose();
     final cam = _cam;
     _cam = null;
-    if (cam != null) {
-      unawaited(cam.dispose());
-    }
+    if (cam != null) unawaited(cam.dispose());
     super.dispose();
   }
 
-  Future<void> _arrancar() async {
+  Future<void> _cargar() async {
+    final storage = context.read<StorageService>();
+    var lista = NominaFacialSync().locales(storage);
+    if (lista.isEmpty) {
+      await NominaFacialSync().descargarLista(storage);
+      if (!mounted) return;
+      lista = NominaFacialSync().locales(storage);
+    } else {
+      unawaited(NominaFacialSync().descargarLista(storage).then((_) {
+        if (!mounted) return;
+        setState(() => _todos = NominaFacialSync().locales(storage));
+      }));
+    }
+    if (!mounted) return;
+    setState(() {
+      _todos = lista;
+      _cargando = false;
+    });
+  }
+
+  List<PersonaReferencia> get _filtrados {
+    final q = _q.trim().toLowerCase();
+    if (q.isEmpty) return _todos;
+    return [
+      for (final p in _todos)
+        if (p.nombre.toLowerCase().contains(q) || p.dni.contains(q)) p,
+    ];
+  }
+
+  Future<void> _escanear() async {
+    final doc = await escanearDocumentoPersona(context);
+    if (doc == null || !mounted) return;
+    final dni = doc.replaceAll(RegExp(r'\D'), '');
+    PersonaReferencia? persona;
+    for (final p in _todos) {
+      if (p.dni == dni) {
+        persona = p;
+        break;
+      }
+    }
+    if (persona == null) {
+      Navigator.of(context).pop(
+        VerificacionFacialResult(dni: dni, nombre: ''),
+      );
+      return;
+    }
+    await _elegir(persona);
+  }
+
+  Future<void> _elegir(PersonaReferencia persona) async {
+    if (!persona.tieneFoto) {
+      Navigator.of(context).pop(
+        VerificacionFacialResult(dni: persona.dni, nombre: persona.nombre),
+      );
+      return;
+    }
     final storage = context.read<StorageService>();
     final store = context.read<NominaStore>();
     final engine = context.read<FaceEngine>();
+    setState(() {
+      _cara = persona;
+      _estado = 'Foto';
+    });
+    var lista = false;
     try {
-      await store.load(clave: NominaFacialSync.clavePara(storage));
-      setState(() => _sincronizando = true);
-      await NominaFacialSync().sync(
+      lista = await NominaFacialSync().prepararRostro(
         storage: storage,
         store: store,
         engine: engine,
+        persona: persona,
       );
-      if (!mounted) return;
-      setState(() => _sincronizando = false);
-      if (store.total == 0) {
-        setState(() => _estado = 'Sin nómina');
-        return;
-      }
+    } catch (_) {
+      lista = false;
+    }
+    if (!mounted) return;
+    if (!lista) {
+      setState(() => _estado = 'Sin foto');
+      return;
+    }
+    await _abrirCamara(engine, persona.dni);
+  }
+
+  Future<void> _abrirCamara(FaceEngine engine, String dni) async {
+    try {
       engine.umbral = FaceConstants.umbralDefecto;
       engine.margen = FaceConstants.margenDefecto;
+      engine.doc11 = dni;
       await engine.inicializar();
       engine.reset();
       final cams = await availableCameras();
@@ -114,17 +186,22 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
 
   Future<void> _onFrame(CameraImage img) async {
     final eng = _engine;
-    if (!_listo || _ocupado || _saliendo || eng == null) return;
+    final persona = _cara;
+    if (!_listo || _ocupado || _saliendo || eng == null || persona == null) {
+      return;
+    }
     _ocupado = true;
     try {
       final f = await eng.procesar(img, giro: _giro, espejo: _espejo);
       if (!mounted || _saliendo) return;
       _fallos = 0;
       if (f.estado == EstadoFrame.confirmado && f.persona != null) {
-        _salir(
+        await _salir(
           VerificacionFacialResult(
             dni: f.persona!.dni,
-            nombre: f.persona!.nombre,
+            nombre: f.persona!.nombre.isNotEmpty
+                ? f.persona!.nombre
+                : persona.nombre,
           ),
         );
         return;
@@ -162,15 +239,103 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
     Navigator.of(context).pop(r);
   }
 
+  void _continuarDocumento() {
+    final p = _cara;
+    if (p == null) return;
+    unawaited(
+      _salir(VerificacionFacialResult(dni: p.dni, nombre: p.nombre)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cam = _cam;
+    if (_cara != null) return _camara();
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
         title: const Text('Verificación facial'),
         backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _busqueda,
+                    decoration: const InputDecoration(
+                      labelText: 'DNI o nombre',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (v) => setState(() => _q = v),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _escanear,
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  color: AppColors.primaryDark,
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _cargando
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+                    itemCount: _filtrados.length,
+                    itemBuilder: (context, i) {
+                      final p = _filtrados[i];
+                      return ListTile(
+                        title: Text(p.nombre),
+                        subtitle: Text(p.dni),
+                        trailing: Icon(
+                          p.tieneFoto
+                              ? Icons.face_retouching_natural
+                              : Icons.badge_outlined,
+                          color: AppColors.primaryDark,
+                        ),
+                        onTap: () => _elegir(p),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _camara() {
+    final cam = _cam;
+    final sinFoto = _estado == 'Sin foto';
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: Text(_cara?.nombre ?? 'Verificación facial'),
+        backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () async {
+            final cam = _cam;
+            if (cam != null && cam.value.isStreamingImages) {
+              try {
+                await cam.stopImageStream();
+              } catch (_) {}
+            }
+            _engine?.doc11 = null;
+            setState(() {
+              _cara = null;
+              _listo = false;
+              _cam = null;
+              _estado = '';
+            });
+            if (cam != null) unawaited(cam.dispose());
+          },
+        ),
       ),
       body: Stack(
         fit: StackFit.expand,
@@ -192,35 +357,34 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        _sincronizando ? 'Actualizando' : _estado,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                    if (_estado.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          _estado,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () => _salir(null),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white70),
+                    if (sinFoto) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: _continuarDocumento,
+                          child: const Text('DNI'),
                         ),
-                        child: const Text('Documento'),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

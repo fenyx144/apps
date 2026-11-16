@@ -83,6 +83,9 @@ class CatalogService with ChangeNotifier {
   Map<String, dynamic> _bio = {};
   bool _isLoading = false;
   bool _bioLoading = false;
+
+  /// Catálogo que no llegó en la última descarga (nombre corto).
+  String? falloBio;
   Future<bool>? _bioEnCurso;
 
   Map<String, dynamic> get catalogos => _catalogos;
@@ -170,6 +173,7 @@ class CatalogService with ChangeNotifier {
     try {
       final result = await ApiService().downloadCatalogosBioseguridad();
       if (result['success'] == true && result['data'] is Map) {
+        falloBio = null;
         final fetched = Map<String, dynamic>.from(result['data'] as Map);
         // Rastro para verificar desde `flutter run` que el STD descargado es el
         // que quedó guardado (p. ej. «Verificación del voltaje=>11»).
@@ -184,14 +188,16 @@ class CatalogService with ChangeNotifier {
         // así desaparece cualquier valor que el servidor ya no envía.
         final faltantes = validarCatalogoBio(fetched);
         if (faltantes != null) {
-          // Un payload a medias (servidor a medio migrar, respuesta recortada)
-          // dejaría los selectores sin opciones y el formulario pidiendo
-          // descargar. Se conserva lo anterior y se informa como descarga
-          // fallida: el menú lateral dice qué no se actualizó.
-          debugPrint(
-            'CatalogService: catálogo bio incompleto ($faltantes); '
-            'se conserva el anterior',
-          );
+          final merged = Map<String, dynamic>.from(_bio);
+          fetched.forEach((k, v) {
+            if (v is List && v.isNotEmpty) merged[k] = v;
+            if (v is Map && v.isNotEmpty) merged[k] = v;
+          });
+          _bio = merged;
+          falloBio = 'bioseguridad: $faltantes';
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(AppConstants.keyCatalogosBio, jsonEncode(_bio));
+          notifyListeners();
           return false;
         }
         _bio = fetched;
@@ -201,11 +207,14 @@ class CatalogService with ChangeNotifier {
         notifyListeners();
         return referencias.isNotEmpty || tiposFomites.isNotEmpty;
       }
+      final msg = (result['message'] ?? '').toString().trim();
+      falloBio = msg.isEmpty ? 'bioseguridad' : 'bioseguridad $msg';
       debugPrint(
         'CatalogService.downloadCatalogosBioseguridad falló: '
         '${result['message'] ?? 'sin mensaje'}',
       );
     } catch (e) {
+      falloBio = 'bioseguridad';
       debugPrint('CatalogService: error al descargar catálogos bio: $e');
     } finally {
       _bioLoading = false;
