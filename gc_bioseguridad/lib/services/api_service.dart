@@ -914,6 +914,44 @@ class ApiService {
     }
   }
 
+  /// El servidor compara la foto capturada con la registrada de ese DNI.
+  /// Respuesta: `data.verificado`, `data.motivo` (`ok`, `sin_foto`, `no_coincide`).
+  Future<Map<String, dynamic>> verificarRostro({
+    required String dni,
+    required List<int> jpeg,
+  }) async {
+    try {
+      final url = Uri.parse(
+        '${AppConstants.baseUrl}${AppConstants.seguimientoPath}'
+        '${AppConstants.verificarRostroEndpoint}',
+      );
+      final usuario = await _getUsuarioSesion();
+      final response = await _http
+          .post(
+            url,
+            headers: _headers,
+            body: jsonEncode({
+              'dni': dni,
+              'foto': base64Encode(jpeg),
+              if (usuario.isNotEmpty) 'usuario': usuario,
+            }),
+          )
+          .timeout(const Duration(seconds: 25));
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        return {'success': false, 'message': 'Respuesta inválida'};
+      }
+      final data = decoded['data'];
+      return {
+        'success': decoded['success'] == true,
+        'message': decoded['message']?.toString() ?? '',
+        'data': data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+      };
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   /// Foto ya registrada de un DNI. Null si no hay archivo.
   Future<Uint8List?> downloadFotoPersonal(String dni) async {
     try {

@@ -181,6 +181,10 @@ class _DniFila {
   /// Ya figura dentro (ingreso sin salida): se puede registrar igual (olvido).
   bool yaDentro = false;
 
+  /// `ok` si el servidor validó el rostro; `sin_verificacion_facial` si se
+  /// siguió solo con el documento.
+  String verificacionFacial = '';
+
   Timer? debounce;
 
   bool get esRegreso => regreso != null;
@@ -2126,13 +2130,15 @@ class _RegisterControlIngresoScreenState
     );
     if (i < 0) return;
     final fila = _dnis[i];
-    if (fila.nombre.trim().isEmpty && r.nombre.trim().isNotEmpty) {
-      setState(() {
+    setState(() {
+      fila.verificacionFacial =
+          r.verificado ? 'ok' : 'sin_verificacion_facial';
+      if (fila.nombre.trim().isEmpty && r.nombre.trim().isNotEmpty) {
         fila.nombre = r.nombre.trim();
         fila.estado = _DniEstado.ok;
         fila.consultado = fila.dni;
-      });
-    }
+      }
+    });
   }
 
   /// Abre el escáner y agrega una fila nueva con el documento leído.
@@ -2307,7 +2313,12 @@ class _RegisterControlIngresoScreenState
     for (final d in dnisFilas) {
       final v = d.dni;
       if (v.isEmpty || !vistos.add(v)) continue;
-      dnis.add({'dni': v, 'nombre': d.nombreEfectivo});
+      dnis.add({
+        'dni': v,
+        'nombre': d.nombreEfectivo,
+        if (d.verificacionFacial.isNotEmpty)
+          'verificacion_facial': d.verificacionFacial,
+      });
     }
     final g3 = visita != null && visita.granja.isNotEmpty
         ? visita.granja
@@ -2519,7 +2530,12 @@ class _RegisterControlIngresoScreenState
       final nombre = d.nombreEfectivo.trim().isNotEmpty
           ? d.nombreEfectivo.trim()
           : (d.regreso!.persona?.nombre ?? '');
-      lista.add({'dni': d.dni, 'nombre': nombre});
+      lista.add({
+        'dni': d.dni,
+        'nombre': nombre,
+        if (d.verificacionFacial.isNotEmpty)
+          'verificacion_facial': d.verificacionFacial,
+      });
     }
     for (final v in _vehiculosRegreso) {
       final g = v.regreso!.grupo;

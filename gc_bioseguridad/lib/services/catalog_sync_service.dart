@@ -8,7 +8,6 @@ import 'app_version_service.dart';
 import 'avisos_ingreso_offline_service.dart';
 import 'bio_empresa_api.dart';
 import 'catalog_service.dart';
-import 'nomina_facial_sync.dart';
 import 'nomina_proveedor_service.dart';
 import 'plan_visitas_service.dart';
 import 'proveedor_plan_catalog_service.dart';
@@ -209,14 +208,6 @@ class CatalogSyncService {
     try {
       await NominaProveedorService(api: _api).descargar(storage);
     } catch (_) {}
-
-    // 10. Personal de granja (bio_personal + proveedores) para la tranquera.
-    try {
-      final okPersonal = await NominaFacialSync(api: _api).descargarLista(storage);
-      if (!okPersonal) errors.add('personal');
-    } catch (_) {
-      errors.add('personal');
-    }
 
     return CatalogSyncResult(
       hadInternet: true,

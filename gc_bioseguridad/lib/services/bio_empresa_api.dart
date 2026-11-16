@@ -71,9 +71,12 @@ class BioEmpresaApi {
     if (data is! Map<String, dynamic>) {
       throw BioEmpresaApiException('respuesta_invalida', 'Respuesta no válida');
     }
-    if (data['ok'] != true) {
+    final ok = data['ok'] == true || data['success'] == true;
+    if (!ok) {
       final err = data['error'];
-      final msg = err is Map ? (err['message']?.toString() ?? 'No autorizado') : 'No autorizado';
+      final msg = err is Map
+          ? (err['message']?.toString() ?? 'No autorizado')
+          : (data['message']?.toString() ?? 'No autorizado');
       throw BioEmpresaApiException(
         err is Map ? (err['code']?.toString() ?? 'error') : 'error',
         msg,
@@ -128,18 +131,41 @@ class BioEmpresaApi {
           'per_page': '500',
         },
       );
+      final filas = _filasPersonal(data['data'] ?? data);
+      if (filas.isEmpty) break;
+      out.addAll(filas);
       final payload = data['data'];
-      if (payload is! Map) break;
-      final items = payload['items'];
-      if (items is! List || items.isEmpty) break;
-      for (final e in items) {
-        if (e is Map) out.add(Map<String, dynamic>.from(e));
-      }
-      final total = int.tryParse('${payload['total']}') ?? out.length;
-      if (out.length >= total) break;
+      final total = payload is Map
+          ? int.tryParse('${payload['total']}') ?? out.length
+          : out.length;
+      if (out.length >= total || filas.length < 500) break;
       page++;
     }
     return out;
+  }
+
+  /// Acepta `data.items`, `data.rows`, `data.personas` o una lista directa.
+  static List<Map<String, dynamic>> _filasPersonal(dynamic payload) {
+    final lista = _listaDe(payload);
+    return [
+      for (final e in lista)
+        if (e is Map) Map<String, dynamic>.from(e),
+    ];
+  }
+
+  static List<dynamic> _listaDe(dynamic payload) {
+    if (payload is List) return payload;
+    if (payload is Map) {
+      for (final key in ['items', 'rows', 'personas', 'data']) {
+        final v = payload[key];
+        if (v is List) return v;
+        if (v is Map) {
+          final anidada = _listaDe(v);
+          if (anidada.isNotEmpty) return anidada;
+        }
+      }
+    }
+    return const [];
   }
 
   /// Bytes de `foto_ruta` (`storage/personal/...`). No persiste el archivo.
