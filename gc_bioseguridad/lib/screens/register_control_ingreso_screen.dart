@@ -279,6 +279,8 @@ class _RegisterControlIngresoScreenState
   static const double _sepFila = 10;
 
   final _observacionController = TextEditingController();
+  final _dniEntrada = TextEditingController();
+  final _placaEntrada = TextEditingController();
 
   /// Fecha del registro (solo lectura, siempre el día de hoy).
   final DateTime _fecha = DateTime.now();
@@ -333,8 +335,6 @@ class _RegisterControlIngresoScreenState
   Timer? _estatusDebounce;
 
   int _planCargaActivas = 0;
-  Timer? _planCargaTimer;
-  void Function()? _cerrarPlanCarga;
 
   int? _visitaPlanId;
 
@@ -479,11 +479,10 @@ class _RegisterControlIngresoScreenState
       v.dispose();
     }
     _estatusDebounce?.cancel();
-    _planCargaTimer?.cancel();
-    _cerrarPlanCarga?.call();
-    _cerrarPlanCarga = null;
     _storage?.removeListener(_alCambiarStorage);
     _observacionController.dispose();
+    _dniEntrada.dispose();
+    _placaEntrada.dispose();
     _galponOtroController.dispose();
     super.dispose();
   }
@@ -1276,11 +1275,6 @@ class _RegisterControlIngresoScreenState
 
   /* ── Vehículos adicionales (multi-vehículo) ────────────────────────────── */
 
-  /// Agrega un vehículo extra (placa) al registro.
-  void _agregarVehiculo() {
-    setState(() => _vehiculos.add(_VehiculoFila()));
-  }
-
   Future<void> _escanearPlacaNueva() async {
     final placa = await PlacaInputDialog.capture(context);
     if (placa == null || !mounted) return;
@@ -1507,30 +1501,13 @@ class _RegisterControlIngresoScreenState
 
   void _iniciarCargaPlanificacion() {
     _planCargaActivas++;
-    if (_planCargaActivas != 1) return;
-    _planCargaTimer?.cancel();
-    _planCargaTimer = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted || _planCargaActivas < 1 || _cerrarPlanCarga != null) {
-        return;
-      }
-      _cerrarPlanCarga = showChickenLoadingDialog(
-        context,
-        'Consultando planificación…',
-      );
-    });
+    if (_planCargaActivas == 1 && mounted) setState(() {});
   }
 
   Future<void> _finalizarCargaPlanificacion() async {
     if (_planCargaActivas <= 0) return;
     _planCargaActivas--;
-    if (_planCargaActivas > 0) return;
-    _planCargaTimer?.cancel();
-    _planCargaTimer = null;
-    final close = _cerrarPlanCarga;
-    _cerrarPlanCarga = null;
-    if (close != null) {
-      await dismissLoadingDialog(close);
-    }
+    if (_planCargaActivas == 0 && mounted) setState(() {});
   }
 
   /// Planificación del DNI de una fila: primero lo descargado y, si hay red,
@@ -1861,9 +1838,20 @@ class _RegisterControlIngresoScreenState
     });
   }
 
-  /// Agrega un renglón vacío para escribir un DNI.
-  void _agregarDni() {
-    setState(() => _dnis.add(_DniFila()));
+  void _confirmarDniEscrito() {
+    final dni = _dniEntrada.text.replaceAll(RegExp(r'\D'), '');
+    if (dni.length < 6) return;
+    _dniEntrada.clear();
+    unawaited(_agregarDniEscaneado(dni));
+  }
+
+  Future<void> _confirmarPlacaEscrita() async {
+    final placa = _placaEntrada.text.trim();
+    if (PlanDescarga.normPlaca(placa).length < _minPlaca) return;
+    _placaEntrada.clear();
+    if (!await _evaluarPresenciaTrasEscaneo(placaNorm: placa)) return;
+    if (!mounted) return;
+    _trasEscaneoPlaca(placa);
   }
 
   void _quitarDni(int index) {
@@ -2135,7 +2123,7 @@ class _RegisterControlIngresoScreenState
         final dni = (map['dni'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
         debugPrint(
           '[BioVerif] motivo=${map['motivo']} verificado=${map['verificado']} '
-          'dni=$dni ${res['message']}',
+          'dni=$dni ${res['message']} tiempos=${map['tiempos']}',
         );
         if (res['success'] == true && map['verificado'] == true && dni.isNotEmpty) {
           reconocido = VerificacionFacialResult(
@@ -2913,20 +2901,33 @@ class _RegisterControlIngresoScreenState
       title: '1. Identificar',
       icon: Icons.qr_code_scanner_rounded,
       children: [
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: _identificarPorRostro,
-            icon: const Icon(Icons.face_retouching_natural),
-            label: const Text('Verificación facial'),
+        if (_planCargaActivas > 0)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2.2, color: _verdeIngreso),
+              ),
+            ),
           ),
+        _EntradaIdentificar(
+          controller: _dniEntrada,
+          hint: 'DNI',
+          iconoFacial: Icons.face_retouching_natural,
+          onFacial: _identificarPorRostro,
+          onEscanear: _escanearNuevoDni,
+          onSubmit: _confirmarDniEscrito,
         ),
-        const SizedBox(height: _sepCampo),
-        BioScanTiles(
-          onScanDni: _escanearNuevoDni,
-          onScanPlaca: _escanearPlacaNueva,
-          onManualDni: _agregarDni,
-          onManualPlaca: _agregarVehiculo,
+        const SizedBox(height: 10),
+        _EntradaIdentificar(
+          controller: _placaEntrada,
+          hint: 'Placa',
+          onEscanear: _escanearPlacaNueva,
+          onSubmit: () => unawaited(_confirmarPlacaEscrita()),
+          teclado: TextInputType.text,
         ),
         if (_dnis.isNotEmpty) ...[
           const SizedBox(height: _sepCampo),
@@ -4591,6 +4592,86 @@ class _AvisoPlan extends StatelessWidget {
               ),
             ),
           ],
+      ),
+    );
+  }
+}
+
+const _verdeIngreso = Color(0xFF1F7A4D);
+
+/// Campo grande: escribir confirma a mano; los iconos disparan cámara o escáner.
+class _EntradaIdentificar extends StatelessWidget {
+  const _EntradaIdentificar({
+    required this.controller,
+    required this.hint,
+    required this.onEscanear,
+    required this.onSubmit,
+    this.onFacial,
+    this.iconoFacial,
+    this.teclado = TextInputType.number,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final VoidCallback onEscanear;
+  final VoidCallback onSubmit;
+  final VoidCallback? onFacial;
+  final IconData? iconoFacial;
+  final TextInputType teclado;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      keyboardType: teclado,
+      textCapitalization: teclado == TextInputType.number
+          ? TextCapitalization.none
+          : TextCapitalization.characters,
+      textInputAction: TextInputAction.done,
+      onSubmitted: (_) => onSubmit(),
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      decoration: InputDecoration(
+        hintText: hint,
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFFE8F6EE),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF8FCBAA)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF8FCBAA), width: 1.4),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: _verdeIngreso, width: 2),
+        ),
+        suffixIconConstraints: BoxConstraints(
+          minWidth: onFacial == null ? 48 : 96,
+          minHeight: 48,
+        ),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onFacial != null)
+              IconButton(
+                onPressed: onFacial,
+                iconSize: 28,
+                color: _verdeIngreso,
+                icon: Icon(iconoFacial ?? Icons.face_retouching_natural),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              ),
+            IconButton(
+              onPressed: onEscanear,
+              iconSize: 28,
+              color: _verdeIngreso,
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            ),
+          ],
+        ),
       ),
     );
   }

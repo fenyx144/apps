@@ -39,7 +39,7 @@ class RostroCaptura {
 
 Uint8List jpegRostro(Uint8List rgb, int w, int h) {
   if (w < 2 || h < 2) return Uint8List(0);
-  final foto = im.Image(width: w, height: h);
+  var foto = im.Image(width: w, height: h);
   var i = 0;
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
@@ -47,7 +47,16 @@ Uint8List jpegRostro(Uint8List rgb, int w, int h) {
       i += 3;
     }
   }
-  return Uint8List.fromList(im.encodeJpg(foto, quality: 75));
+  const maxLado = 480;
+  if (foto.width > maxLado || foto.height > maxLado) {
+    final escala = maxLado / (foto.width > foto.height ? foto.width : foto.height);
+    foto = im.copyResize(
+      foto,
+      width: (foto.width * escala).round(),
+      height: (foto.height * escala).round(),
+    );
+  }
+  return Uint8List.fromList(im.encodeJpg(foto, quality: 80));
 }
 
 /// Encuadra el rostro y vuelve enseguida. La identificación ocurre en la pantalla anterior.
@@ -145,8 +154,11 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
         espejo: _espejo,
       );
       final rgb = Uint8List.fromList(reg.rgb);
+      final reloj = Stopwatch()..start();
       final jpeg = jpegRostro(rgb, reg.ancho, reg.alto);
-      debugPrint('[BioVerif] jpeg ${jpeg.length} ${reg.ancho}x${reg.alto}');
+      debugPrint(
+        '[BioVerif] jpeg ${jpeg.length}B ${reg.ancho}x${reg.alto} q80 max480 ${reloj.elapsedMilliseconds}ms',
+      );
       if (jpeg.length < 32) {
         debugPrint('[BioVerif] jpeg vacío, se sigue encuadrando');
         _rostros = 0;

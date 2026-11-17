@@ -937,9 +937,11 @@ class ApiService {
       final decoded = jsonDecode(response.body);
       final data = decoded is Map ? decoded['data'] : null;
       final motivo = data is Map ? data['motivo'] : null;
+      final tiempos = data is Map ? data['tiempos'] : null;
       debugPrint(
         '[BioVerif] POST $url → ${response.statusCode} '
-        '${reloj.elapsedMilliseconds}ms ${response.body.length}B motivo=$motivo',
+        '${reloj.elapsedMilliseconds}ms ${response.body.length}B motivo=$motivo '
+        'tiempos=$tiempos',
       );
       if (decoded is! Map) {
         return {'success': false, 'message': 'Respuesta inválida'};

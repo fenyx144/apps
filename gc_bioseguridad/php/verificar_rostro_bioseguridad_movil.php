@@ -61,22 +61,27 @@ $tmp = sys_get_temp_dir() . '/rostro_' . bin2hex(random_bytes(8));
 @mkdir($tmp, 0700, true);
 $probe = $tmp . '/probe.jpg';
 file_put_contents($probe, $bin);
+$t0 = microtime(true);
 
-$galeria = bio_ver_galeria($conn);
+$tCache0 = microtime(true);
 $cache = bio_ver_cache($conn);
+$msCache = (int) round((microtime(true) - $tCache0) * 1000);
+$soloCache = count($cache) > 0;
 $pendientes = [['id' => 'probe', 'path' => $probe]];
 $meta = [];
-foreach ($galeria as $p) {
-    $hash = sha1_file($p['path']) ?: '';
-    $p['hash'] = $hash;
-    $meta[$p['dni']] = $p;
-    $guardada = $cache[$p['dni']] ?? null;
-    if ($guardada === null || ($guardada['foto_hash'] ?? '') !== $hash || count($guardada['vector']) !== 512) {
+if (!$soloCache) {
+    $galeria = bio_ver_galeria($conn);
+    foreach ($galeria as $p) {
+        $hash = sha1_file($p['path']) ?: '';
+        $p['hash'] = $hash;
+        $meta[$p['dni']] = $p;
         $pendientes[] = ['id' => $p['dni'], 'path' => $p['path']];
     }
 }
 
+$tEmbed0 = microtime(true);
 $emb = bio_ver_embed($pendientes);
+$msEmbed = (int) round((microtime(true) - $tEmbed0) * 1000);
 if ($emb === null) {
     bio_ver_limpiar($tmp);
     $conn->close();
@@ -98,15 +103,28 @@ if (!is_array($probeVec) || count($probeVec) !== 512) {
 }
 
 $plantillas = [];
-foreach ($meta as $dni => $p) {
-    $vec = $emb[$dni] ?? ($cache[$dni]['vector'] ?? null);
-    if (!is_array($vec) || count($vec) !== 512) {
-        continue;
+if ($soloCache) {
+    foreach ($cache as $dni => $g) {
+        $vec = $g['vector'] ?? null;
+        if (!is_array($vec) || count($vec) !== 512) {
+            continue;
+        }
+        $plantillas[] = [
+            'dni' => $dni,
+            'nombre' => (string) ($g['nombre'] ?? $dni),
+            'empresa' => (string) ($g['empresa'] ?? ''),
+            'vector' => $vec,
+        ];
     }
-    if (isset($emb[$dni])) {
+} else {
+    foreach ($meta as $dni => $p) {
+        $vec = $emb[$dni] ?? null;
+        if (!is_array($vec) || count($vec) !== 512) {
+            continue;
+        }
         bio_ver_guardar($conn, $p, $vec);
+        $plantillas[] = ['dni' => $dni, 'nombre' => $p['nombre'], 'empresa' => $p['empresa'], 'vector' => $vec];
     }
-    $plantillas[] = ['dni' => $dni, 'nombre' => $p['nombre'], 'empresa' => $p['empresa'], 'vector' => $vec];
 }
 $conn->close();
 bio_ver_limpiar($tmp);
@@ -125,6 +143,7 @@ if ($plantillas === []) {
 $best = null;
 $bs = -2.0;
 $second = 0.0;
+$tCmp0 = microtime(true);
 foreach ($plantillas as $p) {
     $s = bio_ver_coseno($probeVec, $p['vector']);
     if ($s > $bs) {
@@ -138,6 +157,17 @@ foreach ($plantillas as $p) {
     }
 }
 $ok = $best !== null && $bs >= BIO_VER_UMBRAL && ($bs - $second) >= BIO_VER_MARGEN;
+$msCmp = (int) round((microtime(true) - $tCmp0) * 1000);
+$msTotal = (int) round((microtime(true) - $t0) * 1000);
+$tiempos = [
+    'cache_ms' => $msCache,
+    'embed_ms' => $msEmbed,
+    'cmp_ms' => $msCmp,
+    'total_ms' => $msTotal,
+    'plantillas' => count($plantillas),
+    'solo_cache' => $soloCache,
+];
+error_log('[BioVerif] cache=' . $msCache . 'ms embed=' . $msEmbed . 'ms cmp=' . $msCmp . 'ms total=' . $msTotal . 'ms plantillas=' . count($plantillas) . ' solo_cache=' . ($soloCache ? '1' : '0'));
 
 bio_send_json(200, true, $ok ? 'Coincide' : 'No coincide', [
     'verificado' => $ok,
@@ -146,6 +176,7 @@ bio_send_json(200, true, $ok ? 'Coincide' : 'No coincide', [
     'nombre' => $ok ? $best['nombre'] : '',
     'empresa' => $ok ? $best['empresa'] : '',
     'similitud' => round($bs, 3),
+    'tiempos' => $tiempos,
 ]);
 
 function bio_ver_asegurar_tabla(mysqli $conn): void
@@ -308,7 +339,17 @@ function bio_ver_archivo(string $ruta): ?string
 function bio_ver_cache(mysqli $conn): array
 {
     $out = [];
-    $rs = @$conn->query('SELECT dni, foto_hash, vector FROM bio_rostro_plantilla');
+    static $mem = null;
+    static $sello = '';
+    $selloAhora = '0';
+    $marca = @$conn->query('SELECT COUNT(*) AS c, IFNULL(MAX(updated_at), \'\') AS m FROM bio_rostro_plantilla');
+    if ($marca && ($m = $marca->fetch_assoc())) {
+        $selloAhora = ((string) $m['c']) . '|' . ((string) $m['m']);
+    }
+    if (is_array($mem) && $sello === $selloAhora) {
+        return $mem;
+    }
+    $rs = @$conn->query('SELECT dni, nombre, empresa, foto_hash, vector FROM bio_rostro_plantilla');
     while ($rs && ($row = $rs->fetch_assoc())) {
         $vec = json_decode((string) ($row['vector'] ?? ''), true);
         if (!is_array($vec)) {
@@ -320,9 +361,13 @@ function bio_ver_cache(mysqli $conn): array
         }
         $out[(string) $row['dni']] = [
             'foto_hash' => (string) ($row['foto_hash'] ?? ''),
+            'nombre' => (string) ($row['nombre'] ?? ''),
+            'empresa' => (string) ($row['empresa'] ?? ''),
             'vector' => $floats,
         ];
     }
+    $mem = $out;
+    $sello = $selloAhora;
 
     return $out;
 }

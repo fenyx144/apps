@@ -88,28 +88,28 @@ Finder _selloDescarga() => find.byWidgetPredicate(
 Finder _camposVehiculo() =>
     find.byWidgetPredicate((w) => w is BioTextField && w.hint == 'Placa');
 
-Finder _botonAgregarDni() => find.descendant(
-      of: find.byType(OutlinedButton),
-      matching: find.text('Ingreso manual documento'),
-    );
-
 Future<void> _agregarDniManual(WidgetTester tester, String dni) async {
-  await tester.tap(_botonAgregarDni());
+  await tester.enterText(_campoPorHint('DNI'), dni);
+  await tester.testTextInput.receiveAction(TextInputAction.done);
   await tester.pump();
-  await tester.enterText(_campoPorHint('DNI o CEE'), dni);
   await tester.pump(const Duration(milliseconds: 500));
-  await tester.pumpAndSettle();
 }
 
 @Deprecated('Flujo eliminado')
 Future<void> _seleccionarPlanDelDia(WidgetTester tester) async {}
 
+Finder _entradaPlaca() => find.byWidgetPredicate(
+      (w) =>
+          w is TextField &&
+          w.decoration?.hintText == 'Placa' &&
+          w.onSubmitted != null,
+    );
+
 Future<void> _agregarPlacaManual(WidgetTester tester, String placa) async {
-  await tester.tap(find.text('Ingreso manual placa'));
+  await tester.enterText(_entradaPlaca(), placa);
+  await tester.testTextInput.receiveAction(TextInputAction.done);
   await tester.pump();
-  await tester.enterText(_camposVehiculo(), placa);
   await tester.pump(const Duration(milliseconds: 500));
-  await tester.pumpAndSettle();
 }
 
 /// ¿Está tildada la casilla de la fila que muestra [texto]?
@@ -148,33 +148,28 @@ void main() {
     await _montar(tester);
     expect(find.textContaining('1. Identificar'), findsOneWidget);
 
-    await tester.tap(_botonAgregarDni());
+    await tester.enterText(_campoPorHint('DNI'), '12345678');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
 
     final tabla = find.byType(BioTable);
     expect(tabla, findsOneWidget);
 
-    final scanDni = find.text('Escanear Documento');
-    final scanPlaca = find.text('Escanear Placa');
-    expect(scanDni, findsWidgets);
-    expect(scanPlaca, findsOneWidget);
+    final campoDni = _campoPorHint('DNI');
+    final campoPlaca = _campoPorHint('Placa');
+    expect(campoDni, findsOneWidget);
+    expect(campoPlaca, findsOneWidget);
     expect(
-      tester.getTopLeft(scanDni.first).dy,
+      tester.getTopLeft(campoDni).dy,
       lessThan(tester.getTopLeft(tabla).dy),
     );
     expect(
-      tester.getTopLeft(_botonAgregarDni()).dy,
+      tester.getTopLeft(campoPlaca).dy,
       lessThan(tester.getTopLeft(tabla).dy),
     );
-
     expect(
-      tester.getTopLeft(scanPlaca).dy,
-      tester.getTopLeft(scanDni.first).dy,
-      reason: 'escaneo DNI y placa comparten fila',
-    );
-    expect(
-      tester.getTopLeft(scanPlaca).dx,
-      greaterThan(tester.getTopLeft(scanDni.first).dx),
+      tester.getTopLeft(campoPlaca).dy,
+      greaterThan(tester.getTopLeft(campoDni).dy),
     );
   });
 
@@ -186,8 +181,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await _montar(tester);
-    await tester.tap(_botonAgregarDni());
-    await tester.pump();
+    await _agregarDniManual(tester, '11111111');
 
     final tabla = tester.widget<BioTable>(find.byType(BioTable));
     final dni = tabla.columns[0];
@@ -236,11 +230,7 @@ void main() {
 
     await _montar(tester);
 
-    await tester.tap(_botonAgregarDni());
-    await tester.pump();
-
-    await tester.enterText(_campoPorHint('DNI o CEE'), '12345678');
-    await tester.pump();
+    await _agregarDniManual(tester, '12345678');
 
     // Se espera el debounce de la consulta (450 ms) y su respuesta. En las
     // pruebas no hay red, así que el documento tampoco llega del backend y la
@@ -275,9 +265,7 @@ void main() {
 
     await _montar(tester);
 
-    await tester.tap(_botonAgregarDni());
-    await tester.pump();
-    await tester.enterText(_campoPorHint('DNI o CEE'), '12345678');
+    await _agregarDniManual(tester, '12345678');
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump();
     await tester.pump();
@@ -733,13 +721,8 @@ void main() {
 
     await _montar(tester, prefsIniciales: _prefsConGranja());
 
-    expect(find.text('Escanear Placa'), findsOneWidget);
-    final dniLbl = find.text('Escanear Documento');
-    expect(dniLbl, findsWidgets);
-    expect(
-      tester.getTopLeft(find.text('Escanear Placa')).dy,
-      tester.getTopLeft(dniLbl.first).dy,
-    );
+    expect(_campoPorHint('DNI'), findsOneWidget);
+    expect(_campoPorHint('Placa'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -794,12 +777,9 @@ void main() {
 
     expect(_camposVehiculo(), findsNothing);
 
-    await tester.tap(find.text('Ingreso manual placa'));
-    await tester.pump();
-    await tester.tap(find.text('Ingreso manual placa'));
-    await tester.pump();
-    await tester.tap(find.text('Ingreso manual placa'));
-    await tester.pump();
+    await _agregarPlacaManual(tester, 'ABC123');
+    await _agregarPlacaManual(tester, 'DEF456');
+    await _agregarPlacaManual(tester, 'GHI789');
     expect(_camposVehiculo(), findsNWidgets(3));
 
     expect(find.byIcon(Icons.delete_outline_rounded), findsNWidgets(3));
