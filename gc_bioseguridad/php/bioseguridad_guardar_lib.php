@@ -296,8 +296,16 @@ function bio_procesar_guardado(mysqli $conn, array $data, bool $esActualizacion)
         $imagenesCsv = $imagenesPrevias;
     }
 
+    $txGarita = $reporte === 'garita' && $conn->begin_transaction();
     if ($reemplaza) {
         bio_borrar_grupo($conn, $reporte, $ctx);
+        if ($reporte === 'garita' && !bio_agc_borrar($conn, $uuid)) {
+            if ($txGarita) {
+                $conn->rollback();
+            }
+
+            return bio_resp(500, false, 'No se pudo guardar el registro.', 'INSERT_FAILED');
+        }
     }
 
     // La auditoría de modificación solo se llena cuando se reemplaza algo; en
@@ -306,8 +314,21 @@ function bio_procesar_guardado(mysqli $conn, array $data, bool $esActualizacion)
     $ctx['fechaHoraModificacion'] = $esModificacion ? $ahoraDatetime : '';
 
     $insertadas = bio_insertar_filas($conn, $reporte, $ctx, $imagenesCsv);
-    if ($insertadas <= 0) {
+    if ($insertadas <= 0 || ($reporte === 'garita' && !bio_agc_insertar($conn, $ctx, $imagenesCsv))) {
+        if ($txGarita) {
+            $conn->rollback();
+        } elseif ($reporte === 'garita') {
+            bio_agc_borrar($conn, $uuid);
+            $rid = (int) ($ctx['rgarita_id'] ?? 0);
+            if ($rid > 0) {
+                @$conn->query('DELETE FROM `rgarita` WHERE `id` = ' . $rid);
+            }
+        }
+
         return bio_resp(500, false, 'No se pudo guardar el registro.', 'INSERT_FAILED');
+    }
+    if ($txGarita) {
+        $conn->commit();
     }
 
     // Verificación de evidencias: todo archivo que llegó debe haber quedado

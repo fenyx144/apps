@@ -1321,7 +1321,159 @@ function bio_imagenes_grupo(mysqli $conn, string $reporte, array $ctx): string
  *
  * @param array<string, mixed> $ctx
  */
-function bio_insertar_filas(mysqli $conn, string $reporte, array $ctx, string $imagenesCsv): int
+/**
+ * Tipo de la app → clave y banderas de san_agentes_causales.
+ *
+ * @return array{tarea:string,fisico:int,quimico:int,biologico:int}
+ */
+function bio_agc_tipo(string $bioseguridad): array
+{
+    $b = strtolower($bioseguridad);
+    $fisico = 0;
+    $quimico = 0;
+    $biologico = 0;
+    $tarea = 'bioseguridad_fisica';
+    if (strpos($b, 'quim') !== false) {
+        $quimico = 1;
+        $tarea = 'bioseguridad_quimica';
+    } elseif (strpos($b, 'biolog') !== false) {
+        $biologico = 1;
+        $tarea = 'bioseguridad_biologica';
+    } else {
+        $fisico = 1;
+    }
+
+    return [
+        'tarea' => $tarea,
+        'fisico' => $fisico,
+        'quimico' => $quimico,
+        'biologico' => $biologico,
+    ];
+}
+
+/** @return array<string,string> nombre en minúsculas => nombre real */
+function bio_agc_columnas(mysqli $conn): array
+{
+    static $cols = null;
+    if (is_array($cols)) {
+        return $cols;
+    }
+    $cols = [];
+    $rs = @$conn->query('SHOW COLUMNS FROM `san_agentes_causales`');
+    while ($rs && ($c = $rs->fetch_assoc())) {
+        $nombre = (string) ($c['Field'] ?? '');
+        if ($nombre !== '') {
+            $cols[strtolower($nombre)] = $nombre;
+        }
+    }
+
+    return $cols;
+}
+
+function bio_agc_enlace(string $uuid): string
+{
+    return 'rgarita:' . $uuid;
+}
+
+function bio_agc_borrar(mysqli $conn, string $uuid): bool
+{
+    $uuid = trim($uuid);
+    if ($uuid === '') {
+        return true;
+    }
+    $cols = bio_agc_columnas($conn);
+    if ($cols === [] || !isset($cols['archivo'])) {
+        return false;
+    }
+    $enlace = bio_agc_enlace($uuid);
+    if (isset($cols['uuid'])) {
+        $sql = 'DELETE FROM `san_agentes_causales` WHERE `archivo` = ? OR `uuid` = ?';
+        $st = $conn->prepare($sql);
+        if (!$st) {
+            return false;
+        }
+        $st->bind_param('ss', $enlace, $uuid);
+    } else {
+        $st = $conn->prepare('DELETE FROM `san_agentes_causales` WHERE `archivo` = ?');
+        if (!$st) {
+            return false;
+        }
+        $st->bind_param('s', $enlace);
+    }
+    $ok = $st->execute();
+    $st->close();
+
+    return $ok;
+}
+
+/**
+ * Segunda escritura de la anomalía. Usa las columnas que ya existen y, si
+ * están, fisico/quimico/biologico y uuid (ver SQL pendiente, no se ejecuta aquí).
+ *
+ * @param array<string,mixed> $ctx
+ */
+function bio_agc_insertar(mysqli $conn, array $ctx, string $imagenesCsv): bool
+{
+    $cols = bio_agc_columnas($conn);
+    if ($cols === [] || !isset($cols['tareakey']) || !isset($cols['archivo'])) {
+        return false;
+    }
+    $tipo = bio_agc_tipo((string) ($ctx['bioseguridad'] ?? ''));
+    $uuid = bio_cut((string) ($ctx['uuid'] ?? ''), 36);
+    $enlace = bio_agc_enlace($uuid);
+    $valores = [
+        'tareakey' => $tipo['tarea'],
+        'archivo' => $enlace,
+        'uuid' => $uuid,
+        'rgarita_id' => (int) ($ctx['rgarita_id'] ?? 0),
+        'fecha' => (string) ($ctx['fecha'] ?? ''),
+        'cencos' => (string) ($ctx['cencos'] ?? ''),
+        'turno' => (string) ($ctx['turno'] ?? ''),
+        'instalacion' => bio_cut((string) ($ctx['instalacion'] ?? ''), 20),
+        'bioseguridad' => bio_cut((string) ($ctx['bioseguridad'] ?? ''), 30),
+        'fisico' => $tipo['fisico'],
+        'quimico' => $tipo['quimico'],
+        'biologico' => $tipo['biologico'],
+        'anomalia' => bio_cut((string) ($ctx['anomalia'] ?? ''), 30),
+        'descripcion' => bio_cut((string) ($ctx['descripcion'] ?? ''), 200),
+        'agentecausal' => bio_cut((string) ($ctx['agentecausal'] ?? ''), 200),
+        'hora' => bio_cut((string) ($ctx['hora'] ?? ''), 8),
+        'imagenes' => $imagenesCsv,
+        'numfiltro' => (int) ($ctx['numfiltro'] ?? 0),
+    ];
+    $campos = [];
+    $marcas = [];
+    $types = '';
+    $params = [];
+    foreach ($valores as $clave => $valor) {
+        if (!isset($cols[$clave])) {
+            continue;
+        }
+        $campos[] = '`' . $cols[$clave] . '`';
+        $marcas[] = '?';
+        if (is_int($valor)) {
+            $types .= 'i';
+        } else {
+            $types .= 's';
+        }
+        $params[] = $valor;
+    }
+    if ($campos === []) {
+        return false;
+    }
+    $sql = 'INSERT INTO `san_agentes_causales` (' . implode(',', $campos) . ') VALUES (' . implode(',', $marcas) . ')';
+    $st = $conn->prepare($sql);
+    if (!$st) {
+        return false;
+    }
+    $st->bind_param($types, ...$params);
+    $ok = $st->execute();
+    $st->close();
+
+    return $ok;
+}
+
+function bio_insertar_filas(mysqli $conn, string $reporte, array &$ctx, string $imagenesCsv): int
 {
     $tuser = bio_cut((string) ($ctx['tuser'] ?? ''), 6);
     $colaborador = bio_cut((string) ($ctx['colaborador'] ?? ''), 30);
@@ -1382,12 +1534,14 @@ function bio_insertar_filas(mysqli $conn, string $reporte, array $ctx, string $i
             bio_cut((string) ($ctx['uuid'] ?? ''), 36),
             $imagenesCsv
         );
-        if ($stmt->execute()) {
-            $filas = 1;
-        }
+        $ok = $stmt->execute();
         $stmt->close();
+        if (!$ok) {
+            return 0;
+        }
+        $ctx['rgarita_id'] = $id;
 
-        return $filas;
+        return 1;
     }
 
     if ($reporte === 'cerco') {
