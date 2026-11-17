@@ -10,10 +10,10 @@ class AlmacenLinea {
     this.s = 0,
   });
 
-  /// LIMPIO, LAVADERO o INSUMOS.
+  /// LIMPIO, LAVADERO, IMPLEMENTOS o INSUMOS.
   final String frente;
 
-  /// Ropa `1`/`2`, o id de insumo si [frente] es INSUMOS.
+  /// Ropa `1`/`2`, o id de insumo si el frente no es ropa.
   final String item;
   final String nombre;
   final String unidad;
@@ -58,17 +58,24 @@ double stockAlmacen(List<AlmacenLinea> lineas, String frente, String item) {
   return 0;
 }
 
-/// `null` si la operación cabe en el stock. El consumo solo mira INSUMOS.
+/// `null` si la operación cabe en el stock.
 String? rechazoAlmacen(
   List<AlmacenLinea> lineas, {
   required String operacion,
   required String item,
   required double cantidad,
+  String categoria = '',
 }) {
   final op = operacion.toUpperCase();
+  final cat = categoria.toUpperCase();
+  if (op == 'RELEVO') {
+    if (stockAlmacen(lineas, 'LIMPIO', '2') + 0.001 < 1) return 'Sin stock';
+    return null;
+  }
   if (cantidad <= 0) return 'Sin stock';
-  if (op == 'ENTREGA' && cantidad > stockAlmacen(lineas, 'LIMPIO', item) + 0.001) {
-    return 'Sin stock';
+  if (op == 'ENTREGA') {
+    final frente = cat == 'IMPLEMENTO' ? 'IMPLEMENTOS' : 'LIMPIO';
+    if (cantidad > stockAlmacen(lineas, frente, item) + 0.001) return 'Sin stock';
   }
   if (op == 'LAVADO' && cantidad > stockAlmacen(lineas, 'LAVADERO', item) + 0.001) {
     return 'Sin stock';
@@ -92,18 +99,40 @@ List<AlmacenLinea> aplicarAlmacen(
     if (cant <= 0) continue;
     final item = (op['item'] ?? op['insumo_id'] ?? op['ropa_tipo'] ?? '2').toString();
     final nombre = (op['nombre_insumo'] ?? op['nombre'] ?? '').toString();
-    if (rechazoAlmacen(lineas, operacion: oper, item: item, cantidad: cant) != null) {
+    final cat = (op['categoria'] ?? '').toString();
+    if (rechazoAlmacen(lineas, operacion: oper, item: item, cantidad: cant, categoria: cat) !=
+        null) {
       continue;
     }
     if (oper == 'ENTREGA') {
-      _sumar(lineas, 'LIMPIO', item, nombre, s: cant);
-    } else if (oper == 'RECEPCION') {
-      _sumar(lineas, 'LAVADERO', item, nombre, e: cant);
+      final frente = cat.toUpperCase() == 'IMPLEMENTO' ? 'IMPLEMENTOS' : 'LIMPIO';
+      _sumar(lineas, frente, item, nombre, s: cant);
+    } else if (oper == 'DEVOLUCION' || oper == 'RECEPCION') {
+      final frente = cat.toUpperCase() == 'IMPLEMENTO' ? 'IMPLEMENTOS' : 'LAVADERO';
+      _sumar(lineas, frente, item, nombre, e: cant);
     } else if (oper == 'LAVADO') {
       _sumar(lineas, 'LAVADERO', item, nombre, s: cant);
       _sumar(lineas, 'LIMPIO', item, nombre, e: cant);
     } else if (oper == 'CONSUMO') {
       _sumar(lineas, 'INSUMOS', item, nombre, s: cant);
+    } else if (oper == 'ENVIO' || oper == 'SI') {
+      final frente = _frenteCategoria(cat, item);
+      _sumar(
+        lineas,
+        frente,
+        item,
+        nombre,
+        si: oper == 'SI' ? cant : 0,
+        e: oper == 'ENVIO' ? cant : 0,
+      );
+    } else if (oper == 'RELEVO') {
+      _sumar(lineas, 'LAVADERO', '2', 'Ropa para el proceso', e: 1);
+      _sumar(lineas, 'LIMPIO', '2', 'Ropa para el proceso', s: 1);
+      final imps = lineas.where((l) => l.frente == 'IMPLEMENTOS' && l.stock + 0.001 >= 1).toList();
+      for (final l in imps) {
+        _sumar(lineas, 'IMPLEMENTOS', l.item, l.nombre, s: 1);
+        _sumar(lineas, 'IMPLEMENTOS', l.item, l.nombre, e: 1);
+      }
     } else if (oper == 'SI_UNIFORME' || oper == 'CARGA_UNIFORME') {
       final frente = (op['frente'] ?? 'LIMPIO').toString();
       _sumar(lineas, frente == 'LAVADERO' ? 'LAVADERO' : 'LIMPIO', item, nombre,
@@ -115,6 +144,14 @@ List<AlmacenLinea> aplicarAlmacen(
     }
   }
   return lineas;
+}
+
+String _frenteCategoria(String categoria, String item) {
+  final cat = categoria.toUpperCase();
+  if (cat == 'IMPLEMENTO') return 'IMPLEMENTOS';
+  if (cat == 'INSUMO') return 'INSUMOS';
+  if (cat == 'UNIFORME' || item == '1' || item == '2') return 'LIMPIO';
+  return 'INSUMOS';
 }
 
 void _sumar(

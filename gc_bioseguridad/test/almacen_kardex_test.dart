@@ -30,6 +30,20 @@ void main() {
     expect(rechazoAlmacen(out, operacion: 'CONSUMO', item: '6', cantidad: 9), 'Sin stock');
   });
 
+  test('el relevo pasa el uniforme limpio al lavadero y no cambia implementos', () {
+    final conImp = [
+      ...base,
+      AlmacenLinea(frente: 'IMPLEMENTOS', item: '4', nombre: 'Botas', si: 3),
+    ];
+    final out = aplicarAlmacen(conImp, [
+      {'operacion': 'RELEVO', 'categoria': 'UNIFORME', 'item': '2', 'cantidad': 1},
+    ]);
+    expect(out.firstWhere((l) => l.frente == 'LIMPIO' && l.item == '2').stock, 19);
+    expect(out.firstWhere((l) => l.frente == 'LAVADERO').stock, 1);
+    expect(out.firstWhere((l) => l.frente == 'IMPLEMENTOS').stock, 3);
+    expect(rechazoAlmacen(out, operacion: 'RELEVO', item: '2', cantidad: 1), isNull);
+  });
+
   test('no se entregan más limpios de los que hay', () {
     expect(rechazoAlmacen(base, operacion: 'ENTREGA', item: '2', cantidad: 21), 'Sin stock');
     final out = aplicarAlmacen(base, [

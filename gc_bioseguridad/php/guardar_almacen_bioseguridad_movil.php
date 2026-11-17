@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 /**
- * Guarda uno o varios movimientos de almacén. El uuid deduplica la cola offline.
- * POST { uuid, granja, fecha, operacion, insumo_id, cantidad, dni, nombre }
+ * Registra movimientos de almacén. El rol se valida en el servidor (403).
+ * POST { operacion, granja_cod, categoria, item, cantidad, fecha, ... }
  * o   { ops: [ ... ] }
  */
 
@@ -47,12 +47,20 @@ if (isset($body['ops']) && is_array($body['ops'])) {
 }
 
 $usuario = bio_alm_usuario();
+$actor = bio_alm_actor($conn, $usuario);
+if ($actor['rol'] !== 'grs' && $actor['rol'] !== 'empresa') {
+    bio_send_json(403, false, 'No autorizado', null, 'forbidden');
+}
+
 $resultados = array();
 foreach ($ops as $op) {
     if (!is_array($op)) {
         continue;
     }
     $r = bio_alm_guardar($conn, $op, $usuario);
+    if (!empty($r['http']) && (int) $r['http'] === 403) {
+        bio_send_json(403, false, (string) $r['message'], null, 'forbidden');
+    }
     $uuid = '';
     if (isset($op['uuid'])) {
         $uuid = (string) $op['uuid'];
@@ -62,8 +70,8 @@ foreach ($ops as $op) {
     $resultados[] = array(
         'uuid' => isset($r['uuid']) ? $r['uuid'] : $uuid,
         'ok' => !empty($r['ok']),
-        'duplicado' => !empty($r['duplicado']),
         'message' => isset($r['message']) ? $r['message'] : '',
+        'par_id' => isset($r['par_id']) ? $r['par_id'] : 0,
     );
 }
 

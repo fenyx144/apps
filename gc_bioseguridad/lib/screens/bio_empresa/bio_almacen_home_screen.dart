@@ -15,7 +15,6 @@ import '../../widgets/granja_campania_fields.dart';
 import '../../widgets/section_app_bar.dart';
 
 const _verde = Color(0xFF1F7A4D);
-const _verdeSuave = Color(0xFFE8F6EE);
 const _verdeBorde = Color(0xFF8FCBAA);
 
 class BioAlmacenHomeScreen extends StatefulWidget {
@@ -29,10 +28,13 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
   String _granja = '';
   String _granjaNombre = '';
   bool _loading = true;
+  List<String> _acciones = [];
+  List<Map<String, dynamic>> _granjas = [];
   List<Map<String, dynamic>> _insumos = [];
+  List<Map<String, dynamic>> _implementos = [];
   List<Map<String, dynamic>> _ropa = [];
+  List<Map<String, dynamic>> _personal = [];
   List<AlmacenLinea> _lineas = [];
-  List<Map<String, dynamic>> _prestamos = [];
 
   @override
   void initState() {
@@ -53,19 +55,86 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
     final net = granja.isEmpty ? null : await cola.descargar(granja);
     final cache = net ?? (granja.isEmpty ? <String, dynamic>{} : cola.cacheDe(granja));
     final insumos = _lista(cache['insumos']);
-    final kardex = _lista(cache['kardex']).map(AlmacenLinea.fromMap).toList();
+    final implementos = _lista(cache['implementos']);
+    final uniformes = _lista(cache['uniformes']);
+    final base = _lineasDe(cache, uniformes, implementos, insumos);
+    final acciones = _listaTexto(cache['acciones']);
+    final granjas = _lista(cache['granjas']);
     if (!mounted) return;
+    var granjaEfectiva = granja;
+    var nombre = _granja == sel?.granja ? (sel?.granjaNombre ?? _granjaNombre) : _granjaNombre;
+    if (granjas.isNotEmpty && !granjas.any((g) => '${g['codigo']}' == granjaEfectiva)) {
+      granjaEfectiva = '${granjas.first['codigo']}';
+      nombre = '${granjas.first['nombre'] ?? ''}';
+    } else if (granjas.isNotEmpty) {
+      final g = granjas.firstWhere((e) => '${e['codigo']}' == granjaEfectiva);
+      final n = '${g['nombre'] ?? ''}'.trim();
+      if (n.isNotEmpty) nombre = n;
+    }
     setState(() {
-      _granja = granja;
-      _granjaNombre = _granja == sel?.granja
-          ? (sel?.granjaNombre ?? _granjaNombre)
-          : _granjaNombre;
+      _granja = granjaEfectiva;
+      _granjaNombre = nombre;
+      _acciones = acciones;
+      _granjas = granjas;
       _insumos = insumos.isNotEmpty ? insumos : local;
+      _implementos = implementos;
       _ropa = _lista(cache['ropa_tipos']);
-      _lineas = aplicarAlmacen(kardex, cola.pendientesDe(granja));
-      _prestamos = _lista(cache['prestamos']);
+      _personal = _lista(cache['personal']);
+      _lineas = aplicarAlmacen(base, cola.pendientesDe(granjaEfectiva));
       _loading = false;
     });
+    if (granjaEfectiva != granja && granjaEfectiva.isNotEmpty) {
+      await _cargar();
+    }
+  }
+
+  List<String> _listaTexto(dynamic raw) {
+    if (raw is! List) return [];
+    return raw.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+  }
+
+  List<AlmacenLinea> _lineasDe(
+    Map<String, dynamic> cache,
+    List<Map<String, dynamic>> uniformes,
+    List<Map<String, dynamic>> implementos,
+    List<Map<String, dynamic>> insumos,
+  ) {
+    final out = <AlmacenLinea>[];
+    for (final u in uniformes) {
+      out.add(AlmacenLinea(
+        frente: (u['frente'] ?? '').toString(),
+        item: (u['item'] ?? u['ropa_tipo'] ?? '').toString(),
+        nombre: (u['ropa_nombre'] ?? u['nombre'] ?? '').toString(),
+        si: _num(u['stock']),
+      ));
+    }
+    for (final i in implementos) {
+      out.add(AlmacenLinea(
+        frente: 'IMPLEMENTOS',
+        item: (i['item'] ?? i['insumo_id'] ?? '').toString(),
+        nombre: (i['nombre'] ?? '').toString(),
+        unidad: (i['unidad'] ?? '').toString(),
+        si: _num(i['stock']),
+      ));
+    }
+    for (final i in insumos) {
+      out.add(AlmacenLinea(
+        frente: 'INSUMOS',
+        item: (i['item'] ?? i['insumo_id'] ?? '').toString(),
+        nombre: (i['nombre'] ?? '').toString(),
+        unidad: (i['unidad'] ?? '').toString(),
+        si: _num(i['stock']),
+      ));
+    }
+    if (out.isEmpty) {
+      return _lista(cache['kardex']).map(AlmacenLinea.fromMap).toList();
+    }
+    return out;
+  }
+
+  double _num(dynamic v) {
+    if (v is num) return v.toDouble();
+    return double.tryParse('$v') ?? 0;
   }
 
   List<Map<String, dynamic>> _lista(dynamic raw) {
@@ -81,23 +150,28 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
     ];
   }
 
-  List<({String dni, String nombre})> _trabajadores() {
-    final map = <String, String>{};
+  List<({String dni, String nombre, int id})> _trabajadores() {
+    final map = <String, ({String dni, String nombre, int id})>{};
+    for (final p in _personal) {
+      final dni = (p['dni'] ?? '').toString();
+      if (dni.isEmpty) continue;
+      map[dni] = (
+        dni: dni,
+        nombre: (p['nombre'] ?? '').toString(),
+        id: int.tryParse('${p['id']}') ?? 0,
+      );
+    }
     final storage = context.read<StorageService>();
     for (final g in IngresoPresenciaService.gruposConPersonalDentro(
       storage,
       granja: _granja,
     )) {
       for (final p in g.dentro) {
-        if (p.dni.isNotEmpty) map[p.dni] = p.nombre;
+        if (p.dni.isEmpty) continue;
+        map.putIfAbsent(p.dni, () => (dni: p.dni, nombre: p.nombre, id: 0));
       }
     }
-    for (final p in _prestamos) {
-      final dni = (p['dni'] ?? '').toString();
-      if (dni.isEmpty) continue;
-      map.putIfAbsent(dni, () => (p['nombre'] ?? '').toString());
-    }
-    final lista = map.entries.map((e) => (dni: e.key, nombre: e.value)).toList();
+    final lista = map.values.toList();
     lista.sort((a, b) => a.dni.compareTo(b.dni));
     return lista;
   }
@@ -105,7 +179,9 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
   Future<void> _elegirGranja() async {
     final storage = context.read<StorageService>();
     final fecha = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final opciones = storage.getGranjasTrabajo();
+    final opciones = _granjas.isNotEmpty
+        ? _granjas.map((g) => '${g['codigo']}').where((c) => c.isNotEmpty).toList()
+        : storage.getGranjasTrabajo();
     if (opciones.isEmpty) return;
     final elegida = await showModalBottomSheet<String>(
       context: context,
@@ -133,6 +209,12 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
   }
 
   String _etiquetaGranja(StorageService storage, String codigo, String fecha) {
+    for (final g in _granjas) {
+      if ('${g['codigo']}' != codigo) continue;
+      final nombre = '${g['nombre'] ?? ''}'.trim();
+      if (nombre.isEmpty || nombre == codigo) return codigo;
+      return '$codigo · $nombre';
+    }
     final sel = granjaSeleccionDe(storage, codigo, fechaYmd: fecha);
     final nombre = (sel?.granjaNombre ?? '').trim();
     if (nombre.isEmpty || nombre == codigo) return codigo;
@@ -140,43 +222,57 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
   }
 
   Future<void> _operacion(String operacion) async {
-    if (_granja.isEmpty) return;
-    final pideTrabajador = operacion == 'ENTREGA' || operacion == 'RECEPCION';
-    final items = operacion == 'CONSUMO' ? _insumos : _ropaTipos;
-    if (items.isEmpty) return;
+    if (_granja.isEmpty || !_acciones.contains(operacion)) return;
+    final relevo = operacion == 'RELEVO';
+    final pideTrabajador = operacion == 'ENTREGA' || operacion == 'DEVOLUCION';
+    final items = _itemsDe(operacion);
+    if (!relevo && items.isEmpty) return;
     final trabajadores = _trabajadores();
-    var insumo = items.first;
-    if (operacion != 'CONSUMO') {
+    var insumo = items.isEmpty ? <String, dynamic>{} : items.first;
+    if (operacion == 'LAVADO' || operacion == 'ENTREGA' || operacion == 'DEVOLUCION') {
       for (final e in items) {
-        if ('${e['codigo']}' == '2') insumo = e;
+        if ('${e['codigo'] ?? e['item']}' == '2' && '${e['categoria']}' == 'UNIFORME') {
+          insumo = e;
+        }
       }
     }
-    var dni = trabajadores.length == 1 ? trabajadores.first.dni : '';
-    var nombre = trabajadores.length == 1 ? trabajadores.first.nombre : '';
+    final unico = trabajadores.length == 1 ? trabajadores.first : null;
     final elegido = await showDialog<AlmacenDialogoResult>(
       context: context,
       builder: (ctx) => AlmacenMovimientoDialog(
         titulo: _titulo(operacion),
-        etiquetaItem: operacion == 'CONSUMO' ? 'Insumo' : 'Ropa',
+        etiquetaItem: _etiquetaItem(operacion),
         items: items,
         inicial: int.tryParse('${insumo['id'] ?? insumo['codigo']}'),
         pideTrabajador: pideTrabajador,
+        pideEntrante: relevo,
+        pideCantidad: !relevo,
+        eligeItem: !relevo,
         trabajadores: trabajadores,
-        dniInicial: dni,
-        nombreInicial: nombre,
+        dniInicial: unico?.dni ?? '',
+        nombreInicial: unico?.nombre ?? '',
       ),
     );
-    final n = elegido?.cantidad;
     if (elegido == null || !mounted) return;
-    if (n == null || n < 1) return;
-    if (pideTrabajador && elegido.dni.replaceAll(RegExp(r'\D'), '').length < 6) {
+    final n = relevo ? 1 : elegido.cantidad;
+    if (n < 1) return;
+    if (pideTrabajador && elegido.dni.trim().length < 6) return;
+    if (relevo && (elegido.dni.trim().length < 6 || elegido.dniEntra.trim().length < 6)) {
       return;
     }
+    if (relevo && elegido.dni.trim() == elegido.dniEntra.trim()) return;
     insumo = elegido.item;
-    final item = operacion == 'CONSUMO'
-        ? '${insumo['id']}'
-        : '${insumo['codigo'] ?? insumo['id'] ?? 2}';
-    if (rechazoAlmacen(_lineas, operacion: operacion, item: item, cantidad: n.toDouble()) !=
+    final categoria = '${insumo['categoria'] ?? _categoriaDe(operacion)}';
+    final item = categoria == 'UNIFORME'
+        ? '${insumo['codigo'] ?? insumo['item'] ?? 2}'
+        : '${insumo['id'] ?? insumo['insumo_id'] ?? insumo['item']}';
+    if (rechazoAlmacen(
+          _lineas,
+          operacion: operacion,
+          item: item,
+          cantidad: n.toDouble(),
+          categoria: categoria,
+        ) !=
         null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sin stock')));
       return;
@@ -189,26 +285,81 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
       'granja': _granja,
       'fecha': DateFormat('yyyy-MM-dd').format(DateTime.now()),
       'operacion': operacion,
+      'categoria': categoria,
       'item': item,
-      'insumo_id': operacion == 'CONSUMO' ? insumo['id'] : 0,
-      'ropa_tipo': operacion == 'CONSUMO' ? 0 : item,
+      'insumo_id': categoria == 'UNIFORME' ? 0 : insumo['id'] ?? insumo['insumo_id'],
+      'ropa_tipo': categoria == 'UNIFORME' ? item : 0,
       'nombre_insumo': insumo['nombre'] ?? '',
       'cantidad': n,
-      'dni': elegido.dni.replaceAll(RegExp(r'\D'), ''),
+      'dni': elegido.dni.trim(),
+      'personal_id': elegido.personalId,
+      'dni_sale': relevo ? elegido.dni.trim() : '',
+      'personal_id_sale': relevo ? elegido.personalId : 0,
+      'dni_entra': relevo ? elegido.dniEntra.trim() : '',
+      'personal_id_entra': relevo ? elegido.personalIdEntra : 0,
       'origen': 'app',
     });
     await cola.sincronizar();
     await _cargar();
   }
 
+  List<Map<String, dynamic>> _itemsDe(String operacion) {
+    final ropa = [
+      for (final r in _ropaTipos)
+        {
+          'codigo': r['codigo'],
+          'nombre': r['nombre'],
+          'categoria': 'UNIFORME',
+        },
+    ];
+    final imps = [
+      for (final i in _implementos)
+        {...i, 'categoria': 'IMPLEMENTO', 'id': i['insumo_id'] ?? i['id'] ?? i['item']},
+    ];
+    final ins = [
+      for (final i in _insumos)
+        {...i, 'categoria': 'INSUMO', 'id': i['insumo_id'] ?? i['id'] ?? i['item']},
+    ];
+    switch (operacion) {
+      case 'CONSUMO':
+        return ins;
+      case 'LAVADO':
+      case 'RELEVO':
+        return ropa;
+      case 'ENTREGA':
+      case 'DEVOLUCION':
+        return [...ropa, ...imps];
+      default:
+        return [...ropa, ...imps, ...ins];
+    }
+  }
+
+  String _categoriaDe(String operacion) {
+    if (operacion == 'CONSUMO') return 'INSUMO';
+    if (operacion == 'LAVADO' || operacion == 'RELEVO') return 'UNIFORME';
+    return '';
+  }
+
+  String _etiquetaItem(String op) {
+    if (op == 'CONSUMO') return 'Insumo';
+    if (op == 'LAVADO') return 'Uniforme';
+    return 'Ítem';
+  }
+
   String _titulo(String op) {
     switch (op) {
+      case 'ENVIO':
+        return 'Envío';
+      case 'SI':
+        return 'Saldo inicial';
       case 'CONSUMO':
         return 'Consumo';
       case 'ENTREGA':
         return 'Entrega';
-      case 'RECEPCION':
-        return 'Recepción';
+      case 'DEVOLUCION':
+        return 'Devolución';
+      case 'RELEVO':
+        return 'Relevo';
       default:
         return 'Lavado';
     }
@@ -219,21 +370,7 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
     return n.toStringAsFixed(2);
   }
 
-  String _alm(String a) {
-    if (a == 'LAVADERO') return 'Lavadero';
-    if (a == 'INSUMOS') return 'Insumos';
-    return 'Limpio';
-  }
-
-  List<AlmacenLinea> get _ropaLineas => _lineas.where((l) {
-        if (l.frente == 'INSUMOS') return false;
-        final proceso = l.item == '2';
-        final tiene = l.si != 0 || l.e != 0 || l.s != 0;
-        return proceso || tiene;
-      }).toList();
-
-  List<AlmacenLinea> get _insumoLineas =>
-      _lineas.where((l) => l.frente == 'INSUMOS').toList();
+  double _stock(String frente, String item) => stockAlmacen(_lineas, frente, item);
 
   @override
   Widget build(BuildContext context) {
@@ -266,37 +403,26 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
                   const SizedBox(height: 14),
                   _tarjeta(
                     icono: Icons.checkroom_outlined,
-                    titulo: 'Ropa',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _tabla(_ropaLineas),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _boton('Entrega', 'ENTREGA', Icons.output_rounded),
-                            _boton('Recepción', 'RECEPCION', Icons.keyboard_return_rounded),
-                            _boton('Lavado', 'LAVADO', Icons.local_laundry_service_outlined),
-                          ],
-                        ),
-                      ],
-                    ),
+                    titulo: 'Uniformes',
+                    child: _stockUniformes(),
+                  ),
+                  const SizedBox(height: 12),
+                  _tarjeta(
+                    icono: Icons.construction_outlined,
+                    titulo: 'Implementos',
+                    child: _stockItems('IMPLEMENTOS'),
                   ),
                   const SizedBox(height: 12),
                   _tarjeta(
                     icono: Icons.science_outlined,
                     titulo: 'Insumos',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _tabla(_insumoLineas),
-                        const SizedBox(height: 10),
-                        _boton('Consumo', 'CONSUMO', Icons.remove_circle_outline),
-                      ],
-                    ),
+                    child: _stockItems('INSUMOS'),
                   ),
+                  const SizedBox(height: 16),
+                  for (final op in _acciones) ...[
+                    _boton(_titulo(op), op, _icono(op)),
+                    const SizedBox(height: 8),
+                  ],
                 ],
               ),
             ),
@@ -309,7 +435,7 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
     required Widget child,
   }) {
     return Card(
-      color: _verdeSuave,
+      color: Colors.white,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -342,66 +468,86 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
     );
   }
 
-  Widget _tabla(List<AlmacenLinea> lineas) {
-    final grupos = <String, List<AlmacenLinea>>{};
-    for (final l in lineas) {
-      grupos.putIfAbsent(l.nombre.isEmpty ? l.item : l.nombre, () => []).add(l);
+  Widget _stockUniformes() {
+    final nombres = <String, String>{'1': 'Ropa de transito', '2': 'Ropa para el proceso'};
+    for (final r in _ropaTipos) {
+      nombres['${r['codigo']}'] = '${r['nombre']}';
     }
-    if (grupos.isEmpty) return const SizedBox.shrink();
+    final items = <String>{'2'};
+    for (final l in _lineas) {
+      if (l.frente == 'LIMPIO' || l.frente == 'LAVADERO') items.add(l.item);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final entry in grupos.entries) ...[
+        for (final item in items) ...[
           Text(
-            entry.key,
+            nombres[item] ?? item,
             style: const TextStyle(fontWeight: FontWeight.w700, color: _verde),
           ),
-          const SizedBox(height: 4),
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(1.5),
-              1: FlexColumnWidth(),
-              2: FlexColumnWidth(),
-              3: FlexColumnWidth(),
-              4: FlexColumnWidth(),
-            },
-            children: [
-              const TableRow(
-                children: [
-                  Text(''),
-                  Text('SI', style: TextStyle(fontWeight: FontWeight.w700)),
-                  Text('E', style: TextStyle(fontWeight: FontWeight.w700)),
-                  Text('S', style: TextStyle(fontWeight: FontWeight.w700)),
-                  Text('Stock', style: TextStyle(fontWeight: FontWeight.w700)),
-                ],
-              ),
-              for (final l in entry.value)
-                TableRow(
-                  children: [
-                    Text(_alm(l.frente)),
-                    Text(_fmt(l.si)),
-                    Text(_fmt(l.e)),
-                    Text(_fmt(l.s)),
-                    Text(_fmt(l.stock)),
-                  ],
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
+          _lineaStock('Limpio', _stock('LIMPIO', item)),
+          _lineaStock('Lavadero', _stock('LAVADERO', item)),
+          const SizedBox(height: 6),
         ],
       ],
     );
   }
 
-  Widget _boton(String texto, String op, IconData icono) {
-    return FilledButton.icon(
-      onPressed: _granja.isEmpty ? null : () => _operacion(op),
-      style: FilledButton.styleFrom(
-        backgroundColor: _verde,
-        visualDensity: VisualDensity.compact,
+  Widget _stockItems(String frente) {
+    final lineas = _lineas.where((l) => l.frente == frente).toList();
+    if (lineas.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: [
+        for (final l in lineas) _lineaStock(l.nombre.isEmpty ? l.item : l.nombre, l.stock),
+      ],
+    );
+  }
+
+  Widget _lineaStock(String nombre, double stock) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(child: Text(nombre)),
+          Text(_fmt(stock), style: const TextStyle(fontWeight: FontWeight.w800, color: _verde)),
+        ],
       ),
-      icon: Icon(icono, size: 18),
-      label: Text(texto),
+    );
+  }
+
+  IconData _icono(String op) {
+    switch (op) {
+      case 'ENVIO':
+        return Icons.local_shipping_outlined;
+      case 'SI':
+        return Icons.playlist_add_rounded;
+      case 'CONSUMO':
+        return Icons.remove_circle_outline;
+      case 'ENTREGA':
+        return Icons.output_rounded;
+      case 'DEVOLUCION':
+        return Icons.keyboard_return_rounded;
+      case 'RELEVO':
+        return Icons.swap_horiz_rounded;
+      default:
+        return Icons.local_laundry_service_outlined;
+    }
+  }
+
+  Widget _boton(String texto, String op, IconData icono) {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: FilledButton.icon(
+        onPressed: _granja.isEmpty ? null : () => _operacion(op),
+        style: FilledButton.styleFrom(
+          backgroundColor: _verde,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+        icon: Icon(icono, size: 22),
+        label: Text(texto),
+      ),
     );
   }
 }
@@ -411,11 +557,17 @@ class AlmacenDialogoResult {
     required this.item,
     required this.cantidad,
     required this.dni,
+    this.personalId = 0,
+    this.dniEntra = '',
+    this.personalIdEntra = 0,
   });
 
   final Map<String, dynamic> item;
   final int cantidad;
   final String dni;
+  final int personalId;
+  final String dniEntra;
+  final int personalIdEntra;
 }
 
 /// Formulario de un movimiento. El contenido hace scroll y respeta el teclado.
@@ -430,6 +582,9 @@ class AlmacenMovimientoDialog extends StatefulWidget {
     required this.trabajadores,
     required this.dniInicial,
     required this.nombreInicial,
+    this.pideEntrante = false,
+    this.pideCantidad = true,
+    this.eligeItem = true,
   });
 
   final String titulo;
@@ -437,7 +592,10 @@ class AlmacenMovimientoDialog extends StatefulWidget {
   final List<Map<String, dynamic>> items;
   final int? inicial;
   final bool pideTrabajador;
-  final List<({String dni, String nombre})> trabajadores;
+  final bool pideEntrante;
+  final bool pideCantidad;
+  final bool eligeItem;
+  final List<({String dni, String nombre, int id})> trabajadores;
   final String dniInicial;
   final String nombreInicial;
 
@@ -450,6 +608,10 @@ class _AlmacenMovimientoDialogState extends State<AlmacenMovimientoDialog> {
   late final TextEditingController _cant;
   late final TextEditingController _dni;
   late String _nombre;
+  int _personalId = 0;
+  String _dniEntra = '';
+  String _nombreEntra = '';
+  int _personalIdEntra = 0;
 
   @override
   void initState() {
@@ -463,6 +625,9 @@ class _AlmacenMovimientoDialogState extends State<AlmacenMovimientoDialog> {
     _cant = TextEditingController(text: '1');
     _dni = TextEditingController(text: widget.dniInicial);
     _nombre = widget.nombreInicial;
+    if (widget.trabajadores.length == 1) {
+      _personalId = widget.trabajadores.first.id;
+    }
   }
 
   @override
@@ -475,11 +640,36 @@ class _AlmacenMovimientoDialogState extends State<AlmacenMovimientoDialog> {
   int? _clave(Map<String, dynamic> m) =>
       int.tryParse('${m['id'] ?? m['codigo']}');
 
+  Future<({String dni, String nombre, int id})?> _elegirPersona() {
+    return showModalBottomSheet<({String dni, String nombre, int id})>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final t in widget.trabajadores)
+              ListTile(
+                title: Text(t.nombre.isEmpty ? t.dni : '${t.dni} · ${t.nombre}'),
+                onTap: () => Navigator.pop(sheet, t),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _guardar() {
     final n = int.tryParse(_cant.text.trim());
     if (n == null || n < 1) return;
     Navigator.of(context).pop(
-      AlmacenDialogoResult(item: _item, cantidad: n, dni: _dni.text),
+      AlmacenDialogoResult(
+        item: _item,
+        cantidad: n,
+        dni: _dni.text,
+        personalId: _personalId,
+        dniEntra: _dniEntra,
+        personalIdEntra: _personalIdEntra,
+      ),
     );
   }
 
@@ -494,6 +684,7 @@ class _AlmacenMovimientoDialogState extends State<AlmacenMovimientoDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+            if (widget.eligeItem)
             DropdownButtonFormField<int>(
               isExpanded: true,
               initialValue: _clave(_item),
@@ -518,7 +709,8 @@ class _AlmacenMovimientoDialogState extends State<AlmacenMovimientoDialog> {
                 }
               },
             ),
-            const SizedBox(height: 8),
+            if (widget.eligeItem) const SizedBox(height: 8),
+            if (widget.pideCantidad)
             TextField(
               controller: _cant,
               keyboardType: TextInputType.number,
@@ -529,43 +721,49 @@ class _AlmacenMovimientoDialogState extends State<AlmacenMovimientoDialog> {
                 border: OutlineInputBorder(),
               ),
             ),
-            if (widget.pideTrabajador) ...[
+            if (widget.pideTrabajador || widget.pideEntrante) ...[
               const SizedBox(height: 8),
               EvidenciaSelectField(
-                label: 'Trabajador',
+                label: widget.pideEntrante ? 'Saliente' : 'Trabajador',
                 value: etiqueta,
                 placeholder: 'DNI',
                 icon: Icons.person_outline,
+                iconColor: _verde,
                 onTap: widget.trabajadores.isEmpty
                     ? null
                     : () async {
-                        final e = await showModalBottomSheet<
-                            ({String dni, String nombre})>(
-                          context: context,
-                          builder: (sheet) => SafeArea(
-                            child: ListView(
-                              shrinkWrap: true,
-                              children: [
-                                for (final t in widget.trabajadores)
-                                  ListTile(
-                                    title: Text(
-                                      t.nombre.isEmpty
-                                          ? t.dni
-                                          : '${t.dni} · ${t.nombre}',
-                                    ),
-                                    onTap: () => Navigator.pop(sheet, t),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
+                        final e = await _elegirPersona();
                         if (e == null) return;
                         setState(() {
                           _dni.text = e.dni;
                           _nombre = e.nombre;
+                          _personalId = e.id;
                         });
                       },
               ),
+              if (widget.pideEntrante) ...[
+                const SizedBox(height: 8),
+                EvidenciaSelectField(
+                  label: 'Entrante',
+                  value: _dniEntra.isEmpty
+                      ? ''
+                      : (_nombreEntra.isEmpty ? _dniEntra : '$_dniEntra · $_nombreEntra'),
+                  placeholder: 'DNI',
+                  icon: Icons.person_outline,
+                  iconColor: _verde,
+                  onTap: widget.trabajadores.isEmpty
+                      ? null
+                      : () async {
+                          final e = await _elegirPersona();
+                          if (e == null) return;
+                          setState(() {
+                            _dniEntra = e.dni;
+                            _nombreEntra = e.nombre;
+                            _personalIdEntra = e.id;
+                          });
+                        },
+                ),
+              ],
               const SizedBox(height: 8),
               TextField(
                 controller: _dni,
@@ -578,7 +776,10 @@ class _AlmacenMovimientoDialogState extends State<AlmacenMovimientoDialog> {
                 ),
                 onChanged: (v) {
                   for (final t in widget.trabajadores) {
-                    if (t.dni == v) _nombre = t.nombre;
+                    if (t.dni == v) {
+                      _nombre = t.nombre;
+                      _personalId = t.id;
+                    }
                   }
                 },
               ),
