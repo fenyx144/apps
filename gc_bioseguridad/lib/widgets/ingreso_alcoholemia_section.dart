@@ -216,7 +216,7 @@ class _FilaAlcoholemiaTile extends StatefulWidget {
   State<_FilaAlcoholemiaTile> createState() => _FilaAlcoholemiaTileState();
 }
 
-const _verdeAlc = Color(0xFF1F7A4D);
+const _verdeAlc = Color(0xFF0FA3B1);
 
 class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
   late final TextEditingController _valor;

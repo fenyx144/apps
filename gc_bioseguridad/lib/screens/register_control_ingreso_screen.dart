@@ -3689,38 +3689,6 @@ class _RegisterControlIngresoScreenState
     );
   }
 
-  Widget _botonConfirmarIngreso() {
-    return Material(
-      color: Colors.white,
-      elevation: 8,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: _verdeIngreso,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              onPressed: _guardar,
-              child: const Text('Confirmar ingreso'),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final hayDocumento =
@@ -3738,70 +3706,60 @@ class _RegisterControlIngresoScreenState
       body: Theme(
         data: _temaCamposClaros(Theme.of(context)),
         child: DismissKeyboardScope(
-          child: Column(
-            children: [
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _refrescar,
-                  color: _verdeIngreso,
-                  child: SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      16,
-                      16,
-                      _puedeConfirmarEnPantalla
-                          ? 20
-                          : 32 + MediaQuery.viewPaddingOf(context).bottom,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const BioCatalogoAviso(),
-                        _avisoConfigurarMisGranjas(context),
-                        _buildFaseIdentificar(context),
-                        if (hayDocumento) ...[
-                          const SizedBox(height: _sepBloque),
-                          _buildAlcoholemiaIngreso(),
-                        ],
-                        if (_hayElementosIngreso) ...[
-                          const SizedBox(height: _sepBloque),
-                          if (_hayVisitasPorElegir ||
-                              (_algunEscaneadoPlanificado &&
-                                  !_grupoIngresoNoPlanificado))
-                            _buildSeccionFichaPlanificada(context)
-                          else if (_grupoIngresoNoPlanificado)
-                            _buildFormularioNoPlanificado(context)
-                          else if (!_planificacionResueltaParaGrupo)
-                            const _TarjetaSeccion(
-                              titulo: 'Ficha',
-                              icono: Icons.assignment_outlined,
-                              children: [
-                                Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 12),
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      color: _verdeIngreso,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
-                        if (_hayRegresos) ...[
-                          const SizedBox(height: _sepBloque),
-                          _buildSeccionRegreso(context),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
+          child: RefreshIndicator(
+            onRefresh: _refrescar,
+            color: _verdeIngreso,
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                32 + MediaQuery.viewPaddingOf(context).bottom,
               ),
-              if (_puedeConfirmarEnPantalla) _botonConfirmarIngreso(),
-            ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const BioCatalogoAviso(),
+                  _avisoConfigurarMisGranjas(context),
+                  _buildFaseIdentificar(context),
+                  if (hayDocumento) ...[
+                    const SizedBox(height: _sepBloque),
+                    _buildAlcoholemiaIngreso(),
+                  ],
+                  if (_hayElementosIngreso) ...[
+                    const SizedBox(height: _sepBloque),
+                    if (_hayVisitasPorElegir ||
+                        (_algunEscaneadoPlanificado &&
+                            !_grupoIngresoNoPlanificado))
+                      _buildSeccionFichaPlanificada(context)
+                    else if (_grupoIngresoNoPlanificado)
+                      _buildFormularioNoPlanificado(context)
+                    else if (!_planificacionResueltaParaGrupo)
+                      const _TarjetaSeccion(
+                        titulo: 'Ficha',
+                        icono: Icons.assignment_outlined,
+                        children: [
+                          Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: _verdeIngreso,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                  if (_hayRegresos) ...[
+                    const SizedBox(height: _sepBloque),
+                    _buildSeccionRegreso(context),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -4697,7 +4655,7 @@ class _AvisoPlan extends StatelessWidget {
   }
 }
 
-const _verdeIngreso = Color(0xFF1F7A4D);
+const _verdeIngreso = Color(0xFF0FA3B1);
 
 /// Campo grande: escribir confirma a mano; los iconos disparan cámara o escáner.
 class _EntradaIdentificar extends StatelessWidget {
