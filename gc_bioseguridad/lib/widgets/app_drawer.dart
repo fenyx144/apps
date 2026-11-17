@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../screens/login_screen.dart';
 import '../screens/mi_granja_screen.dart';
 import '../screens/reports_screen.dart';
+import '../services/almacen_cola.dart';
 import '../services/api_service.dart';
 import '../services/app_version_service.dart';
 import '../services/catalog_service.dart';
@@ -50,7 +51,8 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   late final Set<String> _abiertos = _gruposIniciales();
 
   /// Submenú Almacén (consumo / relevo); el título «Almacén» va en el encabezado.
-  late bool _almacenAbierto = _almacenInicialAbierto();
+  // El almacén es una sola sección. El submenú consumo/relevo queda comentado.
+  // late bool _almacenAbierto = _almacenInicialAbierto();
 
   @override
   void initState() {
@@ -206,7 +208,8 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
     // Todos los registros del día (pendientes y ya marcados synced): el servidor
     // deduplica por UUID (`id`) y confirma si las imágenes llegaron completas.
     final records = storage.getMyRecordsByDate(date);
-    if (records.isEmpty) {
+    final cola = AlmacenCola(storage);
+    if (records.isEmpty && cola.pendientes == 0) {
       showInfoToast(hostContext, 'No hay registros para esa fecha.');
       return;
     }
@@ -239,6 +242,10 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
           fail++;
         }
       }
+      final antesAlm = cola.pendientes;
+      await cola.sincronizar();
+      ok += antesAlm - cola.pendientes;
+      if (antesAlm > 0 && cola.pendientes > 0) fail++;
       if (ok > 0) {
         await storage.setLastSyncDate();
       }
@@ -513,7 +520,8 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final isDark = context.isAppDark;
     final storage = context.watch<StorageService>();
-    final pending = storage.getMyPendingCount();
+    final pending =
+        storage.getMyPendingCount() + AlmacenCola(storage).pendientes;
     final lastDownloadDate = storage.lastDownloadDateDisplay;
     final lastUploadDate = storage.lastSyncDateDisplay;
     final catalogStale = storage.needsCatalogUpdate;
@@ -982,21 +990,22 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
     return {};
   }
 
-  bool _almacenInicialAbierto() {
-    final ruta = Get.currentRoute;
-    return ruta.contains(BioNavigation.rutas[BioEmpresaSecciones.consumo]!) ||
-        ruta.contains(BioNavigation.rutas[BioEmpresaSecciones.relevo]!);
-  }
+  // bool _almacenInicialAbierto() {
+  //   final ruta = Get.currentRoute;
+  //   return ruta.contains(BioNavigation.rutas[BioEmpresaSecciones.consumo]!) ||
+  //       ruta.contains(BioNavigation.rutas[BioEmpresaSecciones.relevo]!);
+  // }
 
-  int get _indiceBaseEmpresa =>
-      1 + bioNavTipos.fold<int>(0, (t, g) => t + g.secciones.length);
+  // int get _indiceBaseEmpresa =>
+  //     1 + bioNavTipos.fold<int>(0, (t, g) => t + g.secciones.length);
 
   List<Widget> _bloqueAlmacen(BuildContext context) {
     return [
       _EncabezadoAlmacen(
-        abierto: _almacenAbierto,
+        abierto: false,
+        desplegable: false,
         activoHome: _rutaActiva(BioNavigation.rutas[BioEmpresaSecciones.almacen]),
-        onToggle: () => setState(() => _almacenAbierto = !_almacenAbierto),
+        onToggle: () {},
         onIrHome: () {
           Navigator.pop(context);
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1009,32 +1018,10 @@ class _AppDrawerState extends State<AppDrawer> with TickerProviderStateMixin {
           });
         },
       ),
-      if (_almacenAbierto)
-        for (var i = 0; i < bioEmpresaNavSecciones.length; i++)
-          _animatedItem(
-            _indiceBaseEmpresa + i,
-            _DrawerItem(
-              icon: bioEmpresaNavSecciones[i].icon,
-              title: bioEmpresaNavSecciones[i].label,
-              gradient: AppColors.primaryGradient,
-              indent: true,
-              activo: _rutaActiva(
-                BioNavigation.rutas[bioEmpresaNavSecciones[i].id],
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  final sec = bioEmpresaNavSecciones[i].id;
-                  Get.to(
-                    () => BioNavigation.pantallaEmpresa(sec),
-                    routeName: BioNavigation.rutas[sec],
-                    transition: Transition.rightToLeft,
-                    duration: const Duration(milliseconds: 300),
-                  );
-                });
-              },
-            ),
-          ),
+      // Submenú anterior (consumo y relevo). Ahora todo vive en Almacén.
+      // if (_almacenAbierto)
+      //   for (var i = 0; i < bioEmpresaNavSecciones.length; i++)
+      //     _animatedItem(... consumo / relevo ...),
     ];
   }
 
@@ -1247,12 +1234,14 @@ class _EncabezadoAlmacen extends StatelessWidget {
     required this.activoHome,
     required this.onToggle,
     required this.onIrHome,
+    this.desplegable = true,
   });
 
   final bool abierto;
   final bool activoHome;
   final VoidCallback onToggle;
   final VoidCallback onIrHome;
+  final bool desplegable;
 
   @override
   Widget build(BuildContext context) {
@@ -1282,22 +1271,23 @@ class _EncabezadoAlmacen extends StatelessWidget {
                     ),
                   ),
                 ),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onToggle,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: AnimatedRotation(
-                      turns: abierto ? 0.25 : 0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Icon(
-                        Icons.chevron_right_rounded,
-                        size: 22,
-                        color: context.textThemeMuted,
+                if (desplegable)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onToggle,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: AnimatedRotation(
+                        turns: abierto ? 0.25 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          size: 22,
+                          color: context.textThemeMuted,
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

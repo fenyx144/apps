@@ -256,6 +256,13 @@ class StorageService with ChangeNotifier {
   /// Cantidad de pendientes visibles para el usuario actual.
   int getMyPendingCount() => getMyRecordsPendientes().length;
 
+  String? prefsString(String key) => _prefs.getString(key);
+
+  Future<void> setPrefsString(String key, String value) async {
+    await _prefs.setString(key, value);
+    notifyListeners();
+  }
+
   /// Registros del usuario actual para una fecha específica.
   List<Map<String, dynamic>> getMyRecordsByDate(DateTime date) {
     final dateStr =

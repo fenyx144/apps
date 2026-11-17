@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'api_service.dart';
 import 'app_version_service.dart';
 import 'avisos_ingreso_offline_service.dart';
-import 'bio_empresa_api.dart';
+import 'almacen_cola.dart';
 import 'catalog_service.dart';
 import 'nomina_proveedor_service.dart';
 import 'plan_visitas_service.dart';
@@ -166,17 +166,18 @@ class CatalogSyncService {
       bioCatalogosOk = await catalog.downloadCatalogosBioseguridad();
       if (bioCatalogosOk) {
         try {
-          final api = BioEmpresaApi();
-          if (await api.appConSesion()) {
-            final ctx = await api.get('/almacen/campo-context');
-            final data = ctx['data'];
-            if (data is Map && data['insumos'] is List) {
-              final items = (data['insumos'] as List)
+          // GRS ya no entrega insumos al tercero: no se consulta
+          // /almacen/campo-context (entregas pendientes de recepción).
+          // final ctx = await BioEmpresaApi().get('/almacen/campo-context');
+          final data = await AlmacenCola(storage).descargar('');
+          final items = data?['insumos'];
+          if (items is List) {
+            await catalog.mergeInsumosProveedor(
+              items
                   .whereType<Map>()
                   .map((e) => Map<String, dynamic>.from(e))
-                  .toList();
-              await catalog.mergeInsumosProveedor(items);
-            }
+                  .toList(),
+            );
           }
         } catch (_) {}
         await storage.setLastDownloadDate();

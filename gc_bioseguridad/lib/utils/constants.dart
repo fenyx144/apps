@@ -166,6 +166,8 @@ class AppConstants {
   static const String personalReferenciaEndpoint = '/get_personal_referencia_movil.php';
   static const String fotoPersonalEndpoint = '/foto_personal_bioseguridad_movil.php';
   static const String verificarRostroEndpoint = '/verificar_rostro_bioseguridad_movil.php';
+  static const String getAlmacenEndpoint = '/get_almacen_bioseguridad_movil.php';
+  static const String guardarAlmacenEndpoint = '/guardar_almacen_bioseguridad_movil.php';
   static const String keyPersonalReferencia = 'bio_personal_referencia';
   static const String guardarBioEndpoint = '/guardar_bioseguridad_movil.php';
   static const String actualizarBioEndpoint = '/actualizar_bioseguridad_movil.php';

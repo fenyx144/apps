@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
-import '../../services/bio_empresa_api.dart' show BioEmpresaApi, BioEmpresaApiException;
-import '../../utils/constants.dart' show AppColors, AppConstants;
+import '../../services/almacen_cola.dart';
+import '../../services/almacen_kardex.dart';
+import '../../services/catalog_service.dart';
+import '../../services/ingreso_presencia_service.dart';
+import '../../services/storage_service.dart';
+import '../../utils/constants.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/evidencia_select_field.dart';
+import '../../widgets/granja_campania_fields.dart';
 import '../../widgets/section_app_bar.dart';
-import 'bio_consumo_screen.dart';
-import 'bio_relevo_screen.dart';
 
 class BioAlmacenHomeScreen extends StatefulWidget {
   const BioAlmacenHomeScreen({super.key});
@@ -15,58 +23,277 @@ class BioAlmacenHomeScreen extends StatefulWidget {
 }
 
 class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
-  final _api = BioEmpresaApi();
+  String _granja = '';
+  String _granjaNombre = '';
   bool _loading = true;
-  String? _error;
-  List<dynamic> _entregas = [];
-  List<dynamic> _stock = [];
+  List<Map<String, dynamic>> _insumos = [];
+  List<AlmacenLinea> _lineas = [];
+  List<Map<String, dynamic>> _prestamos = [];
 
   @override
   void initState() {
     super.initState();
-    _cargar();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _cargar());
   }
 
   Future<void> _cargar() async {
+    final storage = context.read<StorageService>();
+    final sel = granjaDeTrabajoSeleccion(
+      storage,
+      fechaYmd: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+    );
+    final granja = _granja.isNotEmpty ? _granja : (sel?.granja ?? '');
+    final cola = AlmacenCola(storage);
+    final local = context.read<CatalogService>().insumosProveedor;
+    if (mounted) setState(() => _loading = true);
+    final net = granja.isEmpty ? null : await cola.descargar(granja);
+    final cache = net ?? (granja.isEmpty ? <String, dynamic>{} : cola.cacheDe(granja));
+    final insumos = _lista(cache['insumos']);
+    final kardex = _lista(cache['kardex']).map(AlmacenLinea.fromMap).toList();
+    if (!mounted) return;
     setState(() {
-      _loading = true;
-      _error = null;
+      _granja = granja;
+      _granjaNombre = _granja == sel?.granja
+          ? (sel?.granjaNombre ?? _granjaNombre)
+          : _granjaNombre;
+      _insumos = insumos.isNotEmpty ? insumos : local;
+      _lineas = aplicarAlmacen(kardex, cola.pendientesDe(granja));
+      _prestamos = _lista(cache['prestamos']);
+      _loading = false;
     });
-    try {
-      if (!await _api.appConSesion()) {
-        setState(() {
-          _loading = false;
-          _error = 'Inicie sesión en la app para usar almacén.';
-        });
-        return;
+  }
+
+  List<Map<String, dynamic>> _lista(dynamic raw) {
+    if (raw is! List) return [];
+    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  List<Map<String, dynamic>> get _uniformes => _insumos.where((i) {
+        return (i['categoria'] ?? '').toString().toUpperCase() == 'INDUMENTARIA';
+      }).toList();
+
+  List<({String dni, String nombre})> _trabajadores() {
+    final map = <String, String>{};
+    final storage = context.read<StorageService>();
+    for (final g in IngresoPresenciaService.gruposConPersonalDentro(
+      storage,
+      granja: _granja,
+    )) {
+      for (final p in g.dentro) {
+        if (p.dni.isNotEmpty) map[p.dni] = p.nombre;
       }
-      final ctx = await _api.get('/almacen/campo-context');
-      final data = ctx['data'] as Map<String, dynamic>;
-      setState(() {
-        _entregas = data['entregas_pendientes'] as List<dynamic>? ?? [];
-        _stock = data['stock'] as List<dynamic>? ?? [];
-        _loading = false;
-      });
-    } on BioEmpresaApiException catch (e) {
-      setState(() {
-        _loading = false;
-        _error = e.code == 'unauthorized'
-            ? 'Sin acceso a la API bioseguridad (${AppConstants.bioEmpresaApiBase}).\n${e.message}'
-            : '${e.message}\n\nURL: ${AppConstants.bioEmpresaApiBase}';
-      });
-    } catch (e) {
-      setState(() {
-        _loading = false;
-        _error =
-            'No se pudo conectar con ${AppConstants.bioEmpresaApiBase}.\n'
-            'Revise red y que el servicio esté en el mismo servidor que el login.\n$e';
-      });
+    }
+    for (final p in _prestamos) {
+      final dni = (p['dni'] ?? '').toString();
+      if (dni.isEmpty) continue;
+      map.putIfAbsent(dni, () => (p['nombre'] ?? '').toString());
+    }
+    final lista = map.entries.map((e) => (dni: e.key, nombre: e.value)).toList();
+    lista.sort((a, b) => a.dni.compareTo(b.dni));
+    return lista;
+  }
+
+  Future<void> _elegirGranja() async {
+    final storage = context.read<StorageService>();
+    final fecha = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final opciones = storage.getGranjasTrabajo();
+    if (opciones.isEmpty) return;
+    final elegida = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final g in opciones)
+              ListTile(
+                title: Text(g),
+                onTap: () => Navigator.pop(ctx, g),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (elegida == null || !mounted) return;
+    final sel = granjaSeleccionDe(storage, elegida, fechaYmd: fecha);
+    setState(() {
+      _granja = elegida;
+      _granjaNombre = sel?.granjaNombre ?? '';
+    });
+    await _cargar();
+  }
+
+  Future<void> _operacion(String operacion) async {
+    if (_granja.isEmpty) return;
+    final pideTrabajador = operacion == 'ENTREGA' || operacion == 'DEVOLUCION';
+    final catalogo = operacion == 'CONSUMO' ? _insumos : _uniformes;
+    final items = catalogo.isNotEmpty ? catalogo : _insumos;
+    if (items.isEmpty) return;
+    final trabajadores = _trabajadores();
+    var insumo = items.first;
+    var dni = trabajadores.length == 1 ? trabajadores.first.dni : '';
+    var nombre = trabajadores.length == 1 ? trabajadores.first.nombre : '';
+    final cantCtrl = TextEditingController(text: '1');
+    final dniCtrl = TextEditingController(text: dni);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final etiqueta = dni.isEmpty
+                ? ''
+                : (nombre.isEmpty ? dni : '$dni · $nombre');
+            return AlertDialog(
+              title: Text(_titulo(operacion)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<int>(
+                    initialValue: int.tryParse('${insumo['id']}'),
+                    decoration: const InputDecoration(labelText: 'Insumo'),
+                    items: [
+                      for (final i in items)
+                        DropdownMenuItem(
+                          value: int.tryParse('${i['id']}'),
+                          child: Text((i['nombre'] ?? '').toString()),
+                        ),
+                    ],
+                    onChanged: (v) {
+                      Map<String, dynamic>? sel;
+                      for (final e in items) {
+                        if (int.tryParse('${e['id']}') == v) sel = e;
+                      }
+                      if (sel != null) setLocal(() => insumo = sel!);
+                    },
+                  ),
+                  TextField(
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(labelText: 'Cantidad'),
+                    controller: cantCtrl,
+                  ),
+                  if (pideTrabajador) ...[
+                    const SizedBox(height: 8),
+                    EvidenciaSelectField(
+                      label: 'Trabajador',
+                      value: etiqueta,
+                      placeholder: 'DNI',
+                      icon: Icons.person_outline,
+                      onTap: trabajadores.isEmpty
+                          ? null
+                          : () async {
+                              final e = await showModalBottomSheet<
+                                  ({String dni, String nombre})>(
+                                context: ctx,
+                                builder: (sheet) => SafeArea(
+                                  child: ListView(
+                                    shrinkWrap: true,
+                                    children: [
+                                      for (final t in trabajadores)
+                                        ListTile(
+                                          title: Text(
+                                            t.nombre.isEmpty
+                                                ? t.dni
+                                                : '${t.dni} · ${t.nombre}',
+                                          ),
+                                          onTap: () => Navigator.pop(sheet, t),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                              if (e != null) {
+                                setLocal(() {
+                                  dni = e.dni;
+                                  nombre = e.nombre;
+                                });
+                              }
+                            },
+                    ),
+                    TextField(
+                      decoration: const InputDecoration(labelText: 'DNI'),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      controller: dniCtrl,
+                      onChanged: (v) {
+                        dni = v;
+                        for (final t in trabajadores) {
+                          if (t.dni == v) nombre = t.nombre;
+                        }
+                      },
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cerrar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    final n = int.tryParse(cantCtrl.text.trim());
+    cantCtrl.dispose();
+    dniCtrl.dispose();
+    if (ok != true || !mounted) return;
+    if (n == null || n < 1) return;
+    if (pideTrabajador && dni.replaceAll(RegExp(r'\D'), '').length < 6) return;
+    final storage = context.read<StorageService>();
+    final cola = AlmacenCola(storage);
+    await cola.encolar({
+      'uuid': const Uuid().v4(),
+      'granja': _granja,
+      'fecha': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+      'operacion': operacion,
+      'insumo_id': insumo['id'],
+      'codigo': insumo['codigo'] ?? '',
+      'nombre_insumo': insumo['nombre'] ?? '',
+      'categoria': insumo['categoria'] ?? '',
+      'unidad': insumo['unidad'] ?? '',
+      'cantidad': n,
+      'dni': dni.replaceAll(RegExp(r'\D'), ''),
+      'nombre': nombre,
+    });
+    await cola.sincronizar();
+    await _cargar();
+  }
+
+  String _titulo(String op) {
+    switch (op) {
+      case 'CONSUMO':
+        return 'Consumo';
+      case 'ENTREGA':
+        return 'Entrega';
+      case 'DEVOLUCION':
+        return 'Recepción';
+      default:
+        return 'Lavado';
     }
   }
 
+  String _fmt(double n) {
+    if (n == n.roundToDouble()) return n.toInt().toString();
+    return n.toStringAsFixed(2);
+  }
+
+  String _alm(String a) => a == 'LAVADERO' ? 'Lavadero' : 'Limpio';
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final porInsumo = <String, List<AlmacenLinea>>{};
+    for (final l in _lineas) {
+      final esUniforme = l.categoria.toUpperCase() == 'INDUMENTARIA';
+      final tiene = l.si != 0 || l.e != 0 || l.s != 0;
+      if (!esUniforme && !tiene) continue;
+      porInsumo.putIfAbsent(l.nombre.isEmpty ? l.codigo : l.nombre, () => []).add(l);
+    }
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: const SectionAppBar(
@@ -75,89 +302,104 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+          : RefreshIndicator(
+              onRefresh: _cargar,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  EvidenciaSelectField(
+                    label: 'Granja',
+                    value: _granjaNombre.isEmpty ? _granja : '$_granja · $_granjaNombre',
+                    placeholder: 'Granja',
+                    icon: Icons.agriculture_outlined,
+                    onTap: _elegirGranja,
+                  ),
+                  const SizedBox(height: 12),
+                  for (final entry in porInsumo.entries) ...[
+                    Text(entry.key, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Table(
+                      columnWidths: const {
+                        0: FlexColumnWidth(1.4),
+                        1: FlexColumnWidth(),
+                        2: FlexColumnWidth(),
+                        3: FlexColumnWidth(),
+                        4: FlexColumnWidth(),
+                      },
                       children: [
-                        Icon(Icons.cloud_off_outlined,
-                            size: 48, color: theme.colorScheme.error),
-                        const SizedBox(height: 16),
-                        Text(_error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: _cargar,
-                          child: const Text('Reintentar'),
+                        const TableRow(
+                          children: [
+                            Text(''),
+                            Text('SI'),
+                            Text('E'),
+                            Text('S'),
+                            Text('Stock'),
+                          ],
                         ),
+                        for (final l in entry.value)
+                          TableRow(
+                            children: [
+                              Text(_alm(l.almacen)),
+                              Text(_fmt(l.si)),
+                              Text(_fmt(l.e)),
+                              Text(_fmt(l.s)),
+                              Text(_fmt(l.stock)),
+                            ],
+                          ),
                       ],
                     ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _cargar,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
+                    const SizedBox(height: 12),
+                  ],
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      Text('Entregas pendientes (${_entregas.length})',
-                          style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      if (_entregas.isEmpty)
-                        const Text('No hay entregas pendientes de recepción.'),
-                      ..._entregas.take(20).map((e) {
-                        final m = e as Map<String, dynamic>;
-                        return Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.local_shipping_outlined),
-                            title: Text('Entrega #${m['id']} · ${m['fecha']}'),
-                            subtitle: Text((m['observacion'] ?? '').toString()),
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 16),
-                      Text('Stock (${_stock.length} líneas)',
-                          style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      ..._stock.take(30).map((s) {
-                        final m = s as Map<String, dynamic>;
-                        return ListTile(
-                          dense: true,
-                          title: Text('${m['insumo_nombre']} (${m['insumo_codigo']})'),
-                          trailing: Text('${m['stock']} ${m['unidad']}'),
-                        );
-                      }),
-                      const SizedBox(height: 24),
-                      FilledButton.icon(
-                        onPressed: () async {
-                          final ok = await Navigator.of(context).push<bool>(
-                            MaterialPageRoute<bool>(
-                              builder: (_) => const BioConsumoScreen(),
-                            ),
-                          );
-                          if (ok == true) _cargar();
-                        },
-                        icon: const Icon(Icons.output_rounded),
-                        label: const Text('Registrar consumo'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const BioRelevoScreen(),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.swap_horiz_rounded),
-                        label: const Text('Relevo de turno'),
-                      ),
+                      _boton('Consumo', 'CONSUMO'),
+                      _boton('Entrega', 'ENTREGA'),
+                      _boton('Recepción', 'DEVOLUCION'),
+                      _boton('Lavado', 'LAVADO'),
                     ],
                   ),
-                ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _boton(String texto, String op) {
+    return FilledButton(
+      onPressed: _granja.isEmpty ? null : () => _operacion(op),
+      style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+      child: Text(texto),
     );
   }
 }
+
+// Recepción de entregas GRS → tercero. GRS ya no envía insumos ni indumentaria.
+// Se deja el flujo anterior comentado, sin borrarlo.
+//
+// class _RecepcionGrs {
+//   List<dynamic> entregas = [];
+//   Future<void> cargar(BioEmpresaApi api) async {
+//     final ctx = await api.get('/almacen/campo-context');
+//     final data = ctx['data'] as Map<String, dynamic>;
+//     entregas = data['entregas_pendientes'] as List<dynamic>? ?? [];
+//   }
+//   Widget lista() {
+//     return Column(
+//       children: [
+//         Text('Entregas pendientes (${entregas.length})'),
+//         if (entregas.isEmpty)
+//           const Text('No hay entregas pendientes de recepción.'),
+//         ...entregas.take(20).map((e) {
+//           final m = e as Map<String, dynamic>;
+//           return ListTile(
+//             leading: const Icon(Icons.local_shipping_outlined),
+//             title: Text('Entrega #${m['id']} · ${m['fecha']}'),
+//             subtitle: Text((m['observacion'] ?? '').toString()),
+//           );
+//         }),
+//       ],
+//     );
+//   }
+// }
