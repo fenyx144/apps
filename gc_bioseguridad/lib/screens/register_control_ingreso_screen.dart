@@ -2116,12 +2116,15 @@ class _RegisterControlIngresoScreenState
   }
 
   Future<VerificacionFacialResult?> _resolverRostro(RostroCaptura cap) async {
-    if (cap.manual || cap.rgb == null) return dniManualFacial(context);
-    final close = showChickenLoadingDialog(context, '');
+    if (cap.manual || cap.jpeg == null || cap.jpeg!.length < 32) {
+      debugPrint('[BioVerif] sin jpeg, DNI manual');
+      return dniManualFacial(context);
+    }
+    final close = showChickenLoadingDialog(context, 'Procesando...');
     await WidgetsBinding.instance.endOfFrame;
     VerificacionFacialResult? reconocido;
     try {
-      final jpeg = jpegRostro(cap.rgb!, cap.ancho, cap.alto);
+      final jpeg = cap.jpeg!;
       if (jpeg.length >= 32) {
         final res = await ApiService()
             .verificarRostro(jpeg: jpeg)
@@ -2130,6 +2133,10 @@ class _RegisterControlIngresoScreenState
         final map =
             data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
         final dni = (map['dni'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+        debugPrint(
+          '[BioVerif] motivo=${map['motivo']} verificado=${map['verificado']} '
+          'dni=$dni ${res['message']}',
+        );
         if (res['success'] == true && map['verificado'] == true && dni.isNotEmpty) {
           reconocido = VerificacionFacialResult(
             dni: dni,

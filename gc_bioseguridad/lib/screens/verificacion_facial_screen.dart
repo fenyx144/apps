@@ -25,19 +25,15 @@ class VerificacionFacialResult {
   final bool verificado;
 }
 
-/// Foto ya recortada, o pedido de DNI porque no hubo cámara.
+/// JPEG ya codificado con la cámara abierta, o pedido de DNI porque no hubo cámara.
 class RostroCaptura {
-  const RostroCaptura.foto(this.rgb, this.ancho, this.alto) : manual = false;
+  const RostroCaptura.foto(this.jpeg) : manual = false;
 
   const RostroCaptura.manual()
-      : rgb = null,
-        ancho = 0,
-        alto = 0,
+      : jpeg = null,
         manual = true;
 
-  final Uint8List? rgb;
-  final int ancho;
-  final int alto;
+  final Uint8List? jpeg;
   final bool manual;
 }
 
@@ -70,6 +66,7 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
   bool _listo = false;
   int _giro = 0;
   bool _espejo = true;
+  int _rostros = 0;
 
   @override
   void initState() {
@@ -130,7 +127,12 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
         espejo: _espejo,
       );
       if (!mounted || _listo || _cam == null) return;
-      if (caras.length != 1) return;
+      if (caras.length != 1) {
+        _rostros = 0;
+        return;
+      }
+      _rostros++;
+      if (_rostros < 3) return;
       final caja = caras.first.caja;
       final m = caja.width * 0.25;
       final reg = regionRgbUpright(
@@ -142,13 +144,19 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
         giro: _giro,
         espejo: _espejo,
       );
-      _listo = true;
       final rgb = Uint8List.fromList(reg.rgb);
-      final ancho = reg.ancho;
-      final alto = reg.alto;
+      final jpeg = jpegRostro(rgb, reg.ancho, reg.alto);
+      debugPrint('[BioVerif] jpeg ${jpeg.length} ${reg.ancho}x${reg.alto}');
+      if (jpeg.length < 32) {
+        debugPrint('[BioVerif] jpeg vacío, se sigue encuadrando');
+        _rostros = 0;
+        return;
+      }
+      _listo = true;
       final cam = _cam;
-      _cam = null;
+      if (mounted) setState(() => _cam = null);
       unawaited(Future<void>(() async {
+        await WidgetsBinding.instance.endOfFrame;
         if (cam != null) {
           if (cam.value.isStreamingImages) {
             try {
@@ -158,7 +166,7 @@ class _VerificacionFacialScreenState extends State<VerificacionFacialScreen> {
           await cam.dispose();
         }
         if (!mounted) return;
-        Navigator.of(context).pop(RostroCaptura.foto(rgb, ancho, alto));
+        Navigator.of(context).pop(RostroCaptura.foto(jpeg));
       }));
     } catch (e) {
       debugPrint('[BioVerif] captura error $e');

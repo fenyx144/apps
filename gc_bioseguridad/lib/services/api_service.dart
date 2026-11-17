@@ -934,14 +934,16 @@ class ApiService {
             body: jsonEncode({'foto': base64Encode(jpeg)}),
           )
           .timeout(const Duration(seconds: 90));
-      debugPrint(
-        '[BioVerif] POST $url → ${response.statusCode} ${reloj.elapsedMilliseconds}ms',
-      );
       final decoded = jsonDecode(response.body);
+      final data = decoded is Map ? decoded['data'] : null;
+      final motivo = data is Map ? data['motivo'] : null;
+      debugPrint(
+        '[BioVerif] POST $url → ${response.statusCode} '
+        '${reloj.elapsedMilliseconds}ms ${response.body.length}B motivo=$motivo',
+      );
       if (decoded is! Map) {
         return {'success': false, 'message': 'Respuesta inválida'};
       }
-      final data = decoded['data'];
       return {
         'success': decoded['success'] == true && response.statusCode == 200,
         'message': decoded['message']?.toString() ?? '',
