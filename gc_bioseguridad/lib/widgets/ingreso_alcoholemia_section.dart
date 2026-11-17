@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../services/catalog_service.dart';
 import '../utils/anomalia_contexto.dart';
-import 'bio_form_fields.dart';
 import 'evidencia_select_field.dart';
 import 'image_slot_row.dart';
 
@@ -118,13 +117,40 @@ class _IngresoAlcoholemiaSectionState extends State<IngresoAlcoholemiaSection> {
 
   @override
   Widget build(BuildContext context) {
-    return BioFormSection(
-      title: 'ALCOHOLEMIA',
-      icon: Icons.local_bar_outlined,
-      children: [
+    return Material(
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: _verdeAlc, width: 1.4),
+      ),
+      child: Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+        Row(
+          children: [
+            const Icon(Icons.local_bar_outlined, size: 18, color: _verdeAlc),
+            const SizedBox(width: 8),
+            const Text(
+              'Alcoholemia',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: _verdeAlc,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Aplicar prueba de alcoholemia'),
+          activeThumbColor: _verdeAlc,
+          title: const Text(
+            'Registrar',
+            style: TextStyle(fontWeight: FontWeight.w700, color: _verdeAlc),
+          ),
           value: widget.data.activa,
           onChanged: (v) {
             setState(() {
@@ -156,11 +182,14 @@ class _IngresoAlcoholemiaSectionState extends State<IngresoAlcoholemiaSection> {
           ],
           TextButton.icon(
             onPressed: _agregarFila,
+            style: TextButton.styleFrom(foregroundColor: _verdeAlc),
             icon: const Icon(Icons.person_add_outlined),
             label: const Text('Agregar persona'),
           ),
         ],
-      ],
+        ],
+      ),
+      ),
     );
   }
 }
@@ -187,11 +216,19 @@ class _FilaAlcoholemiaTile extends StatefulWidget {
   State<_FilaAlcoholemiaTile> createState() => _FilaAlcoholemiaTileState();
 }
 
+const _verdeAlc = Color(0xFF1F7A4D);
+
 class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
   late final TextEditingController _valor;
   late final TextEditingController _grado;
   late final TextEditingController _accion;
+  late final TextEditingController _anomalia;
+  late final TextEditingController _agente;
   bool _syncLecturaGrado = true;
+  bool _anomaliaTocada = false;
+  bool _agenteTocado = false;
+  String _anomaliaAuto = '';
+  String _agenteAuto = '';
 
   @override
   void initState() {
@@ -199,6 +236,10 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
     _valor = TextEditingController(text: widget.fila.valorAparato);
     _grado = TextEditingController(text: widget.fila.gradoGl);
     _accion = TextEditingController(text: widget.fila.accion);
+    _anomalia = TextEditingController(text: widget.fila.anomalia);
+    _agente = TextEditingController(text: widget.fila.agenteCausal);
+    _anomaliaTocada = widget.fila.anomalia.trim().isNotEmpty;
+    _agenteTocado = widget.fila.agenteCausal.trim().isNotEmpty;
     WidgetsBinding.instance.addPostFrameCallback((_) => _aplicarDefaults());
   }
 
@@ -211,6 +252,8 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
     _valor.dispose();
     _grado.dispose();
     _accion.dispose();
+    _anomalia.dispose();
+    _agente.dispose();
     super.dispose();
   }
 
@@ -220,6 +263,30 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
     final g = _gradoNum;
     if (g == null) return false;
     return g > umbral + 1e-9;
+  }
+
+  void _ponerAuto({
+    required TextEditingController ctrl,
+    required bool tocado,
+    required String autoPrevio,
+    required String nuevo,
+    required void Function(String texto) guardarAuto,
+    required void Function(String texto) guardarFila,
+  }) {
+    final actual = ctrl.text;
+    final sigueAuto = !tocado || actual.trim().isEmpty || actual == autoPrevio;
+    if (sigueAuto) {
+      if (actual != nuevo) {
+        ctrl.value = TextEditingValue(
+          text: nuevo,
+          selection: TextSelection.collapsed(offset: nuevo.length),
+        );
+      }
+      guardarAuto(nuevo);
+      guardarFila(nuevo);
+    } else {
+      guardarFila(actual);
+    }
   }
 
   void _actualizarAnomalia() {
@@ -235,15 +302,26 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
         agenteDef: meta.agenteCausalDef,
         accionDef: meta.accionDef,
       );
-      widget.fila.agenteCausal = ctx.agenteCausal;
-      widget.fila.anomalia = ctx.anomalia;
+      _ponerAuto(
+        ctrl: _anomalia,
+        tocado: _anomaliaTocada,
+        autoPrevio: _anomaliaAuto,
+        nuevo: ctx.anomalia,
+        guardarAuto: (t) => _anomaliaAuto = t,
+        guardarFila: (t) => widget.fila.anomalia = t,
+      );
+      _ponerAuto(
+        ctrl: _agente,
+        tocado: _agenteTocado,
+        autoPrevio: _agenteAuto,
+        nuevo: ctx.agenteCausal,
+        guardarAuto: (t) => _agenteAuto = t,
+        guardarFila: (t) => widget.fila.agenteCausal = t,
+      );
       if (widget.fila.accion.trim().isEmpty) {
         widget.fila.accion = ctx.accion;
         if (_accion.text != ctx.accion) _accion.text = ctx.accion;
       }
-    } else if (g != null) {
-      widget.fila.anomalia = '';
-      widget.fila.agenteCausal = '';
     }
   }
 
@@ -315,6 +393,11 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
         : '${widget.fila.nombre.isNotEmpty ? widget.fila.nombre : widget.fila.dni} · ${widget.fila.dni}';
     final supera = _superaUmbral(meta.umbralGl);
 
+    final g = _gradoNum;
+    final colorEstado = g != null && g > meta.umbralGl + 0.10
+        ? const Color(0xFFC62828)
+        : const Color(0xFFF9A825);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -323,14 +406,18 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
             Expanded(
               child: Text(
                 'Persona ${widget.index + 1}',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  color: _verdeAlc,
+                ),
               ),
             ),
             if (widget.puedeQuitar)
               IconButton(
                 tooltip: 'Quitar',
                 onPressed: widget.onQuitar,
-                icon: const Icon(Icons.close, size: 20),
+                icon: const Icon(Icons.close, size: 20, color: _verdeAlc),
                 visualDensity: VisualDensity.compact,
               ),
           ],
@@ -340,73 +427,168 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
           value: labelPersona,
           placeholder: 'Seleccione',
           icon: Icons.person_outline,
+          iconColor: _verdeAlc,
           onTap: widget.candidatos.isEmpty ? null : _pickPersona,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: TextField(
                 controller: _valor,
-                decoration: const InputDecoration(
-                  labelText: 'Lectura aparato',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
+                cursorColor: _verdeAlc,
+                showCursor: true,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                decoration: _campoClaro('Lectura aparato'),
                 onChanged: _onLecturaChanged,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: TextField(
                 controller: _grado,
+                cursorColor: _verdeAlc,
+                showCursor: true,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                 ],
-                decoration: const InputDecoration(
-                  labelText: 'Grado (g/L)',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                decoration: _campoClaro('Grado (g/L)'),
                 onChanged: _onGradoChanged,
               ),
             ),
           ],
         ),
-        if (supera) ...[
-          const SizedBox(height: 10),
-          TextField(
-            controller: _accion,
-            decoration: const InputDecoration(
-              labelText: 'Acción',
-              border: OutlineInputBorder(),
-              isDense: true,
+        ClipRect(
+          child: AnimatedAlign(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            heightFactor: supera ? 1 : 0,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colorEstado.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorEstado, width: 1.4),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            supera && g != null && g > meta.umbralGl + 0.10
+                                ? Icons.error_rounded
+                                : Icons.warning_amber_rounded,
+                            size: 18,
+                            color: colorEstado,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Anomalía',
+                            style: TextStyle(
+                              color: colorEstado,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _anomalia,
+                        cursorColor: _verdeAlc,
+                        showCursor: true,
+                        minLines: 1,
+                        maxLines: 3,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        decoration: _campoClaro('Anomalía'),
+                        onChanged: (v) {
+                          _anomaliaTocada = true;
+                          widget.fila.anomalia = v;
+                          widget.onChanged();
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _agente,
+                        cursorColor: _verdeAlc,
+                        showCursor: true,
+                        minLines: 1,
+                        maxLines: 3,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        decoration: _campoClaro('Agente causal'),
+                        onChanged: (v) {
+                          _agenteTocado = true;
+                          widget.fila.agenteCausal = v;
+                          widget.onChanged();
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _accion,
+                        cursorColor: _verdeAlc,
+                        showCursor: true,
+                        minLines: 2,
+                        maxLines: 3,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        decoration: _campoClaro('Acción'),
+                        onChanged: (v) {
+                          widget.fila.accion = v;
+                          widget.onChanged();
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      ImageSlotRow(
+                        paths: widget.fila.fotos,
+                        onChanged: (i, path) {
+                          widget.fila.fotos[i] = path;
+                          widget.onChanged();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            minLines: 2,
-            maxLines: 3,
-            onChanged: (v) {
-              widget.fila.accion = v;
-              widget.onChanged();
-            },
           ),
-          const SizedBox(height: 10),
-          const Text(
-            'Foto',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-          ImageSlotRow(
-            paths: widget.fila.fotos,
-            onChanged: (i, path) {
-              widget.fila.fotos[i] = path;
-              widget.onChanged();
-            },
-          ),
-        ],
+        ),
       ],
     );
   }
+}
+
+InputDecoration _campoClaro(String label) {
+  const borde = OutlineInputBorder(
+    borderRadius: BorderRadius.all(Radius.circular(12)),
+    borderSide: BorderSide(color: _verdeAlc, width: 1.5),
+  );
+  return const InputDecoration(
+    filled: true,
+    fillColor: Colors.white,
+    isDense: true,
+    floatingLabelBehavior: FloatingLabelBehavior.auto,
+  ).copyWith(
+    labelText: label,
+    labelStyle: const TextStyle(color: _verdeAlc, fontWeight: FontWeight.w600),
+    floatingLabelStyle: const TextStyle(
+      color: _verdeAlc,
+      fontWeight: FontWeight.w700,
+    ),
+    contentPadding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+    border: borde,
+    enabledBorder: borde,
+    focusedBorder: const OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(12)),
+      borderSide: BorderSide(color: _verdeAlc, width: 2),
+    ),
+  );
 }
 
 class AlcoholemiaCatalogMeta {

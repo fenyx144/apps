@@ -275,7 +275,7 @@ class _RegisterControlIngresoScreenState
   static const double _sepCampo = 6;
 
   /// Separación vertical entre bloques del formulario.
-  static const double _sepBloque = 10;
+  static const double _sepBloque = 14;
 
   /// Separación horizontal entre dos campos que comparten fila.
   static const double _sepFila = 10;
@@ -3115,11 +3115,9 @@ class _RegisterControlIngresoScreenState
         : [if (_planVisita?.visita != null) _planVisita!.visita!];
     if (visitas.isEmpty) return const SizedBox.shrink();
     final varias = visitas.length > 1;
-    return BioFormSection(
-      title: varias
-          ? '2. Visitas planificadas (${visitas.length})'
-          : '2. Visita planificada',
-      icon: Icons.event_available_rounded,
+    return _TarjetaSeccion(
+      titulo: 'Ficha',
+      icono: Icons.assignment_outlined,
       children: [
         if (varias)
           for (var i = 0; i < grupos.length; i++) ...[
@@ -3138,6 +3136,11 @@ class _RegisterControlIngresoScreenState
               foregroundColor: AppColors.primaryDark,
             ),
           ),
+        ],
+        if (_personas >= 1) ...[
+          const SizedBox(height: 12),
+          if (_algunEscaneadoPlanificado) _avisoEstatusGranjaRegistro(),
+          _camposCierreFicha(),
         ],
       ],
     );
@@ -3252,9 +3255,9 @@ class _RegisterControlIngresoScreenState
         if (d.visitasPlanAmbiguas.length > 1) d,
     ];
     final ninguna = !candidatas.any(_visitaMarcada);
-    return BioFormSection(
-      title: '2. Visitas planificadas (${candidatas.length + otras.length})',
-      icon: Icons.event_available_rounded,
+    return _TarjetaSeccion(
+      titulo: 'Ficha',
+      icono: Icons.assignment_outlined,
       children: [
         for (final d in ambiguos)
           Padding(
@@ -3315,6 +3318,11 @@ class _RegisterControlIngresoScreenState
             ),
           ),
           const SizedBox(height: 8),
+        ],
+        if (_personas >= 1) ...[
+          const SizedBox(height: 4),
+          if (_algunEscaneadoPlanificado) _avisoEstatusGranjaRegistro(),
+          _camposCierreFicha(),
         ],
       ],
     );
@@ -3519,9 +3527,9 @@ class _RegisterControlIngresoScreenState
 
   /// Visita no planificada: formulario completo en pantalla (estilo ficha antigua).
   Widget _buildFormularioNoPlanificado(BuildContext context) {
-    return BioFormSection(
-      title: '2. Ingreso',
-      icon: Icons.edit_note_rounded,
+    return _TarjetaSeccion(
+      titulo: 'Ficha',
+      icono: Icons.assignment_outlined,
                 children: [
                   Row(
                     children: [
@@ -3599,23 +3607,6 @@ class _RegisterControlIngresoScreenState
     );
   }
 
-  /// Galpones de la planificación web (ficha) o selector si no vinieron del portal.
-  Widget _buildGalponesPlanificacion(
-    BuildContext context, {
-    PlanVisita? visitaOverride,
-  }) {
-    final visita = visitaOverride ?? _planVisita?.visita;
-    if (visita != null && visita.galpones.isNotEmpty) {
-      return _lineaFichaVisita(
-        context,
-        'Galpones',
-        visita.galpones.join(', '),
-        maxLines: 4,
-      );
-    }
-    return _selectorGalponesIngreso();
-  }
-
   Widget _buildAlcoholemiaIngreso() {
     return IngresoAlcoholemiaSection(
       candidatos: [
@@ -3628,38 +3619,22 @@ class _RegisterControlIngresoScreenState
     );
   }
 
-  /// Fecha, turno, hora de ingreso (garita) y fotos; galpones en ficha si planificado.
-  Widget _buildSeccionConfirmarIngreso(
-    BuildContext context, {
-    bool incluirEvidencias = true,
-    bool incluirGalpones = false,
-    bool incluirHoraIngreso = false,
-    PlanVisita? visitaGalpones,
-  }) {
-    return BioFormSection(
-      title: '3. Confirmar ingreso',
-      icon: Icons.task_alt_rounded,
+  /// Hora, fecha, turno y fotos, alineados al final de la ficha.
+  Widget _camposCierreFicha() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (incluirGalpones) ...[
-          _buildGalponesPlanificacion(
-            context,
-            visitaOverride: visitaGalpones,
-              ),
-              const SizedBox(height: _sepCampo),
-        ],
-        if (incluirHoraIngreso) ...[
-          _campoHoraIngreso(),
-              const SizedBox(height: _sepCampo),
-        ],
-                    Row(
-                      children: [
-                        Expanded(
+        _campoHoraIngreso(),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
               child: EvidenciaSelectField(
                 label: 'Fecha',
                 value: DateFormat('dd/MM/yyyy').format(_fecha),
                 placeholder: 'Hoy',
                 icon: Icons.calendar_month_rounded,
-                iconColor: context.textThemeMuted,
+                iconColor: _verdeIngreso,
                 enabled: false,
               ),
             ),
@@ -3672,22 +3647,84 @@ class _RegisterControlIngresoScreenState
                 icon: Icons.wb_twilight_rounded,
                 onTap: _pickTurno,
               ),
-                        ),
-                      ],
-                    ),
-        if (incluirEvidencias) ...[
-          const SizedBox(height: _sepCampo),
-          ImageSlotRow(
-            paths: _imagenes,
-            onChanged: (i, path) => setState(() => _imagenes[i] = path),
-          ),
-        ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ImageSlotRow(
+          paths: _imagenes,
+          onChanged: (i, path) => setState(() => _imagenes[i] = path),
+        ),
       ],
+    );
+  }
+
+  ThemeData _temaCamposClaros(ThemeData base) {
+    const borde = OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(12)),
+      borderSide: BorderSide(color: _verdeIngreso, width: 1.5),
+    );
+    return base.copyWith(
+      inputDecorationTheme: base.inputDecorationTheme.copyWith(
+        filled: true,
+        fillColor: Colors.white,
+        floatingLabelBehavior: FloatingLabelBehavior.auto,
+        labelStyle: const TextStyle(
+          color: _verdeIngreso,
+          fontWeight: FontWeight.w600,
+        ),
+        floatingLabelStyle: const TextStyle(
+          color: _verdeIngreso,
+          fontWeight: FontWeight.w700,
+          fontSize: 13.5,
+        ),
+        enabledBorder: borde,
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+          borderSide: BorderSide(color: _verdeIngreso, width: 2),
+        ),
+        border: borde,
+        disabledBorder: borde,
+      ),
+    );
+  }
+
+  Widget _botonConfirmarIngreso() {
+    return Material(
+      color: Colors.white,
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: _verdeIngreso,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              onPressed: _guardar,
+              child: const Text('Confirmar ingreso'),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final hayDocumento =
+        _dnisIngreso.any((d) => DocumentoPersona.esCompleto(d.dni));
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: SectionAppBar(
@@ -3698,67 +3735,122 @@ class _RegisterControlIngresoScreenState
             AppBarSaveButton(onPressed: _guardar),
         ],
       ),
-      body: DismissKeyboardScope(
-        child: RefreshIndicator(
-          onRefresh: _refrescar,
-          color: AppColors.primaryDark,
-          child: SingleChildScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            32 + MediaQuery.viewPaddingOf(context).bottom,
-          ),
+      body: Theme(
+        data: _temaCamposClaros(Theme.of(context)),
+        child: DismissKeyboardScope(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const BioCatalogoAviso(),
-              _avisoConfigurarMisGranjas(context),
-              _buildFaseIdentificar(context),
-              if (_dnisIngreso.any((d) => DocumentoPersona.esCompleto(d.dni))) ...[
-                const SizedBox(height: _sepBloque),
-                _buildAlcoholemiaIngreso(),
-              ],
-              if (_hayRegresos) ...[
-                const SizedBox(height: _sepBloque),
-                _buildSeccionRegreso(context),
-              ],
-              if (_hayElementosIngreso) ...[
-                const SizedBox(height: _sepBloque),
-                if (_hayVisitasPorElegir ||
-                    (_algunEscaneadoPlanificado &&
-                        !_grupoIngresoNoPlanificado)) ...[
-                  _buildSeccionFichaPlanificada(context),
-                  if (_personas >= 1) ...[
-                    const SizedBox(height: _sepBloque),
-                    if (_algunEscaneadoPlanificado)
-                      _avisoEstatusGranjaRegistro(),
-                    _buildSeccionConfirmarIngreso(
-                      context,
-                      incluirHoraIngreso: true,
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _refrescar,
+                  color: _verdeIngreso,
+                  child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      16,
+                      16,
+                      _puedeConfirmarEnPantalla
+                          ? 20
+                          : 32 + MediaQuery.viewPaddingOf(context).bottom,
                     ),
-                  ],
-                ] else if (_grupoIngresoNoPlanificado)
-                  _buildFormularioNoPlanificado(context)
-                else if (!_planificacionResueltaParaGrupo)
-                  const BioFormSection(
-                    title: '2. Planificación',
-                    icon: Icons.hourglass_top_rounded,
-                    children: [
-                      Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const BioCatalogoAviso(),
+                        _avisoConfigurarMisGranjas(context),
+                        _buildFaseIdentificar(context),
+                        if (hayDocumento) ...[
+                          const SizedBox(height: _sepBloque),
+                          _buildAlcoholemiaIngreso(),
+                        ],
+                        if (_hayElementosIngreso) ...[
+                          const SizedBox(height: _sepBloque),
+                          if (_hayVisitasPorElegir ||
+                              (_algunEscaneadoPlanificado &&
+                                  !_grupoIngresoNoPlanificado))
+                            _buildSeccionFichaPlanificada(context)
+                          else if (_grupoIngresoNoPlanificado)
+                            _buildFormularioNoPlanificado(context)
+                          else if (!_planificacionResueltaParaGrupo)
+                            const _TarjetaSeccion(
+                              titulo: 'Ficha',
+                              icono: Icons.assignment_outlined,
+                              children: [
+                                Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 12),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: _verdeIngreso,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                        if (_hayRegresos) ...[
+                          const SizedBox(height: _sepBloque),
+                          _buildSeccionRegreso(context),
+                        ],
+                      ],
+                    ),
                   ),
-          ),
-        ],
-                  ),
-              ],
+                ),
+              ),
+              if (_puedeConfirmarEnPantalla) _botonConfirmarIngreso(),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TarjetaSeccion extends StatelessWidget {
+  const _TarjetaSeccion({
+    required this.titulo,
+    required this.icono,
+    required this.children,
+  });
+
+  final String titulo;
+  final IconData icono;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: _verdeIngreso, width: 1.4),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icono, size: 18, color: _verdeIngreso),
+              const SizedBox(width: 8),
+              Text(
+                titulo,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: _verdeIngreso,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
         ),
       ),
     );
