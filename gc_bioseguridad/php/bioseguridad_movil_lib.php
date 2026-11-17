@@ -1322,84 +1322,161 @@ function bio_imagenes_grupo(mysqli $conn, string $reporte, array $ctx): string
  * @param array<string, mixed> $ctx
  */
 /**
- * Tipo de la app → clave y banderas de san_agentes_causales.
+ * Granja (3), campaña (3) y galpón a partir del cencos, igual que los AGC
+ * de alcoholemia y artículos: los 3 primeros, los 3 siguientes y el resto.
  *
- * @return array{tarea:string,fisico:int,quimico:int,biologico:int}
+ * @return array{0:string,1:string,2:string}
  */
-function bio_agc_tipo(string $bioseguridad): array
+function bio_agc_partes_cencos(string $cencos): array
+{
+    $c = trim($cencos);
+    $granja = $c;
+    while (strlen($granja) < 3) {
+        $granja = '0' . $granja;
+    }
+    $granja = substr($granja, 0, 3);
+    $resto = strlen($c) > 3 ? substr($c, 3) : '';
+    $camp = preg_replace('/\D/', '', substr($resto, 0, 3));
+    if (!is_string($camp)) {
+        $camp = '';
+    }
+    while (strlen($camp) < 3) {
+        $camp = '0' . $camp;
+    }
+    $campania = substr($camp, -3);
+    $galpon = strlen($c) > 6 ? substr($c, 6, 10) : '';
+
+    return array($granja, $campania, $galpon);
+}
+
+/**
+ * Catálogo AGC de bioseguridad. Si están al lado los PHP de alcoholemia o
+ * artículos, se leen de ahí los mismos tareaKey e ids; si no, queda la clave.
+ *
+ * @return array{tareaKey:string,indicadorId:int,procesoId:int,subprocesoId:int,tipoAnomaliaId:int}
+ */
+function bio_agc_perfil(string $bioseguridad): array
 {
     $b = strtolower($bioseguridad);
-    $fisico = 0;
-    $quimico = 0;
-    $biologico = 0;
-    $tarea = 'bioseguridad_fisica';
     if (strpos($b, 'quim') !== false) {
-        $quimico = 1;
-        $tarea = 'bioseguridad_quimica';
+        $clave = 'quimica';
+        $tarea = 'BIOS_QUIMICA';
     } elseif (strpos($b, 'biolog') !== false) {
-        $biologico = 1;
-        $tarea = 'bioseguridad_biologica';
+        $clave = 'biologica';
+        $tarea = 'BIOS_BIOLOGICA';
     } else {
-        $fisico = 1;
+        $clave = 'fisica';
+        $tarea = 'BIOS_FISICA';
+    }
+    $leido = bio_agc_perfil_vecino($clave);
+    if ($leido !== null) {
+        return $leido;
     }
 
-    return [
-        'tarea' => $tarea,
-        'fisico' => $fisico,
-        'quimico' => $quimico,
-        'biologico' => $biologico,
-    ];
+    return array(
+        'tareaKey' => $tarea,
+        'indicadorId' => 0,
+        'procesoId' => 0,
+        'subprocesoId' => 0,
+        'tipoAnomaliaId' => 0,
+    );
 }
 
-/** @return array<string,string> nombre en minúsculas => nombre real */
-function bio_agc_columnas(mysqli $conn): array
+/** @return array{tareaKey:string,indicadorId:int,procesoId:int,subprocesoId:int,tipoAnomaliaId:int}|null */
+function bio_agc_perfil_vecino(string $clave)
 {
-    static $cols = null;
-    if (is_array($cols)) {
-        return $cols;
-    }
-    $cols = [];
-    $rs = @$conn->query('SHOW COLUMNS FROM `san_agentes_causales`');
-    while ($rs && ($c = $rs->fetch_assoc())) {
-        $nombre = (string) ($c['Field'] ?? '');
-        if ($nombre !== '') {
-            $cols[strtolower($nombre)] = $nombre;
+    $src = '';
+    foreach (array('bio_articulos_agc_lib.php', 'bio_alcoholemia_agc_lib.php') as $nombre) {
+        $ruta = __DIR__ . '/' . $nombre;
+        if (!is_file($ruta)) {
+            continue;
+        }
+        $leido = file_get_contents($ruta);
+        if (is_string($leido) && $leido !== '') {
+            $src .= "\n" . $leido;
         }
     }
+    if ($src === '') {
+        return null;
+    }
+    $pos = stripos($src, $clave);
+    if ($pos === false) {
+        return null;
+    }
+    $trozo = substr($src, max(0, $pos - 400), 1200);
+    $tarea = '';
+    if (preg_match("/tareaKey\\s*(?:=>|=)\\s*'([^']+)'/", $trozo, $m)) {
+        $tarea = $m[1];
+    } elseif (preg_match('/tareaKey\\s*(?:=>|=)\\s*"([^"]+)"/', $trozo, $m)) {
+        $tarea = $m[1];
+    }
+    $ids = array();
+    foreach (array('indicadorId', 'procesoId', 'subprocesoId', 'tipoAnomaliaId') as $campo) {
+        $ids[$campo] = 0;
+        $pat = '/' . $campo . '\\s*(?:=>|=)\\s*(\\d+)/';
+        if (preg_match($pat, $trozo, $m)) {
+            $ids[$campo] = (int) $m[1];
+        }
+    }
+    if ($tarea === '' && $ids['indicadorId'] === 0 && $ids['tipoAnomaliaId'] === 0) {
+        return null;
+    }
+    if ($tarea === '') {
+        $tarea = 'BIOS_' . strtoupper($clave);
+    }
 
-    return $cols;
+    return array(
+        'tareaKey' => $tarea,
+        'indicadorId' => $ids['indicadorId'],
+        'procesoId' => $ids['procesoId'],
+        'subprocesoId' => $ids['subprocesoId'],
+        'tipoAnomaliaId' => $ids['tipoAnomaliaId'],
+    );
 }
 
-function bio_agc_enlace(string $uuid): string
+/** Rutas de evidencia separadas por coma, como el CSV de evidencias (máx. 255). */
+function bio_agc_archivo(string $imagenesCsv): string
 {
-    return 'rgarita:' . $uuid;
+    $partes = preg_split('/\s*,\s*/', trim($imagenesCsv));
+    if (!is_array($partes)) {
+        return '';
+    }
+    $limpias = array();
+    foreach ($partes as $p) {
+        $p = str_replace('\\', '/', trim((string) $p));
+        $p = ltrim($p, '/');
+        if ($p === '' || strpos($p, '..') !== false) {
+            continue;
+        }
+        $limpias[] = $p;
+    }
+    $csv = implode(', ', $limpias);
+    if (strlen($csv) <= 255) {
+        return $csv;
+    }
+    $cabe = '';
+    foreach ($limpias as $p) {
+        $sig = $cabe === '' ? $p : $cabe . ', ' . $p;
+        if (strlen($sig) > 255) {
+            break;
+        }
+        $cabe = $sig;
+    }
+
+    return $cabe;
 }
 
 function bio_agc_borrar(mysqli $conn, string $uuid): bool
 {
-    $uuid = trim($uuid);
+    $uuid = strtolower(trim($uuid));
     if ($uuid === '') {
         return true;
     }
-    $cols = bio_agc_columnas($conn);
-    if ($cols === [] || !isset($cols['archivo'])) {
+    $st = $conn->prepare('DELETE FROM `san_agentes_causales` WHERE `id` = ?');
+    if (!$st) {
         return false;
     }
-    $enlace = bio_agc_enlace($uuid);
-    if (isset($cols['uuid'])) {
-        $sql = 'DELETE FROM `san_agentes_causales` WHERE `archivo` = ? OR `uuid` = ?';
-        $st = $conn->prepare($sql);
-        if (!$st) {
-            return false;
-        }
-        $st->bind_param('ss', $enlace, $uuid);
-    } else {
-        $st = $conn->prepare('DELETE FROM `san_agentes_causales` WHERE `archivo` = ?');
-        if (!$st) {
-            return false;
-        }
-        $st->bind_param('s', $enlace);
-    }
+    $st->bind_param('s', $uuid);
     $ok = $st->execute();
     $st->close();
 
@@ -1407,66 +1484,64 @@ function bio_agc_borrar(mysqli $conn, string $uuid): bool
 }
 
 /**
- * Segunda escritura de la anomalía. Usa las columnas que ya existen y, si
- * están, fisico/quimico/biologico y uuid (ver SQL pendiente, no se ejecuta aquí).
+ * Inserta la anomalía en san_agentes_causales con el uuid de rgarita.
  *
  * @param array<string,mixed> $ctx
  */
 function bio_agc_insertar(mysqli $conn, array $ctx, string $imagenesCsv): bool
 {
-    $cols = bio_agc_columnas($conn);
-    if ($cols === [] || !isset($cols['tareakey']) || !isset($cols['archivo'])) {
+    $uuid = strtolower(trim((string) ($ctx['uuid'] ?? '')));
+    if ($uuid === '') {
         return false;
     }
-    $tipo = bio_agc_tipo((string) ($ctx['bioseguridad'] ?? ''));
-    $uuid = bio_cut((string) ($ctx['uuid'] ?? ''), 36);
-    $enlace = bio_agc_enlace($uuid);
-    $valores = [
-        'tareakey' => $tipo['tarea'],
-        'archivo' => $enlace,
-        'uuid' => $uuid,
-        'rgarita_id' => (int) ($ctx['rgarita_id'] ?? 0),
-        'fecha' => (string) ($ctx['fecha'] ?? ''),
-        'cencos' => (string) ($ctx['cencos'] ?? ''),
-        'turno' => (string) ($ctx['turno'] ?? ''),
-        'instalacion' => bio_cut((string) ($ctx['instalacion'] ?? ''), 20),
-        'bioseguridad' => bio_cut((string) ($ctx['bioseguridad'] ?? ''), 30),
-        'fisico' => $tipo['fisico'],
-        'quimico' => $tipo['quimico'],
-        'biologico' => $tipo['biologico'],
-        'anomalia' => bio_cut((string) ($ctx['anomalia'] ?? ''), 30),
-        'descripcion' => bio_cut((string) ($ctx['descripcion'] ?? ''), 200),
-        'agentecausal' => bio_cut((string) ($ctx['agentecausal'] ?? ''), 200),
-        'hora' => bio_cut((string) ($ctx['hora'] ?? ''), 8),
-        'imagenes' => $imagenesCsv,
-        'numfiltro' => (int) ($ctx['numfiltro'] ?? 0),
-    ];
-    $campos = [];
-    $marcas = [];
-    $types = '';
-    $params = [];
-    foreach ($valores as $clave => $valor) {
-        if (!isset($cols[$clave])) {
-            continue;
-        }
-        $campos[] = '`' . $cols[$clave] . '`';
-        $marcas[] = '?';
-        if (is_int($valor)) {
-            $types .= 'i';
-        } else {
-            $types .= 's';
-        }
-        $params[] = $valor;
-    }
-    if ($campos === []) {
-        return false;
-    }
-    $sql = 'INSERT INTO `san_agentes_causales` (' . implode(',', $campos) . ') VALUES (' . implode(',', $marcas) . ')';
+    $partes = bio_agc_partes_cencos((string) ($ctx['cencos'] ?? ''));
+    $granja = $partes[0];
+    $campania = $partes[1];
+    $galpon = $partes[2];
+    $perfil = bio_agc_perfil((string) ($ctx['bioseguridad'] ?? ''));
+    $tareaKey = substr($perfil['tareaKey'], 0, 80);
+    $indicadorId = (int) $perfil['indicadorId'];
+    $procesoId = (int) $perfil['procesoId'];
+    $subprocesoId = (int) $perfil['subprocesoId'];
+    $tipoAnomaliaId = (int) $perfil['tipoAnomaliaId'];
+    $fecha = (string) ($ctx['fecha'] ?? '');
+    $anomalia = (string) ($ctx['anomalia'] ?? '');
+    $agenteCausal = (string) ($ctx['agentecausal'] ?? '');
+    $accion = (string) ($ctx['descripcion'] ?? '');
+    $archivo = bio_agc_archivo($imagenesCsv);
+    $usuario = substr(trim((string) ($ctx['tuser'] ?? '')), 0, 60);
+    $sql = 'INSERT INTO `san_agentes_causales` ('
+        . '`id`,`fecha`,`tareaKey`,`granja`,`campania`,`galpon`,'
+        . '`indicadorId`,`procesoId`,`subprocesoId`,`tipoAnomaliaId`,'
+        . '`anomalia`,`agenteCausal`,`accion`,`archivo`,`usuario`,'
+        . '`indicador_id`,`proceso_id`,`subproceso_id`,`tipo_anomalia_id`'
+        . ') VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
     $st = $conn->prepare($sql);
     if (!$st) {
         return false;
     }
-    $st->bind_param($types, ...$params);
+    $st->bind_param(
+        'ssssssiiiisssssiiii',
+        $uuid,
+        $fecha,
+        $tareaKey,
+        $granja,
+        $campania,
+        $galpon,
+        $indicadorId,
+        $procesoId,
+        $subprocesoId,
+        $tipoAnomaliaId,
+        $anomalia,
+        $agenteCausal,
+        $accion,
+        $archivo,
+        $usuario,
+        $indicadorId,
+        $procesoId,
+        $subprocesoId,
+        $tipoAnomaliaId
+    );
     $ok = $st->execute();
     $st->close();
 
