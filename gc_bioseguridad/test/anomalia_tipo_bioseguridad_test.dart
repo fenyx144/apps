@@ -134,7 +134,9 @@ void main() {
     expect(tipo, lessThan(instalacion));
   });
 
-  testWidgets('el registro de anomalía solo pide la acción', (tester) async {
+  testWidgets('el registro precarga anomalía, agente causal y acción', (
+    tester,
+  ) async {
     await _montar(
       tester,
       prefs: {
@@ -143,9 +145,15 @@ void main() {
       },
     );
 
-    expect(find.text('ACCIÓN'), findsOneWidget);
+    expect(find.text('Anomalía'), findsWidgets);
+    expect(find.text('Agente causal'), findsOneWidget);
     expect(find.text('Acción'), findsOneWidget);
-    expect(find.text('Detalle de anomalía'), findsNothing);
-    expect(find.text('Agente causal'), findsNothing);
+    final textos = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .map((f) => f.controller?.text ?? '')
+        .toList();
+    expect(textos, contains('Anomalía de bioseguridad física en Garita'));
+    expect(textos, contains('Control de bioseguridad física en Garita'));
+    expect(textos, contains('Corregir el hallazgo y dejar evidencia.'));
   });
 }

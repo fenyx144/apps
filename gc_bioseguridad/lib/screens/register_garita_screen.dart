@@ -40,8 +40,15 @@ class RegisterGaritaScreen extends StatefulWidget {
   State<RegisterGaritaScreen> createState() => _RegisterGaritaScreenState();
 }
 
+const _turquesa = Color(0xFF0FA3B1);
+
 class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
+  final _anomaliaController = TextEditingController();
+  final _agenteController = TextEditingController();
   final _accionController = TextEditingController();
+  String _autoAnomalia = '';
+  String _autoAgente = '';
+  String _autoAccion = '';
 
   /// Fecha del registro (solo lectura, siempre el día de hoy).
   final DateTime _fecha = DateTime.now();
@@ -72,6 +79,7 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
         BioTipos.descripcion[widget.tipoInicial ?? BioTipos.fisica] ??
         BioTipos.descripcion[BioTipos.fisica]!;
     _aplicarGranjaDeTrabajo();
+    _precargarTextos(forzar: true);
   }
 
   /// Premarca la granja de trabajo (menú Mi granja) con su campaña sugerida.
@@ -87,8 +95,37 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
     _campaniasDisponibles = sel.campanias;
   }
 
+  AnomaliaContexto _contextoActual() {
+    return AnomaliaContexto.punto(
+      instalacion: _instalacion,
+      bioseguridad: _bioseguridad,
+    );
+  }
+
+  /// Rellena los tres textos. Si el usuario ya editó uno, ese se conserva.
+  void _precargarTextos({bool forzar = false}) {
+    final ctx = _contextoActual();
+    void poner(
+      TextEditingController ctrl,
+      String nuevo,
+      String auto,
+      void Function(String) guardarAuto,
+    ) {
+      if (forzar || ctrl.text.trim().isEmpty || ctrl.text == auto) {
+        ctrl.text = nuevo;
+        guardarAuto(nuevo);
+      }
+    }
+
+    poner(_anomaliaController, ctx.anomalia, _autoAnomalia, (v) => _autoAnomalia = v);
+    poner(_agenteController, ctx.agenteCausal, _autoAgente, (v) => _autoAgente = v);
+    poner(_accionController, ctx.accion, _autoAccion, (v) => _autoAccion = v);
+  }
+
   @override
   void dispose() {
+    _anomaliaController.dispose();
+    _agenteController.dispose();
     _accionController.dispose();
     super.dispose();
   }
@@ -141,6 +178,7 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
       setState(() {
         _instalacion = sel.valor;
         _instalacionCodigo = sel.codigo.isEmpty ? '0' : sel.codigo;
+        _precargarTextos();
       });
     }
   }
@@ -166,8 +204,9 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
         .map((p) => {'path': p})
         .toList();
 
+    final anomalia = _anomaliaController.text.trim();
+    final agente = _agenteController.text.trim();
     final accion = _accionController.text.trim();
-    final ctx = AnomaliaContexto.punto(instalacion: _instalacion);
     return {
       'id': const Uuid().v4(),
       'reporte': 'garita',
@@ -185,8 +224,8 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
         // garita se envía 1 como relleno; el campo no se muestra al usuario.
         'numfiltro': _esGarita ? _filtro : 1,
         'hora': _hora24(),
-        'anomalia': ctx.anomalia,
-        'agentecausal': ctx.agenteCausal,
+        'anomalia': anomalia,
+        'agentecausal': agente,
         'accion': accion,
         'descripcion': accion,
       },
@@ -214,6 +253,14 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
     }
     if (_bioseguridad.trim().isEmpty) {
       showErrorToast(context, 'Seleccione el tipo de bioseguridad.');
+      return;
+    }
+    if (_anomaliaController.text.trim().isEmpty) {
+      showErrorToast(context, 'Indique la anomalía.');
+      return;
+    }
+    if (_agenteController.text.trim().isEmpty) {
+      showErrorToast(context, 'Indique el agente causal.');
       return;
     }
     if (_accionController.text.trim().isEmpty) {
@@ -260,12 +307,92 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
 
     if (saved && mounted) {
       setState(() {
-        _accionController.clear();
+        _precargarTextos(forzar: true);
         _imagenes
           ..clear()
           ..addAll([null, null, null]);
       });
     }
+  }
+
+  Widget _bloqueAnomalia(BuildContext context) {
+    final tema = Theme.of(context);
+    const borde = OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(12)),
+      borderSide: BorderSide(color: _turquesa, width: 1.5),
+    );
+    return Theme(
+      data: tema.copyWith(
+        inputDecorationTheme: tema.inputDecorationTheme.copyWith(
+          filled: true,
+          fillColor: Colors.white,
+          floatingLabelBehavior: FloatingLabelBehavior.auto,
+          labelStyle: const TextStyle(color: _turquesa, fontWeight: FontWeight.w600),
+          floatingLabelStyle: const TextStyle(
+            color: _turquesa,
+            fontWeight: FontWeight.w700,
+            fontSize: 13.5,
+          ),
+          enabledBorder: borde,
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderSide: BorderSide(color: _turquesa, width: 2),
+          ),
+          border: borde,
+        ),
+      ),
+      child: Material(
+        color: Colors.white,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: _turquesa, width: 1.4),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.report_outlined, size: 18, color: _turquesa),
+                  SizedBox(width: 8),
+                  Text(
+                    'Anomalía',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: _turquesa,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              BioTextArea(
+                label: 'Anomalía',
+                controller: _anomaliaController,
+                maxLength: 500,
+                minLines: 2,
+              ),
+              const SizedBox(height: 10),
+              BioTextArea(
+                label: 'Agente causal',
+                controller: _agenteController,
+                maxLength: 500,
+                minLines: 2,
+              ),
+              const SizedBox(height: 10),
+              BioTextArea(
+                label: 'Acción',
+                controller: _accionController,
+                maxLength: 500,
+                minLines: 2,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -378,19 +505,7 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            BioFormSection(
-              title: 'ACCIÓN',
-              icon: Icons.edit_note_rounded,
-              children: [
-                BioTextArea(
-                  label: 'Acción',
-                  controller: _accionController,
-                  icon: Icons.edit_rounded,
-                  maxLength: 200,
-                  minLines: 2,
-                ),
-              ],
-            ),
+            _bloqueAnomalia(context),
             const SizedBox(height: 20),
             BioFormSection(
               title: 'EVIDENCIAS (MÁX. 3)',

@@ -1,5 +1,5 @@
-/// Anomalía y agente causal según el punto donde se registra.
-/// El operador no los edita: solo confirma la acción.
+/// Textos iniciales de anomalía, agente causal y acción.
+/// En el formulario de anomalías el operador puede editarlos.
 class AnomaliaContexto {
   const AnomaliaContexto({
     required this.anomalia,
@@ -11,12 +11,16 @@ class AnomaliaContexto {
   final String agenteCausal;
   final String accion;
 
-  static AnomaliaContexto punto({required String instalacion}) {
+  static AnomaliaContexto punto({
+    required String instalacion,
+    String bioseguridad = '',
+  }) {
     final punto = instalacion.trim().isEmpty ? 'Garita' : instalacion.trim();
+    final tipo = _tipoCorto(bioseguridad);
     return AnomaliaContexto(
-      anomalia: _corta('Anomalía $punto', 30),
-      agenteCausal: _corta('Control $punto', 200),
-      accion: '',
+      anomalia: 'Anomalía de bioseguridad $tipo en $punto',
+      agenteCausal: 'Control de bioseguridad $tipo en $punto',
+      accion: 'Corregir el hallazgo y dejar evidencia.',
     );
   }
 
@@ -64,8 +68,9 @@ class AnomaliaContexto {
   }
 }
 
-String _corta(String s, int n) {
-  final t = s.trim();
-  if (t.length <= n) return t;
-  return t.substring(0, n);
+String _tipoCorto(String bioseguridad) {
+  final t = bioseguridad.toLowerCase();
+  if (t.contains('quim')) return 'química';
+  if (t.contains('biolog')) return 'biológica';
+  return 'física';
 }
