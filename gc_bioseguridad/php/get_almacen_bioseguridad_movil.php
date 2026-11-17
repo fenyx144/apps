@@ -24,11 +24,14 @@ if (!$conn) {
     bio_send_json(200, false, 'sin señal', null, 'SIN_CONEXION');
 }
 
-bio_alm_asegurar($conn);
-$granja = substr(trim((string) (isset($_GET['granja']) ? $_GET['granja'] : '')), 0, 20);
+if (!bio_alm_tabla($conn, 'bio_almacen_mov')) {
+    bio_send_json(200, false, 'Migración 015 no aplicada', null, 'SIN_TABLA');
+}
+$granja = substr(trim((string) (isset($_GET['granja']) ? $_GET['granja'] : (isset($_GET['granja_cod']) ? $_GET['granja_cod'] : ''))), 0, 20);
 
 bio_send_json(200, true, 'Almacén', array(
     'granja' => $granja,
+    'ropa_tipos' => bio_alm_ropa($conn),
     'insumos' => bio_alm_insumos($conn),
     'kardex' => bio_alm_kardex($conn, $granja),
     'prestamos' => bio_alm_prestamos($conn, $granja),

@@ -2,39 +2,39 @@ import 'package:bioseguridad/services/almacen_kardex.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('entrega, devolución y lavado mueven Limpio y Lavadero', () {
-    final base = [
-      AlmacenLinea(
-        insumoId: 1,
-        codigo: 'IND-001',
-        nombre: 'Overol',
-        categoria: 'INDUMENTARIA',
-        unidad: 'UND',
-        almacen: 'LIMPIO',
-        si: 20,
-      ),
-      AlmacenLinea(
-        insumoId: 1,
-        codigo: 'IND-001',
-        nombre: 'Overol',
-        categoria: 'INDUMENTARIA',
-        unidad: 'UND',
-        almacen: 'LAVADERO',
-      ),
-    ];
-    final ops = [
-      {'operacion': 'ENTREGA', 'insumo_id': 1, 'codigo': 'IND-001', 'cantidad': 1},
-      {'operacion': 'DEVOLUCION', 'insumo_id': 1, 'codigo': 'IND-001', 'cantidad': 1},
-      {'operacion': 'LAVADO', 'insumo_id': 1, 'codigo': 'IND-001', 'cantidad': 2},
-    ];
-    final out = aplicarAlmacen(base, ops);
-    final limpio = out.firstWhere((l) => l.almacen == 'LIMPIO');
-    final lavadero = out.firstWhere((l) => l.almacen == 'LAVADERO');
-    expect(limpio.s, 1);
-    expect(limpio.e, 2);
-    expect(limpio.stock, 21);
-    expect(lavadero.e, 1);
-    expect(lavadero.s, 2);
-    expect(lavadero.stock, -1);
+  final base = [
+    AlmacenLinea(frente: 'LIMPIO', item: '2', nombre: 'Ropa para el proceso', si: 20),
+    AlmacenLinea(frente: 'LAVADERO', item: '2', nombre: 'Ropa para el proceso'),
+    AlmacenLinea(frente: 'INSUMOS', item: '6', nombre: 'Alcohol 70%', si: 10),
+  ];
+
+  test('entrega y recepción no dejan el lavadero en negativo', () {
+    final out = aplicarAlmacen(base, [
+      {'operacion': 'ENTREGA', 'item': '2', 'cantidad': 1},
+      {'operacion': 'RECEPCION', 'item': '2', 'cantidad': 1},
+      {'operacion': 'LAVADO', 'item': '2', 'cantidad': 2},
+    ]);
+    final limpio = out.firstWhere((l) => l.frente == 'LIMPIO');
+    final lavadero = out.firstWhere((l) => l.frente == 'LAVADERO');
+    expect(limpio.stock, 19);
+    expect(lavadero.stock, 1);
+    expect(rechazoAlmacen(out, operacion: 'LAVADO', item: '2', cantidad: 2), 'Sin stock');
+  });
+
+  test('el consumo resta insumos y no el almacén limpio', () {
+    final out = aplicarAlmacen(base, [
+      {'operacion': 'CONSUMO', 'item': '6', 'cantidad': 2},
+    ]);
+    expect(out.firstWhere((l) => l.frente == 'LIMPIO').stock, 20);
+    expect(out.firstWhere((l) => l.frente == 'INSUMOS' && l.item == '6').stock, 8);
+    expect(rechazoAlmacen(out, operacion: 'CONSUMO', item: '6', cantidad: 9), 'Sin stock');
+  });
+
+  test('no se entregan más limpios de los que hay', () {
+    expect(rechazoAlmacen(base, operacion: 'ENTREGA', item: '2', cantidad: 21), 'Sin stock');
+    final out = aplicarAlmacen(base, [
+      {'operacion': 'ENTREGA', 'item': '2', 'cantidad': 21},
+    ]);
+    expect(out.firstWhere((l) => l.frente == 'LIMPIO').stock, 20);
   });
 }

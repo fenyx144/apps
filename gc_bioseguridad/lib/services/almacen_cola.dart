@@ -117,8 +117,11 @@ class AlmacenCola {
       if (resultados is! List) return false;
       final okIds = <String>{};
       for (final r in resultados) {
-        if (r is Map && r['ok'] == true) {
-          okIds.add((r['uuid'] ?? '').toString());
+        if (r is! Map) continue;
+        final id = (r['uuid'] ?? '').toString();
+        if (id.isEmpty) continue;
+        if (r['ok'] == true || r['message'] == 'Stock insuficiente') {
+          okIds.add(id);
         }
       }
       if (okIds.isEmpty) return false;

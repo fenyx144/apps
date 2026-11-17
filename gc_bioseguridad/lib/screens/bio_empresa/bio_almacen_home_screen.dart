@@ -27,6 +27,7 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
   String _granjaNombre = '';
   bool _loading = true;
   List<Map<String, dynamic>> _insumos = [];
+  List<Map<String, dynamic>> _ropa = [];
   List<AlmacenLinea> _lineas = [];
   List<Map<String, dynamic>> _prestamos = [];
 
@@ -57,6 +58,7 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
           ? (sel?.granjaNombre ?? _granjaNombre)
           : _granjaNombre;
       _insumos = insumos.isNotEmpty ? insumos : local;
+      _ropa = _lista(cache['ropa_tipos']);
       _lineas = aplicarAlmacen(kardex, cola.pendientesDe(granja));
       _prestamos = _lista(cache['prestamos']);
       _loading = false;
@@ -68,9 +70,13 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
     return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  List<Map<String, dynamic>> get _uniformes => _insumos.where((i) {
-        return (i['categoria'] ?? '').toString().toUpperCase() == 'INDUMENTARIA';
-      }).toList();
+  List<Map<String, dynamic>> get _ropaTipos {
+    if (_ropa.isNotEmpty) return _ropa;
+    return [
+      {'codigo': 1, 'nombre': 'Ropa de transito'},
+      {'codigo': 2, 'nombre': 'Ropa para el proceso'},
+    ];
+  }
 
   List<({String dni, String nombre})> _trabajadores() {
     final map = <String, String>{};
@@ -124,12 +130,16 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
 
   Future<void> _operacion(String operacion) async {
     if (_granja.isEmpty) return;
-    final pideTrabajador = operacion == 'ENTREGA' || operacion == 'DEVOLUCION';
-    final catalogo = operacion == 'CONSUMO' ? _insumos : _uniformes;
-    final items = catalogo.isNotEmpty ? catalogo : _insumos;
+    final pideTrabajador = operacion == 'ENTREGA' || operacion == 'RECEPCION';
+    final items = operacion == 'CONSUMO' ? _insumos : _ropaTipos;
     if (items.isEmpty) return;
     final trabajadores = _trabajadores();
     var insumo = items.first;
+    if (operacion != 'CONSUMO') {
+      for (final e in items) {
+        if ('${e['codigo']}' == '2') insumo = e;
+      }
+    }
     var dni = trabajadores.length == 1 ? trabajadores.first.dni : '';
     var nombre = trabajadores.length == 1 ? trabajadores.first.nombre : '';
     final cantCtrl = TextEditingController(text: '1');
@@ -148,19 +158,21 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<int>(
-                    initialValue: int.tryParse('${insumo['id']}'),
-                    decoration: const InputDecoration(labelText: 'Insumo'),
+                    initialValue: int.tryParse('${insumo['id'] ?? insumo['codigo']}'),
+                    decoration: InputDecoration(
+                      labelText: operacion == 'CONSUMO' ? 'Insumo' : 'Ropa',
+                    ),
                     items: [
                       for (final i in items)
                         DropdownMenuItem(
-                          value: int.tryParse('${i['id']}'),
+                          value: int.tryParse('${i['id'] ?? i['codigo']}'),
                           child: Text((i['nombre'] ?? '').toString()),
                         ),
                     ],
                     onChanged: (v) {
                       Map<String, dynamic>? sel;
                       for (final e in items) {
-                        if (int.tryParse('${e['id']}') == v) sel = e;
+                        if (int.tryParse('${e['id'] ?? e['codigo']}') == v) sel = e;
                       }
                       if (sel != null) setLocal(() => insumo = sel!);
                     },
@@ -245,21 +257,29 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
     if (ok != true || !mounted) return;
     if (n == null || n < 1) return;
     if (pideTrabajador && dni.replaceAll(RegExp(r'\D'), '').length < 6) return;
+    final item = operacion == 'CONSUMO'
+        ? '${insumo['id']}'
+        : '${insumo['codigo'] ?? insumo['id'] ?? 2}';
+    if (rechazoAlmacen(_lineas, operacion: operacion, item: item, cantidad: n.toDouble()) !=
+        null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sin stock')));
+      return;
+    }
     final storage = context.read<StorageService>();
     final cola = AlmacenCola(storage);
     await cola.encolar({
       'uuid': const Uuid().v4(),
+      'granja_cod': _granja,
       'granja': _granja,
       'fecha': DateFormat('yyyy-MM-dd').format(DateTime.now()),
       'operacion': operacion,
-      'insumo_id': insumo['id'],
-      'codigo': insumo['codigo'] ?? '',
+      'item': item,
+      'insumo_id': operacion == 'CONSUMO' ? insumo['id'] : 0,
+      'ropa_tipo': operacion == 'CONSUMO' ? 0 : item,
       'nombre_insumo': insumo['nombre'] ?? '',
-      'categoria': insumo['categoria'] ?? '',
-      'unidad': insumo['unidad'] ?? '',
       'cantidad': n,
       'dni': dni.replaceAll(RegExp(r'\D'), ''),
-      'nombre': nombre,
+      'origen': 'app',
     });
     await cola.sincronizar();
     await _cargar();
@@ -271,7 +291,7 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
         return 'Consumo';
       case 'ENTREGA':
         return 'Entrega';
-      case 'DEVOLUCION':
+      case 'RECEPCION':
         return 'Recepción';
       default:
         return 'Lavado';
@@ -283,16 +303,20 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
     return n.toStringAsFixed(2);
   }
 
-  String _alm(String a) => a == 'LAVADERO' ? 'Lavadero' : 'Limpio';
+  String _alm(String a) {
+    if (a == 'LAVADERO') return 'Lavadero';
+    if (a == 'INSUMOS') return 'Insumos';
+    return 'Limpio';
+  }
 
   @override
   Widget build(BuildContext context) {
     final porInsumo = <String, List<AlmacenLinea>>{};
     for (final l in _lineas) {
-      final esUniforme = l.categoria.toUpperCase() == 'INDUMENTARIA';
+      final esRopa = l.frente != 'INSUMOS' && l.item == '2';
       final tiene = l.si != 0 || l.e != 0 || l.s != 0;
-      if (!esUniforme && !tiene) continue;
-      porInsumo.putIfAbsent(l.nombre.isEmpty ? l.codigo : l.nombre, () => []).add(l);
+      if (!esRopa && !tiene) continue;
+      porInsumo.putIfAbsent(l.nombre.isEmpty ? l.item : l.nombre, () => []).add(l);
     }
     return Scaffold(
       drawer: const AppDrawer(),
@@ -339,7 +363,7 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
                         for (final l in entry.value)
                           TableRow(
                             children: [
-                              Text(_alm(l.almacen)),
+                              Text(_alm(l.frente)),
                               Text(_fmt(l.si)),
                               Text(_fmt(l.e)),
                               Text(_fmt(l.s)),
@@ -356,7 +380,7 @@ class _BioAlmacenHomeScreenState extends State<BioAlmacenHomeScreen> {
                     children: [
                       _boton('Consumo', 'CONSUMO'),
                       _boton('Entrega', 'ENTREGA'),
-                      _boton('Recepción', 'DEVOLUCION'),
+                      _boton('Recepción', 'RECEPCION'),
                       _boton('Lavado', 'LAVADO'),
                     ],
                   ),

@@ -29,7 +29,9 @@ if (!$conn) {
     bio_send_json(200, false, 'sin señal', null, 'SIN_CONEXION');
 }
 
-bio_alm_asegurar($conn);
+if (!bio_alm_tabla($conn, 'bio_almacen_mov')) {
+    bio_send_json(200, false, 'Migración 015 no aplicada', null, 'SIN_TABLA');
+}
 
 $raw = file_get_contents('php://input');
 $body = json_decode($raw ? $raw : '', true);
