@@ -23,6 +23,8 @@ import '../widgets/image_slot_row.dart';
 import '../widgets/section_app_bar.dart';
 import 'register_summary_screen.dart' show RegisterSummarySheet;
 
+const _turquesa = Color(0xFF0FA3B1);
+
 const _desinfectantes = <String>[
   'Amoníaco',
   'Hipoclorito de sodio',
@@ -40,12 +42,18 @@ class _LineaArticulo {
   String desinfectante = _desinfectantes.first;
   String codigo = '';
   String notaCatalogo = '';
-  String anomaliaPerm = '';
-  String agentePerm = '';
+  final anomaliaPermCtrl = TextEditingController();
+  final agentePermCtrl = TextEditingController();
   final accionPermCtrl = TextEditingController();
-  String anomaliaDes = '';
-  String agenteDes = '';
+  final anomaliaDesCtrl = TextEditingController();
+  final agenteDesCtrl = TextEditingController();
   final accionDesCtrl = TextEditingController();
+  String _autoAnomaliaPerm = '';
+  String _autoAgentePerm = '';
+  String _autoAccionPerm = '';
+  String _autoAnomaliaDes = '';
+  String _autoAgenteDes = '';
+  String _autoAccionDes = '';
   final List<String?> fotos = [null, null, null];
 
   String get nombre => nombreCtrl.text.trim();
@@ -60,27 +68,39 @@ class _LineaArticulo {
     if (a.permite != null) permitido = a.permite!;
   }
 
+  void _poner(
+    TextEditingController ctrl,
+    String nuevo,
+    String auto,
+    void Function(String) guardarAuto,
+  ) {
+    if (ctrl.text.trim().isEmpty || ctrl.text == auto) {
+      ctrl.text = nuevo;
+      guardarAuto(nuevo);
+    }
+  }
+
   void rellenarAgcNoPermitido() {
     final ctx = AnomaliaContexto.articuloNoPermitido(nombre, nota: notaCatalogo);
-    anomaliaPerm = ctx.anomalia;
-    agentePerm = ctx.agenteCausal;
-    if (accionPermCtrl.text.trim().isEmpty) {
-      accionPermCtrl.text = ctx.accion;
-    }
+    _poner(anomaliaPermCtrl, ctx.anomalia, _autoAnomaliaPerm, (v) => _autoAnomaliaPerm = v);
+    _poner(agentePermCtrl, ctx.agenteCausal, _autoAgentePerm, (v) => _autoAgentePerm = v);
+    _poner(accionPermCtrl, ctx.accion, _autoAccionPerm, (v) => _autoAccionPerm = v);
   }
 
   void rellenarAgcSinDesinfeccion() {
     final ctx = AnomaliaContexto.articuloSinDesinfeccion(nombre);
-    anomaliaDes = ctx.anomalia;
-    agenteDes = ctx.agenteCausal;
-    if (accionDesCtrl.text.trim().isEmpty) {
-      accionDesCtrl.text = ctx.accion;
-    }
+    _poner(anomaliaDesCtrl, ctx.anomalia, _autoAnomaliaDes, (v) => _autoAnomaliaDes = v);
+    _poner(agenteDesCtrl, ctx.agenteCausal, _autoAgenteDes, (v) => _autoAgenteDes = v);
+    _poner(accionDesCtrl, ctx.accion, _autoAccionDes, (v) => _autoAccionDes = v);
   }
 
   void dispose() {
     nombreCtrl.dispose();
+    anomaliaPermCtrl.dispose();
+    agentePermCtrl.dispose();
     accionPermCtrl.dispose();
+    anomaliaDesCtrl.dispose();
+    agenteDesCtrl.dispose();
     accionDesCtrl.dispose();
   }
 }
@@ -289,8 +309,8 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
         'descripcion': l.nombre,
         'permitido': l.permitido,
         if (!l.permitido) ...{
-          'anomalia_permitido': l.anomaliaPerm,
-          'agente_causal_permitido': l.agentePerm,
+          'anomalia_permitido': l.anomaliaPermCtrl.text.trim(),
+          'agente_causal_permitido': l.agentePermCtrl.text.trim(),
           'accion_permitido': l.accionPermCtrl.text.trim(),
         },
         if (l.permitido) ...{
@@ -298,8 +318,8 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
           if (l.desinfectado && l.desinfectante.isNotEmpty)
             'desinfectante': l.desinfectante,
           if (!l.desinfectado) ...{
-            'anomalia_desinfeccion': l.anomaliaDes,
-            'agente_causal_desinfeccion': l.agenteDes,
+            'anomalia_desinfeccion': l.anomaliaDesCtrl.text.trim(),
+            'agente_causal_desinfeccion': l.agenteDesCtrl.text.trim(),
             'accion_desinfeccion': l.accionDesCtrl.text.trim(),
           },
         },
@@ -345,13 +365,19 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
         showErrorToast(context, 'Adjunte foto: «${l.nombre}».');
         return;
       }
-      if (!l.permitido && l.accionPermCtrl.text.trim().isEmpty) {
-        showErrorToast(context, 'Indique la acción: «${l.nombre}».');
+      if (!l.permitido &&
+          (l.anomaliaPermCtrl.text.trim().isEmpty ||
+              l.agentePermCtrl.text.trim().isEmpty ||
+              l.accionPermCtrl.text.trim().isEmpty)) {
+        showErrorToast(context, 'Indique anomalía, agente causal y acción: «${l.nombre}».');
         return;
       }
       if (l.permitido) {
-        if (!l.desinfectado && l.accionDesCtrl.text.trim().isEmpty) {
-          showErrorToast(context, 'Indique la acción: «${l.nombre}».');
+        if (!l.desinfectado &&
+            (l.anomaliaDesCtrl.text.trim().isEmpty ||
+                l.agenteDesCtrl.text.trim().isEmpty ||
+                l.accionDesCtrl.text.trim().isEmpty)) {
+          showErrorToast(context, 'Indique anomalía, agente causal y acción: «${l.nombre}».');
           return;
         } else if (l.desinfectado && l.desinfectante.trim().isEmpty) {
           showErrorToast(
@@ -390,8 +416,8 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
                 nombre: _nombre.trim(),
                 articulo: l.nombre,
                 accion: l.accionPermCtrl.text.trim(),
-                anomalia: l.anomaliaPerm,
-                agenteCausal: l.agentePerm,
+                anomalia: l.anomaliaPermCtrl.text.trim(),
+                agenteCausal: l.agentePermCtrl.text.trim(),
                 fotoPath: fotoPath,
                 usuario: usuario,
               );
@@ -409,8 +435,8 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
                 nombre: _nombre.trim(),
                 articulo: '${l.nombre} (desinfección)',
                 accion: l.accionDesCtrl.text.trim(),
-                anomalia: l.anomaliaDes,
-                agenteCausal: l.agenteDes,
+                anomalia: l.anomaliaDesCtrl.text.trim(),
+                agenteCausal: l.agenteDesCtrl.text.trim(),
                 fotoPath: fotoPath,
                 usuario: usuario,
               );
@@ -631,7 +657,11 @@ class _ArticuloLineaTile extends StatelessWidget {
             Expanded(
               child: Text(
                 'Artículo ${index + 1}',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: _turquesa,
+                ),
               ),
             ),
             if (puedeQuitar)
@@ -698,16 +728,11 @@ class _ArticuloLineaTile extends StatelessWidget {
         ),
         if (!linea.permitido) ...[
           const SizedBox(height: 6),
-          TextField(
-            controller: linea.accionPermCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Acción',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            minLines: 2,
-            maxLines: 3,
-            onChanged: (_) => onChanged(),
+          _CamposAnomaliaArticulo(
+            anomalia: linea.anomaliaPermCtrl,
+            agente: linea.agentePermCtrl,
+            accion: linea.accionPermCtrl,
+            onChanged: onChanged,
           ),
         ],
         if (linea.permitido) ...[
@@ -751,16 +776,11 @@ class _ArticuloLineaTile extends StatelessWidget {
             ),
           ] else ...[
             const SizedBox(height: 6),
-            TextField(
-              controller: linea.accionDesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Acción',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              minLines: 2,
-              maxLines: 3,
-              onChanged: (_) => onChanged(),
+            _CamposAnomaliaArticulo(
+              anomalia: linea.anomaliaDesCtrl,
+              agente: linea.agenteDesCtrl,
+              accion: linea.accionDesCtrl,
+              onChanged: onChanged,
             ),
           ],
         ],
@@ -784,4 +804,88 @@ class _ArticuloLineaTile extends StatelessWidget {
       ],
     );
   }
+}
+
+class _CamposAnomaliaArticulo extends StatelessWidget {
+  const _CamposAnomaliaArticulo({
+    required this.anomalia,
+    required this.agente,
+    required this.accion,
+    required this.onChanged,
+  });
+
+  final TextEditingController anomalia;
+  final TextEditingController agente;
+  final TextEditingController accion;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: _turquesa, width: 1.4),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+        child: Column(
+          children: [
+            TextField(
+              controller: anomalia,
+              cursorColor: _turquesa,
+              minLines: 2,
+              maxLines: 3,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              decoration: _dec('Anomalía'),
+              onChanged: (_) => onChanged(),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: agente,
+              cursorColor: _turquesa,
+              minLines: 2,
+              maxLines: 3,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              decoration: _dec('Agente causal'),
+              onChanged: (_) => onChanged(),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: accion,
+              cursorColor: _turquesa,
+              minLines: 2,
+              maxLines: 3,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              decoration: _dec('Acción'),
+              onChanged: (_) => onChanged(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+InputDecoration _dec(String label) {
+  const borde = OutlineInputBorder(
+    borderRadius: BorderRadius.all(Radius.circular(12)),
+    borderSide: BorderSide(color: _turquesa, width: 1.5),
+  );
+  return const InputDecoration(
+    filled: true,
+    fillColor: Colors.white,
+    isDense: true,
+    floatingLabelBehavior: FloatingLabelBehavior.auto,
+  ).copyWith(
+    labelText: label,
+    labelStyle: const TextStyle(color: _turquesa, fontWeight: FontWeight.w600),
+    floatingLabelStyle: const TextStyle(color: _turquesa, fontWeight: FontWeight.w700),
+    border: borde,
+    enabledBorder: borde,
+    focusedBorder: const OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(12)),
+      borderSide: BorderSide(color: _turquesa, width: 2),
+    ),
+  );
 }
