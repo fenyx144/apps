@@ -2115,10 +2115,47 @@ class _RegisterControlIngresoScreenState
     _consultarEstatusSanitario();
   }
 
+  Future<VerificacionFacialResult?> _resolverRostro(RostroCaptura cap) async {
+    if (cap.manual || cap.rgb == null) return dniManualFacial(context);
+    final close = showChickenLoadingDialog(context, '');
+    await WidgetsBinding.instance.endOfFrame;
+    VerificacionFacialResult? reconocido;
+    try {
+      final jpeg = jpegRostro(cap.rgb!, cap.ancho, cap.alto);
+      if (jpeg.length >= 32) {
+        final res = await ApiService()
+            .verificarRostro(jpeg: jpeg)
+            .timeout(const Duration(seconds: 90));
+        final data = res['data'];
+        final map =
+            data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+        final dni = (map['dni'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+        if (res['success'] == true && map['verificado'] == true && dni.isNotEmpty) {
+          reconocido = VerificacionFacialResult(
+            dni: dni,
+            nombre: (map['nombre'] ?? '').toString().trim(),
+            empresa: (map['empresa'] ?? '').toString().trim(),
+            verificado: true,
+          );
+        }
+      }
+    } on TimeoutException {
+      debugPrint('[BioVerif] timeout en pantalla');
+    } catch (e) {
+      debugPrint('[BioVerif] error en pantalla $e');
+    } finally {
+      await dismissLoadingDialog(close);
+    }
+    if (!mounted) return null;
+    return reconocido ?? await dniManualFacial(context);
+  }
+
   Future<void> _identificarPorRostro() async {
-    final r = await Navigator.of(context).push<VerificacionFacialResult>(
+    final cap = await Navigator.of(context).push<RostroCaptura>(
       MaterialPageRoute(builder: (_) => const VerificacionFacialScreen()),
     );
+    if (cap == null || !mounted) return;
+    final r = await _resolverRostro(cap);
     if (r == null || !mounted) return;
     if (!await _evaluarPresenciaTrasEscaneo(dni: r.dni)) return;
     if (!mounted) return;

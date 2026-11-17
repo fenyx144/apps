@@ -32,25 +32,27 @@ void Function() showAppLoadingDialog(BuildContext context, String message) {
                 height: 150,
                 fit: BoxFit.contain,
               ),
-              const SizedBox(height: 14),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: ctx.textThemePrimary,
+              if (message.trim().isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: ctx.textThemePrimary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              const SizedBox(
-                width: 26,
-                height: 26,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  color: AppColors.primary,
+                const SizedBox(height: 16),
+                const SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: AppColors.primary,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
