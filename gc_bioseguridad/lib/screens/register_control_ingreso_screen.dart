@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -267,7 +268,8 @@ class _VehiculoFila {
 
 class _RegisterControlIngresoScreenState
     extends State<RegisterControlIngresoScreen> {
-  static const int _largoDocMax = DocumentoPersona.maxLength;
+  /// Tope del campo de ingreso: DNI (8) o CEE alfanumérico.
+  static const int _largoDocEntrada = 12;
 
   /// Separación vertical entre campos de un mismo bloque del formulario.
   static const double _sepCampo = 6;
@@ -1839,8 +1841,11 @@ class _RegisterControlIngresoScreenState
   }
 
   void _confirmarDniEscrito() {
-    final dni = _dniEntrada.text.replaceAll(RegExp(r'\D'), '');
-    if (dni.length < 6) return;
+    var dni = DocumentoPersona.normalizar(_dniEntrada.text);
+    if (dni.length > _largoDocEntrada) {
+      dni = dni.substring(0, _largoDocEntrada);
+    }
+    if (!DocumentoPersona.esCompleto(dni)) return;
     _dniEntrada.clear();
     unawaited(_agregarDniEscaneado(dni));
   }
@@ -2915,11 +2920,14 @@ class _RegisterControlIngresoScreenState
           ),
         _EntradaIdentificar(
           controller: _dniEntrada,
-          hint: 'DNI',
+          hint: 'DNI o CEE',
           iconoFacial: Icons.face_retouching_natural,
           onFacial: _identificarPorRostro,
           onEscanear: _escanearNuevoDni,
           onSubmit: _confirmarDniEscrito,
+          teclado: TextInputType.text,
+          maxLength: _largoDocEntrada,
+          alfanumerico: true,
         ),
         const SizedBox(height: 10),
         _EntradaIdentificar(
@@ -2950,7 +2958,7 @@ class _RegisterControlIngresoScreenState
                           controller: fila.ctrl,
                           hint: 'DNI o CEE',
                           keyboardType: TextInputType.text,
-                          maxLength: _largoDocMax,
+                          maxLength: _largoDocEntrada,
                           soloDigitos: false,
                           onChanged: (_) => _alCambiarDni(index),
                         ),
@@ -4608,7 +4616,9 @@ class _EntradaIdentificar extends StatelessWidget {
     required this.onSubmit,
     this.onFacial,
     this.iconoFacial,
-    this.teclado = TextInputType.number,
+    this.teclado = TextInputType.text,
+    this.maxLength,
+    this.alfanumerico = false,
   });
 
   final TextEditingController controller;
@@ -4618,35 +4628,57 @@ class _EntradaIdentificar extends StatelessWidget {
   final VoidCallback? onFacial;
   final IconData? iconoFacial;
   final TextInputType teclado;
+  final int? maxLength;
+  final bool alfanumerico;
+
+  static const _borde = OutlineInputBorder(
+    borderRadius: BorderRadius.all(Radius.circular(12)),
+    borderSide: BorderSide(color: _verdeIngreso, width: 1.5),
+  );
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
       keyboardType: teclado,
-      textCapitalization: teclado == TextInputType.number
-          ? TextCapitalization.none
-          : TextCapitalization.characters,
+      textCapitalization: TextCapitalization.characters,
       textInputAction: TextInputAction.done,
       onSubmitted: (_) => onSubmit(),
-      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      cursorColor: _verdeIngreso,
+      cursorWidth: 2,
+      showCursor: true,
+      maxLength: maxLength,
+      inputFormatters: [
+        if (alfanumerico)
+          FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+        if (maxLength != null) LengthLimitingTextInputFormatter(maxLength),
+      ],
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF1A1A1A),
+      ),
       decoration: InputDecoration(
-        hintText: hint,
+        labelText: hint,
+        floatingLabelBehavior: FloatingLabelBehavior.auto,
+        floatingLabelStyle: const TextStyle(
+          color: _verdeIngreso,
+          fontWeight: FontWeight.w700,
+        ),
+        labelStyle: const TextStyle(
+          color: _verdeIngreso,
+          fontWeight: FontWeight.w600,
+        ),
+        counterText: '',
         isDense: true,
         filled: true,
-        fillColor: const Color(0xFFE8F6EE),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF8FCBAA)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF8FCBAA), width: 1.4),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _verdeIngreso, width: 2),
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.fromLTRB(14, 18, 4, 18),
+        border: _borde,
+        enabledBorder: _borde,
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+          borderSide: BorderSide(color: _verdeIngreso, width: 2),
         ),
         suffixIconConstraints: BoxConstraints(
           minWidth: onFacial == null ? 48 : 96,
@@ -4658,17 +4690,17 @@ class _EntradaIdentificar extends StatelessWidget {
             if (onFacial != null)
               IconButton(
                 onPressed: onFacial,
-                iconSize: 28,
+                iconSize: 26,
                 color: _verdeIngreso,
                 icon: Icon(iconoFacial ?? Icons.face_retouching_natural),
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             IconButton(
               onPressed: onEscanear,
-              iconSize: 28,
+              iconSize: 26,
               color: _verdeIngreso,
               icon: const Icon(Icons.qr_code_scanner_rounded),
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             ),
           ],
         ),

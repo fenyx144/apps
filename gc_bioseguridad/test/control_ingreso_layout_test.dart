@@ -75,6 +75,11 @@ Finder _campoPorHint(String hint) => find.byWidgetPredicate(
   (w) => w is TextField && w.decoration?.hintText == hint,
 );
 
+/// Campo grande de identificar (etiqueta flotante), no la celda de la tabla.
+Finder _campoIdentificar(String etiqueta) => find.byWidgetPredicate(
+  (w) => w is TextField && w.decoration?.labelText == etiqueta,
+);
+
 /// Texto con pinta de sello de descarga («01/10 08:30»): el «Planificación:
 /// dd/MM HH:mm» que el formulario ya no muestra en ningún lado.
 Finder _selloDescarga() => find.byWidgetPredicate(
@@ -89,7 +94,7 @@ Finder _camposVehiculo() =>
     find.byWidgetPredicate((w) => w is BioTextField && w.hint == 'Placa');
 
 Future<void> _agregarDniManual(WidgetTester tester, String dni) async {
-  await tester.enterText(_campoPorHint('DNI'), dni);
+  await tester.enterText(_campoIdentificar('DNI o CEE'), dni);
   await tester.testTextInput.receiveAction(TextInputAction.done);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
@@ -101,7 +106,7 @@ Future<void> _seleccionarPlanDelDia(WidgetTester tester) async {}
 Finder _entradaPlaca() => find.byWidgetPredicate(
       (w) =>
           w is TextField &&
-          w.decoration?.hintText == 'Placa' &&
+          w.decoration?.labelText == 'Placa' &&
           w.onSubmitted != null,
     );
 
@@ -148,15 +153,15 @@ void main() {
     await _montar(tester);
     expect(find.textContaining('1. Identificar'), findsOneWidget);
 
-    await tester.enterText(_campoPorHint('DNI'), '12345678');
+    await tester.enterText(_campoIdentificar('DNI o CEE'), '12345678');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
 
     final tabla = find.byType(BioTable);
     expect(tabla, findsOneWidget);
 
-    final campoDni = _campoPorHint('DNI');
-    final campoPlaca = _campoPorHint('Placa');
+    final campoDni = _campoIdentificar('DNI o CEE');
+    final campoPlaca = _campoIdentificar('Placa');
     expect(campoDni, findsOneWidget);
     expect(campoPlaca, findsOneWidget);
     expect(
@@ -721,8 +726,11 @@ void main() {
 
     await _montar(tester, prefsIniciales: _prefsConGranja());
 
-    expect(_campoPorHint('DNI'), findsOneWidget);
-    expect(_campoPorHint('Placa'), findsOneWidget);
+    expect(_campoIdentificar('DNI o CEE'), findsOneWidget);
+    expect(_campoIdentificar('Placa'), findsOneWidget);
+    final dni = tester.widget<TextField>(_campoIdentificar('DNI o CEE'));
+    expect(dni.decoration?.fillColor, Colors.white);
+    expect(dni.maxLength, 12);
     expect(tester.takeException(), isNull);
   });
 
