@@ -37,6 +37,30 @@ if (!is_array($body)) {
     bio_send_json(400, false, 'JSON inválido');
 }
 
+$forzado = bio_ver_forzado_dni();
+if ($forzado !== '') {
+    if (!function_exists('conectar_joya_mysqli')) {
+        bio_send_json(200, false, 'sin señal', ['verificado' => false, 'motivo' => 'sin_senal']);
+    }
+    $connF = conectar_joya_mysqli();
+    if (!$connF) {
+        bio_send_json(200, false, 'sin señal', ['verificado' => false, 'motivo' => 'sin_senal']);
+    }
+    $persona = bio_ver_persona($connF, $forzado);
+    $connF->close();
+    error_log('[BioVerif] motivo=forzado dni=' . $persona['dni']);
+    bio_send_json(200, true, 'Coincide', [
+        'verificado' => true,
+        'motivo' => 'forzado',
+        'forzado' => true,
+        'dni' => $persona['dni'],
+        'nombre' => $persona['nombre'],
+        'empresa' => $persona['empresa'],
+        'similitud' => 1,
+        'score' => 1,
+    ]);
+}
+
 $foto = trim((string) ($body['foto'] ?? ''));
 if (strncmp($foto, 'data:', 5) === 0) {
     $pos = strpos($foto, ',');
@@ -178,6 +202,125 @@ bio_send_json(200, true, $ok ? 'Coincide' : 'No coincide', [
     'similitud' => round($bs, 3),
     'tiempos' => $tiempos,
 ]);
+
+/** DNI de prueba: variable BIO_FACE_FORCE_DNI o face_force_dni.txt junto a este PHP. */
+function bio_ver_forzado_dni(): string
+{
+    $fuentes = [];
+    $env = getenv('BIO_FACE_FORCE_DNI');
+    if (is_string($env) && trim($env) !== '') {
+        $fuentes[] = $env;
+    }
+    if (isset($_SERVER['BIO_FACE_FORCE_DNI'])) {
+        $fuentes[] = (string) $_SERVER['BIO_FACE_FORCE_DNI'];
+    }
+    $archivo = __DIR__ . '/face_force_dni.txt';
+    if (is_file($archivo)) {
+        $txt = file_get_contents($archivo);
+        if (is_string($txt)) {
+            $fuentes[] = $txt;
+        }
+    }
+    foreach ($fuentes as $raw) {
+        $linea = preg_split('/\R/', trim($raw));
+        $primera = is_array($linea) ? trim((string) ($linea[0] ?? '')) : '';
+        $dni = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $primera) ?? '');
+        if (strlen($dni) >= 6 && strlen($dni) <= 15) {
+            return $dni;
+        }
+    }
+
+    return '';
+}
+
+/** Nombre y empresa reales, igual que una coincidencia de la galería. */
+function bio_ver_persona(mysqli $conn, string $dni): array
+{
+    $nombre = '';
+    $empresa = '';
+    $doc = $dni;
+    if (function_exists('bio_nom_tabla_existe') && bio_nom_tabla_existe($conn, 'bio_personal')) {
+        $sql = "SELECT TRIM(p.dni) AS dni,
+                       TRIM(CONCAT(TRIM(IFNULL(p.nombres,'')), ' ', TRIM(IFNULL(p.apellidos,'')))) AS nombre,
+                       TRIM(IFNULL(e.razon_social, IFNULL(p.empresa,''))) AS empresa
+                  FROM bio_personal p
+                  LEFT JOIN bio_empresa e ON e.id = p.empresa_id
+                 WHERE REPLACE(TRIM(p.dni), ' ', '') = ?
+                 LIMIT 1";
+        $st = $conn->prepare($sql);
+        if (!$st) {
+            $sql = "SELECT TRIM(dni) AS dni,
+                           TRIM(CONCAT(TRIM(IFNULL(nombres,'')), ' ', TRIM(IFNULL(apellidos,'')))) AS nombre,
+                           '' AS empresa
+                      FROM bio_personal
+                     WHERE REPLACE(TRIM(dni), ' ', '') = ?
+                     LIMIT 1";
+            $st = $conn->prepare($sql);
+        }
+        if ($st) {
+            $st->bind_param('s', $dni);
+            if ($st->execute()) {
+                $rs = $st->get_result();
+                $row = $rs ? $rs->fetch_assoc() : null;
+                if (is_array($row)) {
+                    $hallado = trim((string) ($row['dni'] ?? ''));
+                    if ($hallado !== '') {
+                        $doc = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $hallado) ?? $dni);
+                    }
+                    $nombre = trim((string) ($row['nombre'] ?? ''));
+                    $empresa = trim((string) ($row['empresa'] ?? ''));
+                }
+            }
+            $st->close();
+        }
+    }
+    if ($nombre === '' && function_exists('bio_nom_tabla_existe') && bio_nom_tabla_existe($conn, 'usuario')) {
+        $cols = [];
+        $rc = @$conn->query('SHOW COLUMNS FROM `usuario`');
+        while ($rc && ($c = $rc->fetch_assoc())) {
+            $cols[strtolower((string) ($c['Field'] ?? ''))] = (string) $c['Field'];
+        }
+        $nombreCol = '';
+        foreach (['nombre', 'nombres', 'descripcion', 'name'] as $c) {
+            if (isset($cols[$c])) {
+                $nombreCol = $cols[$c];
+                break;
+            }
+        }
+        $empCol = '';
+        foreach (['empresa', 'razon_social', 'razonsocial'] as $c) {
+            if (isset($cols[$c])) {
+                $empCol = $cols[$c];
+                break;
+            }
+        }
+        if ($nombreCol !== '' && isset($cols['libtri'])) {
+            $selEmp = $empCol !== '' ? ', TRIM(`' . $empCol . '`) AS empresa' : ", '' AS empresa";
+            $sql = 'SELECT TRIM(`' . $nombreCol . '`) AS nombre' . $selEmp
+                . ' FROM `usuario` WHERE REPLACE(TRIM(`' . $cols['libtri'] . '`), \' \', \'\') = ? LIMIT 1';
+            $st = $conn->prepare($sql);
+            if ($st) {
+                $st->bind_param('s', $dni);
+                if ($st->execute()) {
+                    $rs = $st->get_result();
+                    $row = $rs ? $rs->fetch_assoc() : null;
+                    if (is_array($row)) {
+                        $nombre = trim((string) ($row['nombre'] ?? ''));
+                        if ($empresa === '') {
+                            $empresa = trim((string) ($row['empresa'] ?? ''));
+                        }
+                    }
+                }
+                $st->close();
+            }
+        }
+    }
+    if ($nombre === '') {
+        $nombre = $doc;
+    }
+
+    return ['dni' => $doc, 'nombre' => $nombre, 'empresa' => $empresa];
+}
 
 function bio_ver_asegurar_tabla(mysqli $conn): void
 {

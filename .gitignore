@@ -95,6 +95,9 @@ lib/generated_plugin_registrant.dart
 # Evitar que se suban los zips de gradle que pesan cientos de MB
 **/android/gradle/wrapper/gradle-*.zip
 gradle-*.zip
+# DNI de prueba de la verificación facial. No versionar.
+**/face_force_dni.txt
+
 # Artefactos de build y archivos pesados
 **/build/
 **/.dart_tool/

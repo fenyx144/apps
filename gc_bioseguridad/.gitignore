@@ -93,3 +93,6 @@ migrate_working_dir/
 *.swp
 .DS_Store
 Thumbs.db
+
+# DNI de prueba de la verificación facial (junto a verificar_rostro_bioseguridad_movil.php).
+php/face_force_dni.txt
