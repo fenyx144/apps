@@ -40,8 +40,6 @@ class RegisterGaritaScreen extends StatefulWidget {
   State<RegisterGaritaScreen> createState() => _RegisterGaritaScreenState();
 }
 
-const _turquesa = Color(0xFF0FA3B1);
-
 class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
   final _anomaliaController = TextEditingController();
   final _agenteController = TextEditingController();
@@ -317,37 +315,35 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
 
   Widget _bloqueAnomalia(BuildContext context) {
     final tema = Theme.of(context);
-    const borde = OutlineInputBorder(
-      borderRadius: BorderRadius.all(Radius.circular(12)),
-      borderSide: BorderSide(color: _turquesa, width: 1.5),
+    final esquema = tema.colorScheme;
+    final borde = OutlineInputBorder(
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      borderSide: const BorderSide(color: acentoTurquesa, width: 1.5),
     );
     return Theme(
       data: tema.copyWith(
         inputDecorationTheme: tema.inputDecorationTheme.copyWith(
           filled: true,
-          fillColor: Colors.white,
+          fillColor: esquema.surface,
           floatingLabelBehavior: FloatingLabelBehavior.auto,
-          labelStyle: const TextStyle(color: _turquesa, fontWeight: FontWeight.w600),
+          labelStyle: const TextStyle(color: acentoTurquesa, fontWeight: FontWeight.w600),
           floatingLabelStyle: const TextStyle(
-            color: _turquesa,
+            color: acentoTurquesa,
             fontWeight: FontWeight.w700,
             fontSize: 13.5,
           ),
           enabledBorder: borde,
           focusedBorder: const OutlineInputBorder(
             borderRadius: BorderRadius.all(Radius.circular(12)),
-            borderSide: BorderSide(color: _turquesa, width: 2),
+            borderSide: BorderSide(color: acentoTurquesa, width: 2),
           ),
           border: borde,
         ),
       ),
       child: Material(
-        color: Colors.white,
+        color: esquema.surface,
         clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: _turquesa, width: 1.4),
-        ),
+        shape: context.tarjetaAcento,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
           child: Column(
@@ -355,14 +351,14 @@ class _RegisterGaritaScreenState extends State<RegisterGaritaScreen> {
             children: [
               const Row(
                 children: [
-                  Icon(Icons.report_outlined, size: 18, color: _turquesa),
+                  Icon(Icons.report_outlined, size: 18, color: acentoTurquesa),
                   SizedBox(width: 8),
                   Text(
                     'Anomalía',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: _turquesa,
+                      color: acentoTurquesa,
                     ),
                   ),
                 ],

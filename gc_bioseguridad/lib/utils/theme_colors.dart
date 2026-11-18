@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'constants.dart';
 
+/// Acento de los formularios de campo (anomalías, artículos, alcoholemia).
+const Color acentoTurquesa = Color(0xFF0FA3B1);
+
 /// Colores y estilos que respetan el modo claro/oscuro del sistema.
 extension AppThemeColors on BuildContext {
   bool get isAppDark => Theme.of(this).brightness == Brightness.dark;
@@ -34,6 +37,42 @@ extension AppThemeColors on BuildContext {
 
   Color get dialogSurface =>
       isAppDark ? AppColors.darkCard : AppColors.dialogBackground;
+
+  /// Fondo de tarjeta y de campo: la superficie del tema, no un blanco fijo.
+  Color get superficieCampo => Theme.of(this).colorScheme.surface;
+
+  Color get textoCampo => Theme.of(this).colorScheme.onSurface;
+
+  InputDecoration campoAcento(String label) {
+    const borde = OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(12)),
+      borderSide: BorderSide(color: acentoTurquesa, width: 1.5),
+    );
+    return InputDecoration(
+      filled: true,
+      fillColor: superficieCampo,
+      isDense: true,
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
+      labelText: label,
+      labelStyle: const TextStyle(color: acentoTurquesa, fontWeight: FontWeight.w600),
+      floatingLabelStyle: const TextStyle(
+        color: acentoTurquesa,
+        fontWeight: FontWeight.w700,
+        fontSize: 13.5,
+      ),
+      border: borde,
+      enabledBorder: borde,
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+        borderSide: BorderSide(color: acentoTurquesa, width: 2),
+      ),
+    );
+  }
+
+  ShapeBorder get tarjetaAcento => RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: acentoTurquesa, width: 1.4),
+      );
 
   // ── Tablas ─────────────────────────────────────────────────────────────
   // La tabla nació con el blanco de la app Android antigua. En modo oscuro eso

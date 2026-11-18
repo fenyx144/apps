@@ -11,6 +11,7 @@ import '../services/storage_service.dart';
 import '../utils/documento_persona.dart';
 import '../utils/documento_scan_flow.dart';
 import '../utils/record_saver.dart';
+import '../utils/theme_colors.dart';
 import '../utils/toast_helper.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/bio_form_fields.dart';
@@ -19,8 +20,6 @@ import '../widgets/dni_input_dialog.dart';
 import '../widgets/image_slot_row.dart';
 import '../widgets/section_app_bar.dart';
 import 'register_summary_screen.dart' show RegisterSummarySheet;
-
-const _turquesa = Color(0xFF0FA3B1);
 
 const _desinfectantes = <String>[
   'Formol',
@@ -387,8 +386,8 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
                   child: OutlinedButton.icon(
                     onPressed: _agregarGrupo,
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: _turquesa,
-                      side: const BorderSide(color: _turquesa, width: 1.4),
+                      foregroundColor: acentoTurquesa,
+                      side: const BorderSide(color: acentoTurquesa, width: 1.4),
                     ),
                     icon: const Icon(Icons.add, size: 20),
                     label: const Text('Otro grupo'),
@@ -422,12 +421,10 @@ class _GrupoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
     return Material(
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: _turquesa, width: 1.4),
-      ),
+      color: esquema.surface,
+      shape: context.tarjetaAcento,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: Column(
@@ -439,7 +436,7 @@ class _GrupoCard extends StatelessWidget {
                   child: Text(
                     'Grupo ${index + 1}',
                     style: const TextStyle(
-                      color: _turquesa,
+                      color: acentoTurquesa,
                       fontWeight: FontWeight.w800,
                       fontSize: 15,
                     ),
@@ -448,7 +445,7 @@ class _GrupoCard extends StatelessWidget {
                 if (puedeQuitar)
                   IconButton(
                     onPressed: onQuitar,
-                    icon: const Icon(Icons.close, color: _turquesa),
+                    icon: const Icon(Icons.close, color: acentoTurquesa),
                     visualDensity: VisualDensity.compact,
                   ),
               ],
@@ -456,7 +453,9 @@ class _GrupoCard extends StatelessWidget {
             DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: grupo.desinfectante,
-              decoration: _campo('Desinfectante'),
+              decoration: context.campoAcento('Desinfectante'),
+              dropdownColor: esquema.surface,
+              style: TextStyle(color: esquema.onSurface, fontWeight: FontWeight.w600),
               items: [
                 for (final d in _desinfectantes)
                   DropdownMenuItem(value: d, child: Text(d)),
@@ -477,7 +476,7 @@ class _GrupoCard extends StatelessWidget {
                         grupo.items.removeAt(i).dispose();
                         onChanged();
                       },
-                      icon: const Icon(Icons.remove_circle_outline, color: _turquesa),
+                      icon: const Icon(Icons.remove_circle_outline, color: acentoTurquesa),
                       visualDensity: VisualDensity.compact,
                     ),
                 ],
@@ -491,7 +490,7 @@ class _GrupoCard extends StatelessWidget {
                   grupo.items.add(_ArticuloItem());
                   onChanged();
                 },
-                style: TextButton.styleFrom(foregroundColor: _turquesa),
+                style: TextButton.styleFrom(foregroundColor: acentoTurquesa),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Artículo'),
               ),
@@ -526,10 +525,13 @@ class _GrupoCard extends StatelessWidget {
         return TextField(
           controller: item.nombreCtrl,
           focusNode: focus,
-          cursorColor: _turquesa,
+          cursorColor: acentoTurquesa,
           textCapitalization: TextCapitalization.sentences,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-          decoration: _campo('Artículo'),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Theme.of(ctx).colorScheme.onSurface,
+          ),
+          decoration: ctx.campoAcento('Artículo'),
           onChanged: (v) {
             for (final a in catalogo) {
               if (a.descripcion.toLowerCase() == v.trim().toLowerCase()) {
@@ -543,28 +545,5 @@ class _GrupoCard extends StatelessWidget {
       },
     );
   }
-}
-
-InputDecoration _campo(String label) {
-  const borde = OutlineInputBorder(
-    borderRadius: BorderRadius.all(Radius.circular(12)),
-    borderSide: BorderSide(color: _turquesa, width: 1.5),
-  );
-  return const InputDecoration(
-    filled: true,
-    fillColor: Colors.white,
-    isDense: true,
-    floatingLabelBehavior: FloatingLabelBehavior.auto,
-  ).copyWith(
-    labelText: label,
-    labelStyle: const TextStyle(color: _turquesa, fontWeight: FontWeight.w600),
-    floatingLabelStyle: const TextStyle(color: _turquesa, fontWeight: FontWeight.w700),
-    border: borde,
-    enabledBorder: borde,
-    focusedBorder: const OutlineInputBorder(
-      borderRadius: BorderRadius.all(Radius.circular(12)),
-      borderSide: BorderSide(color: _turquesa, width: 2),
-    ),
-  );
 }
 

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../services/catalog_service.dart';
 import '../utils/anomalia_contexto.dart';
+import '../utils/theme_colors.dart';
 import 'evidencia_select_field.dart';
 import 'image_slot_row.dart';
 
@@ -117,13 +118,11 @@ class _IngresoAlcoholemiaSectionState extends State<IngresoAlcoholemiaSection> {
 
   @override
   Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
     return Material(
-      color: Colors.white,
+      color: esquema.surface,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: _verdeAlc, width: 1.4),
-      ),
+      shape: context.tarjetaAcento,
       child: Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       child: Column(
@@ -131,14 +130,14 @@ class _IngresoAlcoholemiaSectionState extends State<IngresoAlcoholemiaSection> {
         children: [
         Row(
           children: [
-            const Icon(Icons.local_bar_outlined, size: 18, color: _verdeAlc),
+            const Icon(Icons.local_bar_outlined, size: 18, color: acentoTurquesa),
             const SizedBox(width: 8),
             const Text(
               'Alcoholemia',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
-                color: _verdeAlc,
+                color: acentoTurquesa,
               ),
             ),
           ],
@@ -146,10 +145,10 @@ class _IngresoAlcoholemiaSectionState extends State<IngresoAlcoholemiaSection> {
         const SizedBox(height: 4),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          activeThumbColor: _verdeAlc,
-          title: const Text(
+          activeThumbColor: acentoTurquesa,
+          title: Text(
             'Registrar',
-            style: TextStyle(fontWeight: FontWeight.w700, color: _verdeAlc),
+            style: TextStyle(fontWeight: FontWeight.w700, color: esquema.onSurface),
           ),
           value: widget.data.activa,
           onChanged: (v) {
@@ -182,7 +181,7 @@ class _IngresoAlcoholemiaSectionState extends State<IngresoAlcoholemiaSection> {
           ],
           TextButton.icon(
             onPressed: _agregarFila,
-            style: TextButton.styleFrom(foregroundColor: _verdeAlc),
+            style: TextButton.styleFrom(foregroundColor: acentoTurquesa),
             icon: const Icon(Icons.person_add_outlined),
             label: const Text('Agregar persona'),
           ),
@@ -215,8 +214,6 @@ class _FilaAlcoholemiaTile extends StatefulWidget {
   @override
   State<_FilaAlcoholemiaTile> createState() => _FilaAlcoholemiaTileState();
 }
-
-const _verdeAlc = Color(0xFF0FA3B1);
 
 class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
   late final TextEditingController _valor;
@@ -409,7 +406,7 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
-                  color: _verdeAlc,
+                  color: acentoTurquesa,
                 ),
               ),
             ),
@@ -417,7 +414,7 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
               IconButton(
                 tooltip: 'Quitar',
                 onPressed: widget.onQuitar,
-                icon: const Icon(Icons.close, size: 20, color: _verdeAlc),
+                icon: const Icon(Icons.close, size: 20, color: acentoTurquesa),
                 visualDensity: VisualDensity.compact,
               ),
           ],
@@ -427,7 +424,7 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
           value: labelPersona,
           placeholder: 'Seleccione',
           icon: Icons.person_outline,
-          iconColor: _verdeAlc,
+          iconColor: acentoTurquesa,
           onTap: widget.candidatos.isEmpty ? null : _pickPersona,
         ),
         const SizedBox(height: 10),
@@ -437,10 +434,14 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
             Expanded(
               child: TextField(
                 controller: _valor,
-                cursorColor: _verdeAlc,
+                cursorColor: acentoTurquesa,
                 showCursor: true,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                decoration: _campoClaro('Lectura aparato'),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                decoration: _campoClaro(context, 'Lectura aparato'),
                 onChanged: _onLecturaChanged,
               ),
             ),
@@ -448,14 +449,18 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
             Expanded(
               child: TextField(
                 controller: _grado,
-                cursorColor: _verdeAlc,
+                cursorColor: acentoTurquesa,
                 showCursor: true,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                 ],
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                decoration: _campoClaro('Grado (g/L)'),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                decoration: _campoClaro(context, 'Grado (g/L)'),
                 onChanged: _onGradoChanged,
               ),
             ),
@@ -503,12 +508,16 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: _anomalia,
-                        cursorColor: _verdeAlc,
+                        cursorColor: acentoTurquesa,
                         showCursor: true,
                         minLines: 1,
                         maxLines: 3,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                        decoration: _campoClaro('Anomalía'),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        decoration: _campoClaro(context, 'Anomalía'),
                         onChanged: (v) {
                           _anomaliaTocada = true;
                           widget.fila.anomalia = v;
@@ -518,12 +527,16 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
                       const SizedBox(height: 10),
                       TextField(
                         controller: _agente,
-                        cursorColor: _verdeAlc,
+                        cursorColor: acentoTurquesa,
                         showCursor: true,
                         minLines: 1,
                         maxLines: 3,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                        decoration: _campoClaro('Agente causal'),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        decoration: _campoClaro(context, 'Agente causal'),
                         onChanged: (v) {
                           _agenteTocado = true;
                           widget.fila.agenteCausal = v;
@@ -533,12 +546,16 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
                       const SizedBox(height: 10),
                       TextField(
                         controller: _accion,
-                        cursorColor: _verdeAlc,
+                        cursorColor: acentoTurquesa,
                         showCursor: true,
                         minLines: 2,
                         maxLines: 3,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                        decoration: _campoClaro('Acción'),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        decoration: _campoClaro(context, 'Acción'),
                         onChanged: (v) {
                           widget.fila.accion = v;
                           widget.onChanged();
@@ -564,31 +581,10 @@ class _FilaAlcoholemiaTileState extends State<_FilaAlcoholemiaTile> {
   }
 }
 
-InputDecoration _campoClaro(String label) {
-  const borde = OutlineInputBorder(
-    borderRadius: BorderRadius.all(Radius.circular(12)),
-    borderSide: BorderSide(color: _verdeAlc, width: 1.5),
-  );
-  return const InputDecoration(
-    filled: true,
-    fillColor: Colors.white,
-    isDense: true,
-    floatingLabelBehavior: FloatingLabelBehavior.auto,
-  ).copyWith(
-    labelText: label,
-    labelStyle: const TextStyle(color: _verdeAlc, fontWeight: FontWeight.w600),
-    floatingLabelStyle: const TextStyle(
-      color: _verdeAlc,
-      fontWeight: FontWeight.w700,
-    ),
-    contentPadding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
-    border: borde,
-    enabledBorder: borde,
-    focusedBorder: const OutlineInputBorder(
-      borderRadius: BorderRadius.all(Radius.circular(12)),
-      borderSide: BorderSide(color: _verdeAlc, width: 2),
-    ),
-  );
+InputDecoration _campoClaro(BuildContext context, String label) {
+  return context.campoAcento(label).copyWith(
+        contentPadding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+      );
 }
 
 class AlcoholemiaCatalogMeta {
