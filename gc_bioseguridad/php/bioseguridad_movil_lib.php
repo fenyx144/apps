@@ -1359,27 +1359,118 @@ function bio_agc_perfil(string $bioseguridad): array
 {
     $b = strtolower($bioseguridad);
     if (strpos($b, 'quim') !== false) {
-        $clave = 'quimica';
-        $tarea = 'BIOS_QUIMICA';
+        $clave = 'quim';
     } elseif (strpos($b, 'biolog') !== false) {
-        $clave = 'biologica';
-        $tarea = 'BIOS_BIOLOGICA';
+        $clave = 'biolog';
     } else {
-        $clave = 'fisica';
-        $tarea = 'BIOS_FISICA';
-    }
-    $leido = bio_agc_perfil_vecino($clave);
-    if ($leido !== null) {
-        return $leido;
+        $clave = 'fisic';
     }
 
     return array(
-        'tareaKey' => $tarea,
+        'tareaKey' => '',
         'indicadorId' => 0,
         'procesoId' => 0,
         'subprocesoId' => 0,
         'tipoAnomaliaId' => 0,
+        'clave' => $clave,
     );
+}
+
+/**
+ * Ids reales del árbol san_estandares_nodos. El proceso es el nodo Bioseguridad
+ * que tiene hijos física, química o biológica. Si un nodo no está, el id queda 0.
+ *
+ * @param array{tareaKey:string,indicadorId:int,procesoId:int,subprocesoId:int,tipoAnomaliaId:int,clave?:string} $perfil
+ * @return array{tareaKey:string,indicadorId:int,procesoId:int,subprocesoId:int,tipoAnomaliaId:int}
+ */
+function bio_agc_perfil_catalogo(mysqli $conn, array $perfil)
+{
+    $clave = isset($perfil['clave']) ? (string) $perfil['clave'] : 'fisic';
+    unset($perfil['clave']);
+    if ($perfil['tareaKey'] === '') {
+        $perfil['tareaKey'] = 'Bioseguridad';
+    }
+    if (!bio_alm_tabla_simple($conn, 'san_estandares_nodos')) {
+        return $perfil;
+    }
+    $rows = bio_fetch_rows(
+        $conn,
+        'SELECT id, nodoPadreId, TRIM(nombre) AS nombre, TRIM(IFNULL(actividadKey, \'\')) AS actividadKey
+           FROM san_estandares_nodos',
+        '',
+        array()
+    );
+    $porPadre = array();
+    foreach ($rows as $r) {
+        $pid = $r['nodoPadreId'] === null ? '0' : (string) $r['nodoPadreId'];
+        if (!isset($porPadre[$pid])) {
+            $porPadre[$pid] = array();
+        }
+        $porPadre[$pid][] = $r;
+    }
+    $proceso = null;
+    foreach ($rows as $r) {
+        if (strpos(strtolower((string) $r['nombre']), 'bioseguridad') === false) {
+            continue;
+        }
+        $hijos = isset($porPadre[(string) $r['id']]) ? $porPadre[(string) $r['id']] : array();
+        $tieneRama = false;
+        foreach ($hijos as $h) {
+            $hn = strtolower((string) $h['nombre']);
+            if (strpos($hn, 'fisic') !== false || strpos($hn, 'quim') !== false || strpos($hn, 'biolog') !== false) {
+                $tieneRama = true;
+                break;
+            }
+        }
+        if ($tieneRama) {
+            $proceso = $r;
+            break;
+        }
+        if ($proceso === null) {
+            $proceso = $r;
+        }
+    }
+    if ($proceso === null) {
+        return $perfil;
+    }
+    $perfil['procesoId'] = (int) $proceso['id'];
+    $sub = null;
+    $hijos = isset($porPadre[(string) $proceso['id']]) ? $porPadre[(string) $proceso['id']] : array();
+    foreach ($hijos as $h) {
+        if (strpos(strtolower((string) $h['nombre']), $clave) !== false) {
+            $sub = $h;
+            break;
+        }
+    }
+    if ($sub === null) {
+        if ($proceso['actividadKey'] !== '') {
+            $perfil['tareaKey'] = $proceso['actividadKey'];
+        }
+
+        return $perfil;
+    }
+    $perfil['subprocesoId'] = (int) $sub['id'];
+    $perfil['tareaKey'] = $sub['actividadKey'] !== '' ? $sub['actividadKey'] : (string) $sub['nombre'];
+    $nietos = isset($porPadre[(string) $sub['id']]) ? $porPadre[(string) $sub['id']] : array();
+    foreach ($nietos as $n) {
+        $nn = strtolower((string) $n['nombre']);
+        if ($perfil['indicadorId'] === 0 && strpos($nn, 'indicador') !== false) {
+            $perfil['indicadorId'] = (int) $n['id'];
+        }
+        if ($perfil['tipoAnomaliaId'] === 0 && (strpos($nn, 'anomalia') !== false || strpos($nn, 'anomalía') !== false)) {
+            $perfil['tipoAnomaliaId'] = (int) $n['id'];
+        }
+    }
+
+    return $perfil;
+}
+
+function bio_alm_tabla_simple(mysqli $conn, $nombre)
+{
+    $nombre = $conn->real_escape_string($nombre);
+    $rs = @$conn->query("SHOW TABLES LIKE '" . $nombre . "'");
+
+    return $rs && $rs->num_rows > 0;
 }
 
 /** @return array{tareaKey:string,indicadorId:int,procesoId:int,subprocesoId:int,tipoAnomaliaId:int}|null */
@@ -1498,8 +1589,11 @@ function bio_agc_insertar(mysqli $conn, array $ctx, string $imagenesCsv): bool
     $granja = $partes[0];
     $campania = $partes[1];
     $galpon = $partes[2];
-    $perfil = bio_agc_perfil((string) ($ctx['bioseguridad'] ?? ''));
+    $perfil = bio_agc_perfil_catalogo($conn, bio_agc_perfil((string) ($ctx['bioseguridad'] ?? '')));
     $tareaKey = substr($perfil['tareaKey'], 0, 80);
+    if ($tareaKey === '') {
+        $tareaKey = 'Bioseguridad';
+    }
     $indicadorId = (int) $perfil['indicadorId'];
     $procesoId = (int) $perfil['procesoId'];
     $subprocesoId = (int) $perfil['subprocesoId'];
@@ -1544,6 +1638,15 @@ function bio_agc_insertar(mysqli $conn, array $ctx, string $imagenesCsv): bool
     );
     $ok = $st->execute();
     $st->close();
+    if ($ok && function_exists('bio_col_exists') && bio_col_exists($conn, 'san_agentes_causales', 'punto')) {
+        $punto = substr(trim((string) ($ctx['instalacion'] ?? '')), 0, 30);
+        $up = $conn->prepare('UPDATE `san_agentes_causales` SET `punto` = ? WHERE `id` = ?');
+        if ($up) {
+            $up->bind_param('ss', $punto, $uuid);
+            $up->execute();
+            $up->close();
+        }
+    }
 
     return $ok;
 }

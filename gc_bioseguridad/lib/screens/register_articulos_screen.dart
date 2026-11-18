@@ -5,15 +5,12 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
-import '../services/alcoholemia_api_service.dart';
 import '../services/api_service.dart';
 import '../services/catalog_service.dart' show ArticuloIngresoCatalogo, CatalogService;
 import '../services/storage_service.dart';
-import '../utils/anomalia_contexto.dart';
 import '../utils/documento_persona.dart';
 import '../utils/documento_scan_flow.dart';
 import '../utils/record_saver.dart';
-import '../utils/theme_colors.dart';
 import '../utils/toast_helper.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/bio_form_fields.dart';
@@ -26,6 +23,7 @@ import 'register_summary_screen.dart' show RegisterSummarySheet;
 const _turquesa = Color(0xFF0FA3B1);
 
 const _desinfectantes = <String>[
+  'Formol',
   'Amoníaco',
   'Hipoclorito de sodio',
   'Alcohol 70 %',
@@ -33,75 +31,28 @@ const _desinfectantes = <String>[
   'Otro',
 ];
 
-class _LineaArticulo {
-  _LineaArticulo();
-
+class _ArticuloItem {
   final nombreCtrl = TextEditingController();
-  bool permitido = true;
-  bool desinfectado = true;
-  String desinfectante = _desinfectantes.first;
   String codigo = '';
-  String notaCatalogo = '';
-  final anomaliaPermCtrl = TextEditingController();
-  final agentePermCtrl = TextEditingController();
-  final accionPermCtrl = TextEditingController();
-  final anomaliaDesCtrl = TextEditingController();
-  final agenteDesCtrl = TextEditingController();
-  final accionDesCtrl = TextEditingController();
-  String _autoAnomaliaPerm = '';
-  String _autoAgentePerm = '';
-  String _autoAccionPerm = '';
-  String _autoAnomaliaDes = '';
-  String _autoAgenteDes = '';
-  String _autoAccionDes = '';
-  final List<String?> fotos = [null, null, null];
 
   String get nombre => nombreCtrl.text.trim();
 
-  bool get tieneAnomalia => !permitido || (permitido && !desinfectado);
+  void dispose() => nombreCtrl.dispose();
+}
 
-  bool get fotosObligatorias => true;
-
-  void aplicarCatalogo(ArticuloIngresoCatalogo a) {
-    codigo = a.codigo;
-    notaCatalogo = a.nota;
-    if (a.permite != null) permitido = a.permite!;
+class _GrupoDesinfeccion {
+  _GrupoDesinfeccion() {
+    items.add(_ArticuloItem());
   }
 
-  void _poner(
-    TextEditingController ctrl,
-    String nuevo,
-    String auto,
-    void Function(String) guardarAuto,
-  ) {
-    if (ctrl.text.trim().isEmpty || ctrl.text == auto) {
-      ctrl.text = nuevo;
-      guardarAuto(nuevo);
-    }
-  }
-
-  void rellenarAgcNoPermitido() {
-    final ctx = AnomaliaContexto.articuloNoPermitido(nombre, nota: notaCatalogo);
-    _poner(anomaliaPermCtrl, ctx.anomalia, _autoAnomaliaPerm, (v) => _autoAnomaliaPerm = v);
-    _poner(agentePermCtrl, ctx.agenteCausal, _autoAgentePerm, (v) => _autoAgentePerm = v);
-    _poner(accionPermCtrl, ctx.accion, _autoAccionPerm, (v) => _autoAccionPerm = v);
-  }
-
-  void rellenarAgcSinDesinfeccion() {
-    final ctx = AnomaliaContexto.articuloSinDesinfeccion(nombre);
-    _poner(anomaliaDesCtrl, ctx.anomalia, _autoAnomaliaDes, (v) => _autoAnomaliaDes = v);
-    _poner(agenteDesCtrl, ctx.agenteCausal, _autoAgenteDes, (v) => _autoAgenteDes = v);
-    _poner(accionDesCtrl, ctx.accion, _autoAccionDes, (v) => _autoAccionDes = v);
-  }
+  String desinfectante = _desinfectantes.first;
+  final items = <_ArticuloItem>[];
+  final fotos = <String?>[null, null, null];
 
   void dispose() {
-    nombreCtrl.dispose();
-    anomaliaPermCtrl.dispose();
-    agentePermCtrl.dispose();
-    accionPermCtrl.dispose();
-    anomaliaDesCtrl.dispose();
-    agenteDesCtrl.dispose();
-    accionDesCtrl.dispose();
+    for (final i in items) {
+      i.dispose();
+    }
   }
 }
 
@@ -120,7 +71,7 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
   Timer? _debounceNombre;
   bool _consultandoNombre = false;
   bool _sincronizandoPersona = false;
-  final List<_LineaArticulo> _lineas = [_LineaArticulo()];
+  final List<_GrupoDesinfeccion> _grupos = [_GrupoDesinfeccion()];
 
   String get _fechaYmd => DateFormat('yyyy-MM-dd').format(_fecha);
 
@@ -130,8 +81,8 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
   void dispose() {
     _debounceNombre?.cancel();
     _personaCtrl.dispose();
-    for (final l in _lineas) {
-      l.dispose();
+    for (final g in _grupos) {
+      g.dispose();
     }
     super.dispose();
   }
@@ -223,65 +174,26 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
     await _consultarNombre();
   }
 
-  void _agregarLinea() {
-    setState(() => _lineas.add(_LineaArticulo()));
+  void _agregarGrupo() {
+    setState(() => _grupos.add(_GrupoDesinfeccion()));
   }
 
   void _resetearTrasGuardar() {
-    for (final l in _lineas) {
-      l.dispose();
+    for (final g in _grupos) {
+      g.dispose();
     }
-    _lineas
+    _grupos
       ..clear()
-      ..add(_LineaArticulo());
+      ..add(_GrupoDesinfeccion());
     _personaCtrl.clear();
     _dni = '';
     _nombre = '';
     _consultandoNombre = false;
   }
 
-  Future<void> _mostrarArticulosPermitidos(
-    List<ArticuloIngresoCatalogo> permitidos,
-  ) async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Artículos permitidos'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: permitidos.isEmpty
-              ? const Text('No hay referencias en el catálogo descargado.')
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: permitidos.length,
-                  itemBuilder: (_, i) {
-                    final a = permitidos[i];
-                    final nota = a.nota.trim();
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(a.descripcion),
-                      subtitle: nota.isNotEmpty ? Text(nota) : null,
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _quitarLinea(int index) {
-    if (_lineas.length <= 1) {
-      showInfoToast(context, 'Debe haber al menos un artículo.');
-      return;
-    }
-    setState(() => _lineas.removeAt(index).dispose());
+  void _quitarGrupo(int index) {
+    if (_grupos.length <= 1) return;
+    setState(() => _grupos.removeAt(index).dispose());
   }
 
   ArticuloIngresoCatalogo? _catalogoPorNombre(String nombre) {
@@ -292,39 +204,27 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
     return null;
   }
 
-  List<_LineaArticulo> get _lineasConDatos =>
-      _lineas.where((l) => l.nombre.isNotEmpty).toList();
-
   Map<String, dynamic> _buildRecord(StorageService storage) {
     final items = <Map<String, dynamic>>[];
-    for (final l in _lineasConDatos) {
-      final cat = _catalogoPorNombre(l.nombre);
-      final codigo = l.codigo.isNotEmpty ? l.codigo : (cat?.codigo ?? '99');
-      final fotos = l.fotos
+    for (final g in _grupos) {
+      final fotos = g.fotos
           .whereType<String>()
           .where((p) => p.isNotEmpty)
-          .map((p) => {'path': p});
-      items.add({
-        'codigo': codigo,
-        'descripcion': l.nombre,
-        'permitido': l.permitido,
-        if (!l.permitido) ...{
-          'anomalia_permitido': l.anomaliaPermCtrl.text.trim(),
-          'agente_causal_permitido': l.agentePermCtrl.text.trim(),
-          'accion_permitido': l.accionPermCtrl.text.trim(),
-        },
-        if (l.permitido) ...{
-          'desinfectado': l.desinfectado,
-          if (l.desinfectado && l.desinfectante.isNotEmpty)
-            'desinfectante': l.desinfectante,
-          if (!l.desinfectado) ...{
-            'anomalia_desinfeccion': l.anomaliaDesCtrl.text.trim(),
-            'agente_causal_desinfeccion': l.agenteDesCtrl.text.trim(),
-            'accion_desinfeccion': l.accionDesCtrl.text.trim(),
-          },
-        },
-        'imagenes': fotos.toList(),
-      });
+          .map((p) => {'path': p})
+          .toList();
+      for (final l in g.items) {
+        if (l.nombre.isEmpty) continue;
+        final cat = _catalogoPorNombre(l.nombre);
+        final codigo = l.codigo.isNotEmpty ? l.codigo : (cat?.codigo ?? '99');
+        items.add({
+          'codigo': codigo,
+          'descripcion': l.nombre,
+          'permitido': true,
+          'desinfectado': true,
+          'desinfectante': g.desinfectante,
+          'imagenes': fotos,
+        });
+      }
     }
     return {
       'id': const Uuid().v4(),
@@ -353,39 +253,15 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
       showErrorToast(context, 'Indique DNI o carné y nombre en el campo persona.');
       return;
     }
-    final items = _lineasConDatos;
-    if (items.isEmpty) {
+    final conArticulo = _grupos.where((g) => g.items.any((l) => l.nombre.isNotEmpty));
+    if (conArticulo.isEmpty) {
       showErrorToast(context, 'Indique al menos un artículo.');
       return;
     }
-    for (final l in items) {
-      if (!l.permitido) l.rellenarAgcNoPermitido();
-      if (l.permitido && !l.desinfectado) l.rellenarAgcSinDesinfeccion();
-      if (!l.fotos.any((p) => p != null && p.isNotEmpty)) {
-        showErrorToast(context, 'Adjunte foto: «${l.nombre}».');
+    for (final g in conArticulo) {
+      if (g.desinfectante.trim().isEmpty) {
+        showErrorToast(context, 'Indique el desinfectante.');
         return;
-      }
-      if (!l.permitido &&
-          (l.anomaliaPermCtrl.text.trim().isEmpty ||
-              l.agentePermCtrl.text.trim().isEmpty ||
-              l.accionPermCtrl.text.trim().isEmpty)) {
-        showErrorToast(context, 'Indique anomalía, agente causal y acción: «${l.nombre}».');
-        return;
-      }
-      if (l.permitido) {
-        if (!l.desinfectado &&
-            (l.anomaliaDesCtrl.text.trim().isEmpty ||
-                l.agenteDesCtrl.text.trim().isEmpty ||
-                l.accionDesCtrl.text.trim().isEmpty)) {
-          showErrorToast(context, 'Indique anomalía, agente causal y acción: «${l.nombre}».');
-          return;
-        } else if (l.desinfectado && l.desinfectante.trim().isEmpty) {
-          showErrorToast(
-            context,
-            'Indique el desinfectante usado: «${l.nombre}».',
-          );
-          return;
-        }
       }
     }
 
@@ -396,69 +272,9 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
       record: record,
       onConfirm: () async {
         final ok = await BioRecordSaver.save(context, record);
-        var agcOk = true;
-        String? agcError;
-        if (ok) {
-          final api = AlcoholemiaApiService();
-          final usuario = storage.getUserCodeSync() ?? '';
-          for (final l in items) {
-            final foto = l.fotos.whereType<String>().firstWhere(
-                  (p) => p.isNotEmpty,
-                  orElse: () => '',
-                );
-            final fotoPath = foto.isEmpty ? null : foto;
-            if (!l.permitido) {
-              final r = await api.guardarArticuloAnomalia(
-                granja: '000',
-                campania: '000',
-                fecha: _fechaYmd,
-                dni: _dniNorm,
-                nombre: _nombre.trim(),
-                articulo: l.nombre,
-                accion: l.accionPermCtrl.text.trim(),
-                anomalia: l.anomaliaPermCtrl.text.trim(),
-                agenteCausal: l.agentePermCtrl.text.trim(),
-                fotoPath: fotoPath,
-                usuario: usuario,
-              );
-              if (!r.ok) {
-                agcOk = false;
-                agcError ??= r.message;
-              }
-            }
-            if (l.permitido && !l.desinfectado) {
-              final r = await api.guardarArticuloAnomalia(
-                granja: '000',
-                campania: '000',
-                fecha: _fechaYmd,
-                dni: _dniNorm,
-                nombre: _nombre.trim(),
-                articulo: '${l.nombre} (desinfección)',
-                accion: l.accionDesCtrl.text.trim(),
-                anomalia: l.anomaliaDesCtrl.text.trim(),
-                agenteCausal: l.agenteDesCtrl.text.trim(),
-                fotoPath: fotoPath,
-                usuario: usuario,
-              );
-              if (!r.ok) {
-                agcOk = false;
-                agcError ??= r.message;
-              }
-            }
-          }
-        }
         if (!mounted) return;
         if (ok) {
-          if (agcOk) {
-            showSuccessToast(context, 'Registro guardado y enviado.');
-          } else {
-            showInfoToast(
-              context,
-              agcError?.isNotEmpty == true
-                  ? agcError!
-                  : 'Registro guardado; no se pudo registrar una o más anomalías AGC.',
-            );
-          }
+          showSuccessToast(context, 'Registro guardado y enviado.');
         } else {
           showInfoToast(
             context,
@@ -477,10 +293,6 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
     final catalogo = context.watch<CatalogService>().articulosIngreso
         .where((a) => a.codigo != '99')
         .toList();
-    final permitidos = catalogo
-        .where((a) => a.permite != false)
-        .toList()
-      ..sort((a, b) => a.descripcion.compareTo(b.descripcion));
 
     return Scaffold(
       drawer: const AppDrawer(),
@@ -558,42 +370,29 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                BioFormSection(
-                  title: 'ARTÍCULOS',
-                  icon: Icons.inventory_2_outlined,
-                  children: [
-                    if (catalogo.isNotEmpty)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () => _mostrarArticulosPermitidos(permitidos),
-                          icon: const Icon(Icons.list_alt_rounded, size: 20),
-                          label: Text(
-                            permitidos.isEmpty
-                                ? 'Ver catálogo de artículos'
-                                : 'Consultar artículos permitidos (${permitidos.length})',
-                          ),
-                        ),
-                      ),
-                    if (catalogo.isNotEmpty) const SizedBox(height: 4),
-                    for (var i = 0; i < _lineas.length; i++) ...[
-                      _ArticuloLineaTile(
-                        index: i,
-                        linea: _lineas[i],
-                        catalogo: catalogo,
-                        puedeQuitar: _lineas.length > 1,
-                        onQuitar: () => _quitarLinea(i),
-                        onChanged: () => setState(() {}),
-                      ),
-                      if (i < _lineas.length - 1) const Divider(height: 24),
-                    ],
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: _agregarLinea,
-                      icon: const Icon(Icons.add, size: 20),
-                      label: const Text('Agregar otro artículo'),
+                for (var i = 0; i < _grupos.length; i++) ...[
+                  _GrupoCard(
+                    index: i,
+                    grupo: _grupos[i],
+                    catalogo: catalogo,
+                    puedeQuitar: _grupos.length > 1,
+                    onQuitar: () => _quitarGrupo(i),
+                    onChanged: () => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: _agregarGrupo,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _turquesa,
+                      side: const BorderSide(color: _turquesa, width: 1.4),
                     ),
-                  ],
+                    icon: const Icon(Icons.add, size: 20),
+                    label: const Text('Otro grupo'),
+                  ),
                 ),
               ],
             ),
@@ -604,10 +403,10 @@ class _RegisterArticulosScreenState extends State<RegisterArticulosScreen> {
   }
 }
 
-class _ArticuloLineaTile extends StatelessWidget {
-  const _ArticuloLineaTile({
+class _GrupoCard extends StatelessWidget {
+  const _GrupoCard({
     required this.index,
-    required this.linea,
+    required this.grupo,
     required this.catalogo,
     required this.puedeQuitar,
     required this.onQuitar,
@@ -615,208 +414,10 @@ class _ArticuloLineaTile extends StatelessWidget {
   });
 
   final int index;
-  final _LineaArticulo linea;
+  final _GrupoDesinfeccion grupo;
   final List<ArticuloIngresoCatalogo> catalogo;
   final bool puedeQuitar;
   final VoidCallback onQuitar;
-  final VoidCallback onChanged;
-
-  void _alElegirCatalogo(ArticuloIngresoCatalogo a) {
-    linea.nombreCtrl.text = a.descripcion;
-    linea.aplicarCatalogo(a);
-    if (!linea.permitido) {
-      linea.rellenarAgcNoPermitido();
-    } else {
-      linea.desinfectado = true;
-      if (linea.desinfectante.isEmpty) {
-        linea.desinfectante = _desinfectantes.first;
-      }
-    }
-    onChanged();
-  }
-
-  void _alCambiarPermitido(bool? v) {
-    linea.permitido = v ?? true;
-    if (!linea.permitido) {
-      linea.rellenarAgcNoPermitido();
-    } else {
-      linea.desinfectado = true;
-      linea.desinfectante =
-          linea.desinfectante.isNotEmpty ? linea.desinfectante : _desinfectantes.first;
-    }
-    onChanged();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Artículo ${index + 1}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  color: _turquesa,
-                ),
-              ),
-            ),
-            if (puedeQuitar)
-              IconButton(
-                tooltip: 'Quitar',
-                onPressed: onQuitar,
-                icon: const Icon(Icons.close, size: 20),
-                visualDensity: VisualDensity.compact,
-              ),
-          ],
-        ),
-        Autocomplete<ArticuloIngresoCatalogo>(
-          optionsBuilder: (query) {
-            final q = query.text.trim().toLowerCase();
-            if (q.isEmpty) return catalogo.take(12);
-            return catalogo.where(
-              (a) => a.descripcion.toLowerCase().contains(q),
-            );
-          },
-          displayStringForOption: (a) => a.descripcion,
-          onSelected: _alElegirCatalogo,
-          fieldViewBuilder: (ctx, ctrl, focus, onFieldSubmitted) {
-            return TextField(
-              controller: linea.nombreCtrl,
-              focusNode: focus,
-              decoration: const InputDecoration(
-                labelText: 'Nombre del artículo',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (v) {
-                ArticuloIngresoCatalogo? cat;
-                for (final a in catalogo) {
-                  if (a.descripcion.toLowerCase() == v.trim().toLowerCase()) {
-                    cat = a;
-                    break;
-                  }
-                }
-                if (cat != null) {
-                  linea.aplicarCatalogo(cat);
-                  if (!linea.permitido) {
-                    linea.rellenarAgcNoPermitido();
-                  } else {
-                    linea.desinfectado = true;
-                    if (linea.desinfectante.isEmpty) {
-                      linea.desinfectante = _desinfectantes.first;
-                    }
-                  }
-                } else if (linea.permitido && !linea.desinfectado) {
-                  linea.rellenarAgcSinDesinfeccion();
-                }
-                onChanged();
-              },
-            );
-          },
-        ),
-        const SizedBox(height: 6),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: linea.permitido,
-          title: const Text('Artículo permitido'),
-          onChanged: _alCambiarPermitido,
-        ),
-        if (!linea.permitido) ...[
-          const SizedBox(height: 6),
-          _CamposAnomaliaArticulo(
-            anomalia: linea.anomaliaPermCtrl,
-            agente: linea.agentePermCtrl,
-            accion: linea.accionPermCtrl,
-            onChanged: onChanged,
-          ),
-        ],
-        if (linea.permitido) ...[
-          const Divider(height: 20),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            value: linea.desinfectado,
-            title: const Text('Se desinfectó'),
-            onChanged: (v) {
-              linea.desinfectado = v ?? true;
-              if (linea.desinfectado) {
-                linea.desinfectante = linea.desinfectante.isNotEmpty
-                    ? linea.desinfectante
-                    : _desinfectantes.first;
-              } else {
-                linea.rellenarAgcSinDesinfeccion();
-              }
-              onChanged();
-            },
-          ),
-          if (linea.desinfectado) ...[
-            const SizedBox(height: 4),
-            DropdownButtonFormField<String>(
-              key: ValueKey('des-${linea.desinfectante}'),
-              initialValue:
-                  linea.desinfectante.isEmpty ? _desinfectantes.first : linea.desinfectante,
-              decoration: const InputDecoration(
-                labelText: 'Desinfectante utilizado',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: [
-                for (final d in _desinfectantes)
-                  DropdownMenuItem(value: d, child: Text(d)),
-              ],
-              onChanged: (v) {
-                linea.desinfectante = v ?? '';
-                onChanged();
-              },
-            ),
-          ] else ...[
-            const SizedBox(height: 6),
-            _CamposAnomaliaArticulo(
-              anomalia: linea.anomaliaDesCtrl,
-              agente: linea.agenteDesCtrl,
-              accion: linea.accionDesCtrl,
-              onChanged: onChanged,
-            ),
-          ],
-        ],
-        const SizedBox(height: 10),
-        Text(
-          'Foto',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: context.textThemeSecondary,
-          ),
-        ),
-        const SizedBox(height: 6),
-        ImageSlotRow(
-          paths: linea.fotos,
-          onChanged: (i, path) {
-            linea.fotos[i] = path;
-            onChanged();
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _CamposAnomaliaArticulo extends StatelessWidget {
-  const _CamposAnomaliaArticulo({
-    required this.anomalia,
-    required this.agente,
-    required this.accion,
-    required this.onChanged,
-  });
-
-  final TextEditingController anomalia;
-  final TextEditingController agente;
-  final TextEditingController accion;
   final VoidCallback onChanged;
 
   @override
@@ -828,46 +429,123 @@ class _CamposAnomaliaArticulo extends StatelessWidget {
         side: const BorderSide(color: _turquesa, width: 1.4),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
-              controller: anomalia,
-              cursorColor: _turquesa,
-              minLines: 2,
-              maxLines: 3,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              decoration: _dec('Anomalía'),
-              onChanged: (_) => onChanged(),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Grupo ${index + 1}',
+                    style: const TextStyle(
+                      color: _turquesa,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                if (puedeQuitar)
+                  IconButton(
+                    onPressed: onQuitar,
+                    icon: const Icon(Icons.close, color: _turquesa),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: agente,
-              cursorColor: _turquesa,
-              minLines: 2,
-              maxLines: 3,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              decoration: _dec('Agente causal'),
-              onChanged: (_) => onChanged(),
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: grupo.desinfectante,
+              decoration: _campo('Desinfectante'),
+              items: [
+                for (final d in _desinfectantes)
+                  DropdownMenuItem(value: d, child: Text(d)),
+              ],
+              onChanged: (v) {
+                grupo.desinfectante = v ?? _desinfectantes.first;
+                onChanged();
+              },
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: accion,
-              cursorColor: _turquesa,
-              minLines: 2,
-              maxLines: 3,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              decoration: _dec('Acción'),
-              onChanged: (_) => onChanged(),
+            const SizedBox(height: 8),
+            for (var i = 0; i < grupo.items.length; i++) ...[
+              Row(
+                children: [
+                  Expanded(child: _campoArticulo(grupo.items[i])),
+                  if (grupo.items.length > 1)
+                    IconButton(
+                      onPressed: () {
+                        grupo.items.removeAt(i).dispose();
+                        onChanged();
+                      },
+                      icon: const Icon(Icons.remove_circle_outline, color: _turquesa),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+            ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () {
+                  grupo.items.add(_ArticuloItem());
+                  onChanged();
+                },
+                style: TextButton.styleFrom(foregroundColor: _turquesa),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Artículo'),
+              ),
+            ),
+            ImageSlotRow(
+              paths: grupo.fotos,
+              onChanged: (i, path) {
+                grupo.fotos[i] = path;
+                onChanged();
+              },
             ),
           ],
         ),
       ),
     );
   }
+
+  Widget _campoArticulo(_ArticuloItem item) {
+    return Autocomplete<ArticuloIngresoCatalogo>(
+      optionsBuilder: (query) {
+        final q = query.text.trim().toLowerCase();
+        if (q.isEmpty) return catalogo.take(12);
+        return catalogo.where((a) => a.descripcion.toLowerCase().contains(q));
+      },
+      displayStringForOption: (a) => a.descripcion,
+      onSelected: (a) {
+        item.nombreCtrl.text = a.descripcion;
+        item.codigo = a.codigo;
+        onChanged();
+      },
+      fieldViewBuilder: (ctx, ctrl, focus, onSubmit) {
+        return TextField(
+          controller: item.nombreCtrl,
+          focusNode: focus,
+          cursorColor: _turquesa,
+          textCapitalization: TextCapitalization.sentences,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+          decoration: _campo('Artículo'),
+          onChanged: (v) {
+            for (final a in catalogo) {
+              if (a.descripcion.toLowerCase() == v.trim().toLowerCase()) {
+                item.codigo = a.codigo;
+                break;
+              }
+            }
+            onChanged();
+          },
+        );
+      },
+    );
+  }
 }
 
-InputDecoration _dec(String label) {
+InputDecoration _campo(String label) {
   const borde = OutlineInputBorder(
     borderRadius: BorderRadius.all(Radius.circular(12)),
     borderSide: BorderSide(color: _turquesa, width: 1.5),
@@ -889,3 +567,4 @@ InputDecoration _dec(String label) {
     ),
   );
 }
+
